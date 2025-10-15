@@ -48,6 +48,6 @@ public class ChannelSummary {
     }
 
     public void setUsuarios(List<UserSummary> usuarios) {
-        this.usuarios = usuarios;
+        this.usuarios = usuarios == null ? new ArrayList<>() : new ArrayList<>(usuarios);
     }
 }

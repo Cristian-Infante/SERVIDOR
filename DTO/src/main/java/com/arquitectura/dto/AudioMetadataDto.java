@@ -6,12 +6,9 @@ public class AudioMetadataDto {
     private Long emisorId;
     private Long receptorId;
     private Long canalId;
-    private String rutaArchivo;
+    private String ruta;
     private String mime;
-    private Integer duracionSeg;
-
-    public AudioMetadataDto() {
-    }
+    private Integer duracion;
 
     public Long getMensajeId() {
         return mensajeId;
@@ -45,12 +42,20 @@ public class AudioMetadataDto {
         this.canalId = canalId;
     }
 
+    public String getRuta() {
+        return ruta;
+    }
+
+    public void setRuta(String ruta) {
+        this.ruta = ruta;
+    }
+
     public String getRutaArchivo() {
-        return rutaArchivo;
+        return ruta;
     }
 
     public void setRutaArchivo(String rutaArchivo) {
-        this.rutaArchivo = rutaArchivo;
+        this.ruta = rutaArchivo;
     }
 
     public String getMime() {
@@ -61,11 +66,19 @@ public class AudioMetadataDto {
         this.mime = mime;
     }
 
+    public Integer getDuracion() {
+        return duracion;
+    }
+
+    public void setDuracion(Integer duracion) {
+        this.duracion = duracion;
+    }
+
     public Integer getDuracionSeg() {
-        return duracionSeg;
+        return duracion;
     }
 
     public void setDuracionSeg(Integer duracionSeg) {
-        this.duracionSeg = duracionSeg;
+        this.duracion = duracionSeg;
     }
 }
