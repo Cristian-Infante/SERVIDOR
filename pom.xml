@@ -19,4 +19,49 @@
         <module>Aplicacion/Controladores</module>
         <module>Presentacion/Vistas</module>
     </modules>
+
+    <dependencyManagement>
+        <dependencies>
+            <dependency>
+                <groupId>com.arquitectura</groupId>
+                <artifactId>ConfigDB</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.arquitectura.entidades</groupId>
+                <artifactId>Entidades</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.arquitectura.dtos</groupId>
+                <artifactId>DTO</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.arquitectura.repositorios</groupId>
+                <artifactId>Repositorios</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.arquitectura.servicios</groupId>
+                <artifactId>Servicios</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.arquitectura.bootstrap</groupId>
+                <artifactId>Bootstrap</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.arquitectura.controladores</groupId>
+                <artifactId>Controladores</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.arquitectura.vistas</groupId>
+                <artifactId>Vistas</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+        </dependencies>
+    </dependencyManagement>
 </project>
