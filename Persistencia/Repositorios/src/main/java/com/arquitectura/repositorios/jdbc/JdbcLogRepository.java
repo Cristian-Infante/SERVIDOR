@@ -10,19 +10,17 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * Implementación JDBC del repositorio de logs.
- *
- * <p>Esquema esperado:</p>
+ * Schema reference:
  * <pre>
  * CREATE TABLE logs (
  *   id BIGINT AUTO_INCREMENT PRIMARY KEY,
  *   tipo TINYINT(1) NOT NULL,
  *   detalle TEXT NOT NULL,
- *   fecha_hora TIMESTAMP NOT NULL
+ *   fecha_hora DATETIME NOT NULL
  * );
  * </pre>
  */
-public class JdbcLogRepository extends BaseJdbcRepository implements LogRepository {
+public class JdbcLogRepository extends JdbcSupport implements LogRepository {
 
     public JdbcLogRepository(DataSource dataSource) {
         super(dataSource);
@@ -30,39 +28,42 @@ public class JdbcLogRepository extends BaseJdbcRepository implements LogReposito
 
     @Override
     public void append(Log log) {
-        final String sql = "INSERT INTO logs (tipo, detalle, fecha_hora) VALUES (?, ?, ?)";
-        try (Connection connection = getConnection();
-             PreparedStatement ps = connection.prepareStatement(sql)) {
+        String sql = "INSERT INTO logs(tipo, detalle, fecha_hora) VALUES(?,?,?)";
+        try (Connection conn = getConnection();
+             PreparedStatement ps = conn.prepareStatement(sql, Statement.RETURN_GENERATED_KEYS)) {
             ps.setBoolean(1, Boolean.TRUE.equals(log.getTipo()));
             ps.setString(2, log.getDetalle());
-            ps.setTimestamp(3, Timestamp.valueOf(log.getFechaHora() != null ? log.getFechaHora() : LocalDateTime.now()));
+            ps.setTimestamp(3, Timestamp.valueOf(log.getFechaHora()));
             ps.executeUpdate();
+            try (ResultSet rs = ps.getGeneratedKeys()) {
+                if (rs.next()) {
+                    log.setId(rs.getLong(1));
+                }
+            }
         } catch (SQLException e) {
-            throw new IllegalStateException("Error guardando log", e);
+            throw new IllegalStateException("Error inserting log", e);
         }
     }
 
     @Override
     public List<Log> findAll() {
-        final String sql = "SELECT id, tipo, detalle, fecha_hora FROM logs ORDER BY fecha_hora DESC";
-        try (Connection connection = getConnection();
-             PreparedStatement ps = connection.prepareStatement(sql);
+        String sql = "SELECT id, tipo, detalle, fecha_hora FROM logs ORDER BY fecha_hora DESC";
+        List<Log> logs = new ArrayList<>();
+        try (Connection conn = getConnection();
+             PreparedStatement ps = conn.prepareStatement(sql);
              ResultSet rs = ps.executeQuery()) {
-            List<Log> logs = new ArrayList<>();
             while (rs.next()) {
                 Log log = new Log();
                 log.setId(rs.getLong("id"));
                 log.setTipo(rs.getBoolean("tipo"));
                 log.setDetalle(rs.getString("detalle"));
-                Timestamp timestamp = rs.getTimestamp("fecha_hora");
-                if (timestamp != null) {
-                    log.setFechaHora(timestamp.toLocalDateTime());
-                }
+                Timestamp ts = rs.getTimestamp("fecha_hora");
+                log.setFechaHora(ts != null ? ts.toLocalDateTime() : LocalDateTime.now());
                 logs.add(log);
             }
-            return logs;
         } catch (SQLException e) {
-            throw new IllegalStateException("Error listando logs", e);
+            throw new IllegalStateException("Error retrieving logs", e);
         }
+        return logs;
     }
 }

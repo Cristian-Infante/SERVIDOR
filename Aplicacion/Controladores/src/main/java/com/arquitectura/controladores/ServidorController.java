@@ -1,150 +1,116 @@
 package com.arquitectura.controladores;
 
-import com.arquitectura.entidades.Canal;
-import com.arquitectura.entidades.Cliente;
-import com.arquitectura.entidades.Log;
+import com.arquitectura.dto.ChannelSummary;
+import com.arquitectura.dto.LogEntryDto;
+import com.arquitectura.dto.UserSummary;
 import com.arquitectura.servicios.ConexionService;
-import com.arquitectura.servicios.RegistroService;
 import com.arquitectura.servicios.ReporteService;
+import com.arquitectura.servicios.conexion.SessionDescriptor;
 import com.arquitectura.servicios.eventos.SessionEvent;
 import com.arquitectura.servicios.eventos.SessionEventBus;
+import com.arquitectura.servicios.eventos.SessionEventType;
 import com.arquitectura.servicios.eventos.SessionObserver;
+import com.arquitectura.entidades.vistas.ServidorVista;
 
-import javax.swing.*;
+import javax.swing.DefaultListModel;
+import javax.swing.JOptionPane;
+import javax.swing.SwingUtilities;
 import java.awt.event.ActionEvent;
-import java.io.IOException;
-import java.nio.file.Files;
-import java.nio.file.Path;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.concurrent.Executors;
-import java.util.logging.Level;
-import java.util.logging.Logger;
 import java.util.stream.Collectors;
 
-public class ServidorController {
+public class ServidorController implements SessionObserver {
 
-    private static final Logger LOGGER = Logger.getLogger(ServidorController.class.getName());
-
-    private final ServidorView vista;
-    private final RegistroService registroService;
+    private final ServidorVista vista;
     private final ReporteService reporteService;
     private final ConexionService conexionService;
     private final SessionEventBus eventBus;
+    private final DefaultListModel<String> conexionesModel;
+    private final Map<String, String> mapping = new HashMap<>();
 
-    public ServidorController(ServidorView vista,
-                              RegistroService registroService,
+    public ServidorController(ServidorVista vista,
                               ReporteService reporteService,
                               ConexionService conexionService,
                               SessionEventBus eventBus) {
         this.vista = vista;
-        this.registroService = registroService;
         this.reporteService = reporteService;
         this.conexionService = conexionService;
         this.eventBus = eventBus;
-        initListeners();
+        this.conexionesModel = (DefaultListModel<String>) vista.getLstConexiones().getModel();
+        wire();
+        this.eventBus.subscribe(this);
+        refreshConexiones();
     }
 
-    private void initListeners() {
-        vista.getBtnSeleccionarFoto().addActionListener(this::seleccionarFoto);
-        vista.getBtnEnviarRegistro().addActionListener(this::registrarUsuario);
-        vista.getBtnGenerarUsuarios().addActionListener(e -> mostrarUsuarios(reporteService.usuariosRegistrados()));
-        vista.getBtnGenerarCanales().addActionListener(e -> mostrarCanales(reporteService.canalesConUsuarios()));
-        vista.getBtnGenerarConectados().addActionListener(e -> mostrarUsuarios(reporteService.usuariosConectados()));
-        vista.getBtnGenerarLogs().addActionListener(e -> mostrarLogs(reporteService.logs()));
-        vista.getBtnCerrarConexion().addActionListener(this::cerrarConexionSeleccionada);
-
-        SessionObserver observer = event -> {
-            if (event.getType() == SessionEvent.Type.LOGIN) {
-                actualizarLista(event, true);
-            } else if (event.getType() == SessionEvent.Type.LOGOUT) {
-                actualizarLista(event, false);
-            }
-        };
-        eventBus.subscribe(observer);
+    private void wire() {
+        vista.getBtnGenerarUsuarios().addActionListener(this::mostrarUsuarios);
+        vista.getBtnGenerarCanales().addActionListener(this::mostrarCanales);
+        vista.getBtnGenerarConectados().addActionListener(this::mostrarConectados);
+        vista.getBtnGenerarLogs().addActionListener(this::mostrarLogs);
+        vista.getBtnCerrarConexion().addActionListener(this::cerrarSeleccionada);
     }
 
-    private void seleccionarFoto(ActionEvent actionEvent) {
-        JFileChooser chooser = new JFileChooser();
-        if (chooser.showOpenDialog(vista.asComponent()) == JFileChooser.APPROVE_OPTION) {
-            vista.getTxtFotoRuta().setText(chooser.getSelectedFile().getAbsolutePath());
-        }
-    }
-
-    private void registrarUsuario(ActionEvent e) {
-        Executors.newSingleThreadExecutor().submit(() -> {
-            try {
-                String usuario = vista.getTxtUsuario().getText();
-                String email = vista.getTxtEmail().getText();
-                String password = new String(vista.getTxtContrasena().getPassword());
-                String ip = vista.getTxtDireccionIp().getText();
-                byte[] foto = null;
-                if (!vista.getTxtFotoRuta().getText().isBlank()) {
-                    foto = Files.readAllBytes(Path.of(vista.getTxtFotoRuta().getText()));
-                }
-                registroService.registrar(usuario, email, password, foto, ip);
-                SwingUtilities.invokeLater(() -> JOptionPane.showMessageDialog(vista.asComponent(), "Usuario registrado"));
-            } catch (IOException ex) {
-                LOGGER.log(Level.SEVERE, "Error leyendo foto", ex);
-                SwingUtilities.invokeLater(() -> JOptionPane.showMessageDialog(vista.asComponent(), "Error leyendo foto"));
-            } catch (Exception ex) {
-                LOGGER.log(Level.SEVERE, "Error registrando usuario", ex);
-                SwingUtilities.invokeLater(() -> JOptionPane.showMessageDialog(vista.asComponent(), ex.getMessage()));
-            }
-        });
-    }
-
-    private void mostrarUsuarios(List<Cliente> clientes) {
-        String mensaje = clientes.stream()
-                .map(cliente -> cliente.getId() + " - " + cliente.getNombreDeUsuario() + " (" + cliente.getEmail() + ")")
+    private void mostrarUsuarios(ActionEvent e) {
+        List<UserSummary> usuarios = reporteService.usuariosRegistrados();
+        String mensaje = usuarios.stream()
+                .map(u -> u.getId() + " - " + u.getUsuario() + " (" + (u.isConectado() ? "conectado" : "desconectado") + ")")
                 .collect(Collectors.joining("\n"));
-        JOptionPane.showMessageDialog(vista.asComponent(), mensaje.isBlank() ? "Sin datos" : mensaje);
+        JOptionPane.showMessageDialog(vista, mensaje.isBlank() ? "Sin usuarios" : mensaje, "Usuarios registrados", JOptionPane.INFORMATION_MESSAGE);
     }
 
-    private void mostrarCanales(Map<Canal, List<Cliente>> canales) {
-        StringBuilder sb = new StringBuilder();
-        canales.forEach((canal, usuarios) -> {
-            sb.append("Canal ").append(canal.getNombre()).append(" -> ");
-            sb.append(usuarios.stream().map(Cliente::getNombreDeUsuario).collect(Collectors.joining(", ")));
-            sb.append('\n');
-        });
-        JOptionPane.showMessageDialog(vista.asComponent(), sb.length() == 0 ? "Sin datos" : sb.toString());
+    private void mostrarCanales(ActionEvent e) {
+        List<ChannelSummary> canales = reporteService.canalesConUsuarios();
+        String mensaje = canales.stream()
+                .map(c -> c.getId() + " - " + c.getNombre() + " -> " + c.getUsuarios().size() + " usuarios")
+                .collect(Collectors.joining("\n"));
+        JOptionPane.showMessageDialog(vista, mensaje.isBlank() ? "Sin canales" : mensaje, "Canales", JOptionPane.INFORMATION_MESSAGE);
     }
 
-    private void mostrarLogs(List<Log> logs) {
+    private void mostrarConectados(ActionEvent e) {
+        List<UserSummary> conectados = reporteService.usuariosConectados();
+        String mensaje = conectados.stream()
+                .map(u -> u.getId() + " - " + u.getUsuario())
+                .collect(Collectors.joining("\n"));
+        JOptionPane.showMessageDialog(vista, mensaje.isBlank() ? "Sin usuarios conectados" : mensaje, "Conectados", JOptionPane.INFORMATION_MESSAGE);
+    }
+
+    private void mostrarLogs(ActionEvent e) {
+        List<LogEntryDto> logs = reporteService.logs();
         String mensaje = logs.stream()
-                .map(log -> log.getFechaHora() + " - " + log.getDetalle())
+                .map(l -> l.getFechaHora() + " - " + l.getDetalle())
                 .collect(Collectors.joining("\n"));
-        JOptionPane.showMessageDialog(vista.asComponent(), mensaje.isBlank() ? "Sin datos" : mensaje);
+        JOptionPane.showMessageDialog(vista, mensaje.isBlank() ? "Sin logs" : mensaje, "Logs", JOptionPane.INFORMATION_MESSAGE);
     }
 
-    private void cerrarConexionSeleccionada(ActionEvent actionEvent) {
-        String selected = vista.getLstConexiones().getSelectedValue();
-        if (selected == null) {
-            JOptionPane.showMessageDialog(vista.asComponent(), "Selecciona un usuario");
+    private void cerrarSeleccionada(ActionEvent e) {
+        String value = vista.getLstConexiones().getSelectedValue();
+        if (value == null) {
             return;
         }
-        Long id = Long.parseLong(selected.split(":")[0]);
-        conexionService.cerrarConexion(id);
+        String sessionId = mapping.get(value);
+        if (sessionId != null) {
+            conexionService.cerrarConexion(sessionId);
+        }
     }
 
-    @SuppressWarnings("unchecked")
-    private void actualizarLista(SessionEvent event, boolean agregar) {
+    private void refreshConexiones() {
         SwingUtilities.invokeLater(() -> {
-            DefaultListModel<String> model = (DefaultListModel<String>) vista.getLstConexiones().getModel();
-            Object id = event.getPayload().get("clienteId");
-            Object usuario = event.getPayload().getOrDefault("usuario", "");
-            String entry = id + ":" + usuario;
-            if (agregar) {
-                model.addElement(entry);
-            } else {
-                for (int i = 0; i < model.size(); i++) {
-                    if (model.get(i).startsWith(id + ":")) {
-                        model.remove(i);
-                        break;
-                    }
-                }
+            conexionesModel.clear();
+            mapping.clear();
+            for (SessionDescriptor descriptor : conexionService.sesionesActivas()) {
+                String text = descriptor.getSessionId() + " - " + descriptor.getUsuario();
+                conexionesModel.addElement(text);
+                mapping.put(text, descriptor.getSessionId());
             }
         });
+    }
+
+    @Override
+    public void onEvent(SessionEvent event) {
+        if (event.getType() == SessionEventType.LOGIN || event.getType() == SessionEventType.LOGOUT) {
+            refreshConexiones();
+        }
     }
 }

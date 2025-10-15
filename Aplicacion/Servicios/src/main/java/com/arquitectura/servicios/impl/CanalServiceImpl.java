@@ -6,20 +6,28 @@ import com.arquitectura.repositorios.ClienteRepository;
 import com.arquitectura.servicios.CanalService;
 import com.arquitectura.servicios.eventos.SessionEvent;
 import com.arquitectura.servicios.eventos.SessionEventBus;
+import com.arquitectura.servicios.eventos.SessionEventType;
 
-import java.util.List;
+import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
+import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.logging.Logger;
 
 public class CanalServiceImpl implements CanalService {
+
+    private static final Logger LOGGER = Logger.getLogger(CanalServiceImpl.class.getName());
 
     private final CanalRepository canalRepository;
     private final ClienteRepository clienteRepository;
     private final SessionEventBus eventBus;
+    private final Map<Long, Set<Long>> invitacionesPendientes = new ConcurrentHashMap<>();
 
     public CanalServiceImpl(CanalRepository canalRepository, ClienteRepository clienteRepository, SessionEventBus eventBus) {
-        this.canalRepository = Objects.requireNonNull(canalRepository);
-        this.clienteRepository = Objects.requireNonNull(clienteRepository);
-        this.eventBus = Objects.requireNonNull(eventBus);
+        this.canalRepository = Objects.requireNonNull(canalRepository, "canalRepository");
+        this.clienteRepository = Objects.requireNonNull(clienteRepository, "clienteRepository");
+        this.eventBus = Objects.requireNonNull(eventBus, "eventBus");
     }
 
     @Override
@@ -27,42 +35,48 @@ public class CanalServiceImpl implements CanalService {
         Canal canal = new Canal();
         canal.setNombre(nombre);
         canal.setPrivado(privado);
-        Canal guardado = canalRepository.save(canal);
-        eventBus.publish(new SessionEvent(SessionEvent.Type.CHANNEL_CREATED, java.util.Map.of(
-                "canalId", guardado.getId(),
-                "nombre", guardado.getNombre()
-        )));
-        return guardado;
+        Canal saved = canalRepository.save(canal);
+        LOGGER.info(() -> "Canal creado: " + saved.getId());
+        eventBus.publish(new SessionEvent(SessionEventType.CHANNEL_CREATED, null, null, saved));
+        return saved;
     }
 
     @Override
-    public void invitarUsuario(Long canalId, Long clienteId) {
-        validarExistencia(canalId, clienteId);
-        eventBus.publish(new SessionEvent(SessionEvent.Type.INVITE_SENT, java.util.Map.of(
-                "canalId", canalId,
-                "clienteId", clienteId
-        )));
+    public void invitarUsuario(Long canalId, Long solicitanteId, Long invitadoId) {
+        validarCanalYUsuario(canalId, invitadoId);
+        invitacionesPendientes.computeIfAbsent(canalId, key -> ConcurrentHashMap.newKeySet()).add(invitadoId);
+        LOGGER.info(() -> "Invitación registrada para canal " + canalId + " usuario " + invitadoId);
+        eventBus.publish(new SessionEvent(SessionEventType.INVITE_SENT, null, solicitanteId, Map.of("canalId", canalId, "invitadoId", invitadoId)));
     }
 
     @Override
-    public void aceptarInvitacion(Long canalId, Long clienteId) {
-        validarExistencia(canalId, clienteId);
-        canalRepository.linkUser(canalId, clienteId);
+    public void aceptarInvitacion(Long canalId, Long invitadoId) {
+        if (!isInvited(canalId, invitadoId)) {
+            throw new IllegalStateException("No existe invitación para el canal");
+        }
+        canalRepository.linkUser(canalId, invitadoId);
+        invitacionesPendientes.getOrDefault(canalId, ConcurrentHashMap.newKeySet()).remove(invitadoId);
+        LOGGER.info(() -> "Usuario " + invitadoId + " unido a canal " + canalId);
     }
 
     @Override
-    public void rechazarInvitacion(Long canalId, Long clienteId) {
-        validarExistencia(canalId, clienteId);
-        canalRepository.unlinkUser(canalId, clienteId);
+    public void rechazarInvitacion(Long canalId, Long invitadoId) {
+        if (!isInvited(canalId, invitadoId)) {
+            return;
+        }
+        invitacionesPendientes.get(canalId).remove(invitadoId);
+        LOGGER.info(() -> "Usuario " + invitadoId + " rechazó invitación de canal " + canalId);
     }
 
-    @Override
-    public List<Canal> listarCanales() {
-        return canalRepository.findAll();
+    private boolean isInvited(Long canalId, Long invitadoId) {
+        return invitacionesPendientes.getOrDefault(canalId, Set.of()).contains(invitadoId);
     }
 
-    private void validarExistencia(Long canalId, Long clienteId) {
-        canalRepository.findById(canalId).orElseThrow(() -> new IllegalArgumentException("Canal no encontrado"));
-        clienteRepository.findById(clienteId).orElseThrow(() -> new IllegalArgumentException("Cliente no encontrado"));
+    private void validarCanalYUsuario(Long canalId, Long usuarioId) {
+        Optional<Canal> canal = canalRepository.findById(canalId);
+        if (canal.isEmpty()) {
+            throw new IllegalArgumentException("Canal inexistente");
+        }
+        clienteRepository.findById(usuarioId).orElseThrow(() -> new IllegalArgumentException("Usuario inexistente"));
     }
 }

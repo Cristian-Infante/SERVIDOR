@@ -3,16 +3,36 @@ package com.arquitectura.dto;
 import java.time.LocalDateTime;
 
 public class LogEntryDto {
-    private LocalDateTime fechaHora;
-    private String detalle;
-    private boolean tipo;
 
-    public LocalDateTime getFechaHora() {
-        return fechaHora;
+    private Long id;
+    private boolean tipo;
+    private String detalle;
+    private LocalDateTime fechaHora;
+
+    public LogEntryDto() {
     }
 
-    public void setFechaHora(LocalDateTime fechaHora) {
+    public LogEntryDto(Long id, boolean tipo, String detalle, LocalDateTime fechaHora) {
+        this.id = id;
+        this.tipo = tipo;
+        this.detalle = detalle;
         this.fechaHora = fechaHora;
+    }
+
+    public Long getId() {
+        return id;
+    }
+
+    public void setId(Long id) {
+        this.id = id;
+    }
+
+    public boolean isTipo() {
+        return tipo;
+    }
+
+    public void setTipo(boolean tipo) {
+        this.tipo = tipo;
     }
 
     public String getDetalle() {
@@ -23,11 +43,11 @@ public class LogEntryDto {
         this.detalle = detalle;
     }
 
-    public boolean isTipo() {
-        return tipo;
+    public LocalDateTime getFechaHora() {
+        return fechaHora;
     }
 
-    public void setTipo(boolean tipo) {
-        this.tipo = tipo;
+    public void setFechaHora(LocalDateTime fechaHora) {
+        this.fechaHora = fechaHora;
     }
 }

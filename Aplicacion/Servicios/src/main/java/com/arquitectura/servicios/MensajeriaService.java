@@ -1,14 +1,10 @@
 package com.arquitectura.servicios;
 
+import com.arquitectura.dto.MessageRequest;
 import com.arquitectura.entidades.Mensaje;
 
 public interface MensajeriaService {
+    Mensaje enviarMensajeAUsuario(MessageRequest request);
 
-    Mensaje enviarMensajeATexto(Long emisorId, Long receptorId, String contenido);
-
-    Mensaje enviarMensajeACanalTexto(Long emisorId, Long canalId, String contenido);
-
-    Mensaje enviarMensajeAudio(Long emisorId, Long receptorId, Long canalId, String ruta, String mime, int duracion);
-
-    Mensaje enviarMensajeArchivo(Long emisorId, Long receptorId, Long canalId, String ruta, String mime);
+    Mensaje enviarMensajeACanal(MessageRequest request);
 }

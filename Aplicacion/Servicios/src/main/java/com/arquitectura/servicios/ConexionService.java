@@ -1,10 +1,15 @@
 package com.arquitectura.servicios;
 
-public interface ConexionService {
+import com.arquitectura.servicios.conexion.SessionDescriptor;
 
-    void cerrarConexion(Long clienteId);
+import java.util.List;
+
+public interface ConexionService {
+    void cerrarConexion(String sessionId);
 
     void broadcast(String mensaje);
 
     void enviarACanal(Long canalId, String mensaje);
+
+    List<SessionDescriptor> sesionesActivas();
 }
