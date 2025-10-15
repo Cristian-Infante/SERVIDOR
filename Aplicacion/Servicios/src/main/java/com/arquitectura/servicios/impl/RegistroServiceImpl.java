@@ -44,4 +44,22 @@ public class RegistroServiceImpl implements RegistroService {
         LOGGER.info(() -> "Cliente registrado: " + saved.getId());
         return saved;
     }
+
+    @Override
+    public Cliente autenticarCliente(String email, String contrasenia, String ip) {
+        Cliente cliente = clienteRepository.findByEmail(email)
+                .orElseThrow(() -> new IllegalArgumentException("Credenciales inválidas"));
+
+        if (!passwordHasher.matches(contrasenia, cliente.getContrasenia())) {
+            throw new IllegalArgumentException("Credenciales inválidas");
+        }
+
+        if (ip != null && !ip.isBlank() && !ip.equals(cliente.getIp())) {
+            cliente.setIp(ip);
+            clienteRepository.save(cliente);
+        }
+
+        LOGGER.info(() -> "Cliente autenticado: " + cliente.getId());
+        return cliente;
+    }
 }
