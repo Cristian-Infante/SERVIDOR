@@ -1,6 +1,7 @@
 package com.arquitectura.dto;
 
 public class ErrorResponse {
+
     private String error;
 
     public ErrorResponse() {

@@ -1,22 +1,20 @@
 package com.arquitectura.servicios;
 
-import com.arquitectura.entidades.Canal;
-import com.arquitectura.entidades.Cliente;
-import com.arquitectura.entidades.Log;
-import com.arquitectura.entidades.Mensaje;
+import com.arquitectura.dto.AudioMetadataDto;
+import com.arquitectura.dto.ChannelSummary;
+import com.arquitectura.dto.LogEntryDto;
+import com.arquitectura.dto.UserSummary;
 
 import java.util.List;
-import java.util.Map;
 
 public interface ReporteService {
+    List<UserSummary> usuariosRegistrados();
 
-    List<Cliente> usuariosRegistrados();
+    List<ChannelSummary> canalesConUsuarios();
 
-    Map<Canal, List<Cliente>> canalesConUsuarios();
+    List<UserSummary> usuariosConectados();
 
-    List<Cliente> usuariosConectados();
+    List<AudioMetadataDto> textoDeMensajesDeAudio();
 
-    List<Mensaje> textoDeMensajesDeAudio();
-
-    List<Log> logs();
+    List<LogEntryDto> logs();
 }

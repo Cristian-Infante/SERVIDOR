@@ -1,10 +1,21 @@
 package com.arquitectura.dto;
 
 public class UserSummary {
+
     private Long id;
     private String usuario;
     private String email;
     private boolean conectado;
+
+    public UserSummary() {
+    }
+
+    public UserSummary(Long id, String usuario, String email, boolean conectado) {
+        this.id = id;
+        this.usuario = usuario;
+        this.email = email;
+        this.conectado = conectado;
+    }
 
     public Long getId() {
         return id;

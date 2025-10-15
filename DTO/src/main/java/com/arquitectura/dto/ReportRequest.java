@@ -1,13 +1,21 @@
 package com.arquitectura.dto;
 
 public class ReportRequest {
-    private String tipo;
 
-    public String getTipo() {
-        return tipo;
+    private String reportType;
+
+    public ReportRequest() {
     }
 
-    public void setTipo(String tipo) {
-        this.tipo = tipo;
+    public ReportRequest(String reportType) {
+        this.reportType = reportType;
+    }
+
+    public String getReportType() {
+        return reportType;
+    }
+
+    public void setReportType(String reportType) {
+        this.reportType = reportType;
     }
 }

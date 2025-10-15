@@ -1,11 +1,16 @@
 package com.arquitectura.dto;
 
 public class RegisterRequest {
+
     private String usuario;
     private String email;
-    private String password;
+    private String contrasenia;
     private String fotoBase64;
+    private String fotoPath;
     private String ip;
+
+    public RegisterRequest() {
+    }
 
     public String getUsuario() {
         return usuario;
@@ -23,12 +28,12 @@ public class RegisterRequest {
         this.email = email;
     }
 
-    public String getPassword() {
-        return password;
+    public String getContrasenia() {
+        return contrasenia;
     }
 
-    public void setPassword(String password) {
-        this.password = password;
+    public void setContrasenia(String contrasenia) {
+        this.contrasenia = contrasenia;
     }
 
     public String getFotoBase64() {
@@ -37,6 +42,14 @@ public class RegisterRequest {
 
     public void setFotoBase64(String fotoBase64) {
         this.fotoBase64 = fotoBase64;
+    }
+
+    public String getFotoPath() {
+        return fotoPath;
+    }
+
+    public void setFotoPath(String fotoPath) {
+        this.fotoPath = fotoPath;
     }
 
     public String getIp() {

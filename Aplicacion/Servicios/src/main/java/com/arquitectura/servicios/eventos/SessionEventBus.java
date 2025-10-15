@@ -3,9 +3,6 @@ package com.arquitectura.servicios.eventos;
 import java.util.List;
 import java.util.concurrent.CopyOnWriteArrayList;
 
-/**
- * Subject del patrón Observer para la capa de aplicación.
- */
 public class SessionEventBus {
 
     private final List<SessionObserver> observers = new CopyOnWriteArrayList<>();

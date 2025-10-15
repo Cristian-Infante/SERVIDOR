@@ -1,29 +1,33 @@
 package com.arquitectura.dto;
 
 public class MessageRequest {
-    private Long emisorId;
-    private Long receptorId;
+
+    private Long emisor;
+    private Long receptor;
     private Long canalId;
-    private String tipo; // TEXTO, AUDIO, ARCHIVO
+    private String tipo;
     private String contenido;
-    private String ruta;
+    private String rutaArchivo;
     private String mime;
-    private Integer duracion;
+    private Integer duracionSeg;
 
-    public Long getEmisorId() {
-        return emisorId;
+    public MessageRequest() {
     }
 
-    public void setEmisorId(Long emisorId) {
-        this.emisorId = emisorId;
+    public Long getEmisor() {
+        return emisor;
     }
 
-    public Long getReceptorId() {
-        return receptorId;
+    public void setEmisor(Long emisor) {
+        this.emisor = emisor;
     }
 
-    public void setReceptorId(Long receptorId) {
-        this.receptorId = receptorId;
+    public Long getReceptor() {
+        return receptor;
+    }
+
+    public void setReceptor(Long receptor) {
+        this.receptor = receptor;
     }
 
     public Long getCanalId() {
@@ -50,12 +54,12 @@ public class MessageRequest {
         this.contenido = contenido;
     }
 
-    public String getRuta() {
-        return ruta;
+    public String getRutaArchivo() {
+        return rutaArchivo;
     }
 
-    public void setRuta(String ruta) {
-        this.ruta = ruta;
+    public void setRutaArchivo(String rutaArchivo) {
+        this.rutaArchivo = rutaArchivo;
     }
 
     public String getMime() {
@@ -66,11 +70,11 @@ public class MessageRequest {
         this.mime = mime;
     }
 
-    public Integer getDuracion() {
-        return duracion;
+    public Integer getDuracionSeg() {
+        return duracionSeg;
     }
 
-    public void setDuracion(Integer duracion) {
-        this.duracion = duracion;
+    public void setDuracionSeg(Integer duracionSeg) {
+        this.duracionSeg = duracionSeg;
     }
 }

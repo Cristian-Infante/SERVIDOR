@@ -3,47 +3,45 @@ package com.arquitectura.servicios.impl;
 import com.arquitectura.entidades.Cliente;
 import com.arquitectura.repositorios.ClienteRepository;
 import com.arquitectura.servicios.RegistroService;
-import com.arquitectura.servicios.eventos.SessionEvent;
-import com.arquitectura.servicios.eventos.SessionEventBus;
-import com.arquitectura.servicios.util.PasswordHasher;
+import com.arquitectura.servicios.security.PasswordHasher;
 
 import java.util.Objects;
+import java.util.logging.Logger;
 
-/**
- * Servicio encargado del registro de clientes.
- */
 public class RegistroServiceImpl implements RegistroService {
 
-    private final ClienteRepository clienteRepository;
-    private final SessionEventBus eventBus;
+    private static final Logger LOGGER = Logger.getLogger(RegistroServiceImpl.class.getName());
 
-    public RegistroServiceImpl(ClienteRepository clienteRepository, SessionEventBus eventBus) {
-        this.clienteRepository = Objects.requireNonNull(clienteRepository);
-        this.eventBus = Objects.requireNonNull(eventBus);
+    private final ClienteRepository clienteRepository;
+    private final PasswordHasher passwordHasher;
+
+    public RegistroServiceImpl(ClienteRepository clienteRepository, PasswordHasher passwordHasher) {
+        this.clienteRepository = Objects.requireNonNull(clienteRepository, "clienteRepository");
+        this.passwordHasher = Objects.requireNonNull(passwordHasher, "passwordHasher");
     }
 
     @Override
-    public Cliente registrar(String usuario, String email, String passwordPlano, byte[] foto, String ip) {
-        clienteRepository.findByEmail(email).ifPresent(c -> {
-            throw new IllegalArgumentException("El email ya se encuentra registrado");
+    public Cliente registrarCliente(String usuario, String email, String contrasenia, byte[] foto, String ip) {
+        clienteRepository.findByEmail(email).ifPresent(existing -> {
+            throw new IllegalArgumentException("El email ya está registrado");
         });
-        boolean usuarioEnUso = clienteRepository.all().stream()
-                .anyMatch(cliente -> usuario.equalsIgnoreCase(cliente.getNombreDeUsuario()));
-        if (usuarioEnUso) {
-            throw new IllegalArgumentException("El nombre de usuario ya existe");
+
+        boolean usuarioDuplicado = clienteRepository.all().stream()
+                .anyMatch(cli -> cli.getNombreDeUsuario().equalsIgnoreCase(usuario));
+        if (usuarioDuplicado) {
+            throw new IllegalArgumentException("El usuario ya está registrado");
         }
+
         Cliente cliente = new Cliente();
         cliente.setNombreDeUsuario(usuario);
         cliente.setEmail(email);
-        cliente.setContrasenia(PasswordHasher.hash(passwordPlano));
+        cliente.setContrasenia(passwordHasher.hash(contrasenia));
         cliente.setFoto(foto);
         cliente.setIp(ip);
-        cliente.setEstado(Boolean.TRUE);
-        Cliente guardado = clienteRepository.save(cliente);
-        eventBus.publish(new SessionEvent(SessionEvent.Type.LOGIN, java.util.Map.of(
-                "clienteId", guardado.getId(),
-                "usuario", guardado.getNombreDeUsuario()
-        )));
-        return guardado;
+        cliente.setEstado(Boolean.FALSE);
+
+        Cliente saved = clienteRepository.save(cliente);
+        LOGGER.info(() -> "Cliente registrado: " + saved.getId());
+        return saved;
     }
 }
