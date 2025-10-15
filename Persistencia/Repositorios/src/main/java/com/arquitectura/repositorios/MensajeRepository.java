@@ -4,6 +4,9 @@ import com.arquitectura.entidades.Mensaje;
 
 import java.util.List;
 
+/**
+ * Operaciones de almacenamiento para mensajes en el sistema.
+ */
 public interface MensajeRepository {
 
     Mensaje save(Mensaje mensaje);
