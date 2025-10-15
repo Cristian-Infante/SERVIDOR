@@ -1,4 +1,4 @@
-package com.arquitectura.entidades.vistas;
+package com.arquitectura.bootstrap;
 
 import com.arquitectura.configdb.DBConfig;
 import com.arquitectura.controladores.LogSubscriber;
@@ -88,4 +88,3 @@ public final class ServidorApplication {
         return mensajeriaService;
     }
 }
-

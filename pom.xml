@@ -15,6 +15,7 @@
         <module>DTO</module>
         <module>Persistencia/Repositorios</module>
         <module>Aplicacion/Servicios</module>
+        <module>Aplicacion/Bootstrap</module>
         <module>Aplicacion/Controladores</module>
         <module>Presentacion/Vistas</module>
     </modules>
