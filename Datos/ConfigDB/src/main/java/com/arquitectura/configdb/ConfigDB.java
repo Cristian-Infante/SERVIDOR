@@ -6,7 +6,7 @@ public final class ConfigDB {
     }
 
     public static void main(String[] args) {
-        System.out.println("URL MySQL: " + DBConfig.require("mysql.url"));
-        System.out.println("Puerto servidor: " + DBConfig.require("server.port"));
+        System.out.println("URL MySQL: " + DBConfig.requireProperty("mysql.url"));
+        System.out.println("Puerto servidor: " + DBConfig.requireProperty("server.port"));
     }
 }

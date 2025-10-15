@@ -1,28 +1,29 @@
 package com.arquitectura.configdb;
 
+import com.mysql.cj.jdbc.MysqlDataSource;
+
 import javax.sql.DataSource;
 import java.io.IOException;
 import java.io.InputStream;
-import java.io.PrintWriter;
-import java.sql.Connection;
-import java.sql.DriverManager;
-import java.sql.SQLException;
-import java.sql.SQLFeatureNotSupportedException;
 import java.util.Objects;
 import java.util.Properties;
+import java.util.logging.Level;
 import java.util.logging.Logger;
 
 /**
- * Centraliza la carga de configuraciones para la capa de datos.
- * Lee el archivo {@code properties/DB.properties} y expone utilitarios
- * para obtener un {@link javax.sql.DataSource} conectado a MySQL así como
- * acceso a otras claves requeridas por el servidor.
+ * Punto de acceso centralizado para la configuración del servidor.
+ *
+ * <p>Lee el archivo {@code properties/DB.properties} y expone un {@link DataSource}
+ * para interactuar con MySQL. También expone utilitarios para obtener claves
+ * arbitrarias usadas por otras capas (puertos del servidor, rutas de
+ * almacenamiento, niveles de logging, etc.).</p>
  */
 public final class DBConfig {
 
-    private static final String PROPERTIES_PATH = "properties/DB.properties";
+    private static final Logger LOGGER = Logger.getLogger(DBConfig.class.getName());
+    private static final String PROPERTIES_PATH = "/properties/DB.properties";
     private static final Properties PROPERTIES = new Properties();
-    private static volatile DataSource dataSource;
+    private static DataSource dataSource;
 
     static {
         load();
@@ -32,126 +33,82 @@ public final class DBConfig {
     }
 
     private static void load() {
-        try (InputStream in = Thread.currentThread()
-                .getContextClassLoader()
-                .getResourceAsStream(PROPERTIES_PATH)) {
-            if (in == null) {
-                throw new IllegalStateException("No se encontró el archivo de configuración: " + PROPERTIES_PATH);
+        try (InputStream inputStream = DBConfig.class.getResourceAsStream(PROPERTIES_PATH)) {
+            if (Objects.isNull(inputStream)) {
+                throw new IllegalStateException("No se encontró el archivo de propiedades " + PROPERTIES_PATH);
             }
-            PROPERTIES.load(in);
+            PROPERTIES.load(inputStream);
+            LOGGER.log(Level.CONFIG, "Propiedades de configuración cargadas ({0})", PROPERTIES.size());
         } catch (IOException e) {
-            throw new IllegalStateException("No se pudo cargar la configuración de base de datos", e);
+            throw new IllegalStateException("No se pudieron cargar las propiedades", e);
         }
     }
 
     /**
-     * Obtiene un {@link DataSource} que utiliza {@link DriverManager} para producir conexiones.
-     * La instancia se crea de forma perezosa y se reutiliza (singleton).
+     * Expone una instancia reutilizable de {@link DataSource} inicializada a partir de la configuración.
      *
-     * @return DataSource configurado con los parámetros de MySQL.
+     * @return datasource configurado hacia MySQL
      */
-    public static DataSource getMySqlDataSource() {
+    public static synchronized DataSource getDataSource() {
         if (dataSource == null) {
-            synchronized (DBConfig.class) {
-                if (dataSource == null) {
-                    dataSource = new DriverManagerDataSource(
-                            require("mysql.url"),
-                            require("mysql.user"),
-                            require("mysql.password"),
-                            PROPERTIES.getProperty("mysql.driver", "com.mysql.cj.jdbc.Driver")
-                    );
-                }
-            }
+            MysqlDataSource mysqlDataSource = new MysqlDataSource();
+            mysqlDataSource.setUrl(requireProperty("mysql.url"));
+            mysqlDataSource.setUser(requireProperty("mysql.user"));
+            mysqlDataSource.setPassword(requireProperty("mysql.password"));
+            dataSource = mysqlDataSource;
         }
         return dataSource;
     }
 
     /**
-     * Obtiene una propiedad arbitraria definida en el archivo de configuración.
-     *
-     * @param key clave solicitada.
-     * @return valor encontrado o {@code null} si no existe.
+     * Obtiene una propiedad como {@link String} validando que exista.
      */
-    public static String get(String key) {
-        return PROPERTIES.getProperty(key);
-    }
-
-    /**
-     * Obtiene una propiedad obligatoria, lanzando excepción en caso de ausencia.
-     */
-    public static String require(String key) {
-        String value = get(key);
-        if (Objects.requireNonNull(value, "No se encontró la propiedad: " + key).isEmpty()) {
-            throw new IllegalStateException("La propiedad " + key + " no puede ser vacía");
+    public static String requireProperty(String key) {
+        String value = PROPERTIES.getProperty(key);
+        if (value == null) {
+            throw new IllegalArgumentException("No se encontró la clave de configuración: " + key);
         }
         return value;
     }
 
     /**
-     * Implementación sencilla de {@link DataSource} basada en {@link DriverManager}.
+     * Obtiene una propiedad como {@link int}.
      */
-    private static final class DriverManagerDataSource implements DataSource {
-
-        private final String url;
-        private final String user;
-        private final String password;
-
-        private DriverManagerDataSource(String url, String user, String password, String driverClassName) {
-            this.url = url;
-            this.user = user;
-            this.password = password;
-            if (driverClassName != null && !driverClassName.isBlank()) {
-                try {
-                    Class.forName(driverClassName);
-                } catch (ClassNotFoundException e) {
-                    throw new IllegalStateException("No se pudo cargar el driver de base de datos", e);
-                }
-            }
+    public static int getIntProperty(String key, int defaultValue) {
+        String value = PROPERTIES.getProperty(key);
+        if (value == null || value.isBlank()) {
+            return defaultValue;
         }
+        return Integer.parseInt(value.trim());
+    }
 
-        @Override
-        public Connection getConnection() throws SQLException {
-            return DriverManager.getConnection(url, user, password);
+    /**
+     * Obtiene una propiedad como {@link long}.
+     */
+    public static long getLongProperty(String key, long defaultValue) {
+        String value = PROPERTIES.getProperty(key);
+        if (value == null || value.isBlank()) {
+            return defaultValue;
         }
+        return Long.parseLong(value.trim());
+    }
 
-        @Override
-        public Connection getConnection(String username, String password) throws SQLException {
-            return DriverManager.getConnection(url, username, password);
+    /**
+     * Obtiene una propiedad como {@link boolean}.
+     */
+    public static boolean getBooleanProperty(String key, boolean defaultValue) {
+        String value = PROPERTIES.getProperty(key);
+        if (value == null || value.isBlank()) {
+            return defaultValue;
         }
+        return Boolean.parseBoolean(value.trim());
+    }
 
-        @Override
-        public <T> T unwrap(Class<T> iface) throws SQLException {
-            throw new SQLFeatureNotSupportedException("unwrap no soportado");
-        }
-
-        @Override
-        public boolean isWrapperFor(Class<?> iface) throws SQLException {
-            return false;
-        }
-
-        @Override
-        public PrintWriter getLogWriter() throws SQLException {
-            return DriverManager.getLogWriter();
-        }
-
-        @Override
-        public void setLogWriter(PrintWriter out) throws SQLException {
-            DriverManager.setLogWriter(out);
-        }
-
-        @Override
-        public void setLoginTimeout(int seconds) throws SQLException {
-            DriverManager.setLoginTimeout(seconds);
-        }
-
-        @Override
-        public int getLoginTimeout() throws SQLException {
-            return DriverManager.getLoginTimeout();
-        }
-
-        @Override
-        public Logger getParentLogger() throws SQLFeatureNotSupportedException {
-            throw new SQLFeatureNotSupportedException("ParentLogger no soportado");
-        }
+    /**
+     * Devuelve una propiedad como {@link String} permitiendo valor por defecto.
+     */
+    public static String getProperty(String key, String defaultValue) {
+        String value = PROPERTIES.getProperty(key);
+        return value == null ? defaultValue : value;
     }
 }

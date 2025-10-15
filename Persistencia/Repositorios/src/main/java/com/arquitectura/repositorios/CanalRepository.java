@@ -6,6 +6,9 @@ import com.arquitectura.entidades.Cliente;
 import java.util.List;
 import java.util.Optional;
 
+/**
+ * Contrato de persistencia para la entidad {@link Canal}.
+ */
 public interface CanalRepository {
 
     Canal save(Canal canal);
