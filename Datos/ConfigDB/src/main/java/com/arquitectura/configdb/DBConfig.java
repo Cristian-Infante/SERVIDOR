@@ -70,6 +70,10 @@ public final class DBConfig {
         return dataSource;
     }
 
+    public static String requireProperty(String key) {
+        return INSTANCE.require(key);
+    }
+
     public String getProperty(String key) {
         return properties.getProperty(key);
     }
