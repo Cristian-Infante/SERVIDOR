@@ -18,7 +18,8 @@ public final class PasswordHasher {
     }
 
     public static String hash(String plain) {
-        String salt = DBConfig.getProperty("security.salt", DEFAULT_SALT);
+        DBConfig config = DBConfig.getInstance();
+        String salt = config.getProperty("security.salt", DEFAULT_SALT);
         String toHash = salt + plain;
         try {
             MessageDigest digest = MessageDigest.getInstance("SHA-256");

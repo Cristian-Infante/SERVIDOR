@@ -78,6 +78,10 @@ public final class DBConfig {
         return properties.getProperty(key);
     }
 
+    public String getProperty(String key, String defaultValue) {
+        return properties.getProperty(key, defaultValue);
+    }
+
     public int getIntProperty(String key, int defaultValue) {
         String raw = properties.getProperty(key);
         if (raw == null) {

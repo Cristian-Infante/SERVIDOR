@@ -27,6 +27,10 @@ public class LogEntryDto {
         this.id = id;
     }
 
+    public boolean getTipo() {
+        return tipo;
+    }
+
     public boolean isTipo() {
         return tipo;
     }

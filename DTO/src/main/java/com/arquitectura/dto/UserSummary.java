@@ -33,6 +33,14 @@ public class UserSummary {
         this.usuario = usuario;
     }
 
+    public String getNombreDeUsuario() {
+        return usuario;
+    }
+
+    public void setNombreDeUsuario(String nombreDeUsuario) {
+        this.usuario = nombreDeUsuario;
+    }
+
     public String getEmail() {
         return email;
     }

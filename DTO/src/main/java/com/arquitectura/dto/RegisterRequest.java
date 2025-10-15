@@ -36,6 +36,14 @@ public class RegisterRequest {
         this.contrasenia = contrasenia;
     }
 
+    public String getPassword() {
+        return contrasenia;
+    }
+
+    public void setPassword(String password) {
+        this.contrasenia = password;
+    }
+
     public String getFotoBase64() {
         return fotoBase64;
     }
