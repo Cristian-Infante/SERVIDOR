@@ -5,6 +5,7 @@ import com.arquitectura.dto.ChannelRequest;
 import com.arquitectura.dto.CommandEnvelope;
 import com.arquitectura.dto.ErrorResponse;
 import com.arquitectura.dto.InviteRequest;
+import com.arquitectura.dto.LoginRequest;
 import com.arquitectura.dto.MessageRequest;
 import com.arquitectura.dto.RegisterRequest;
 import com.arquitectura.servicios.CanalService;
@@ -112,6 +113,7 @@ public class ConnectionHandler implements Runnable {
     private void processCommand(String command, JsonNode payload) throws IOException {
         switch (command) {
             case "REGISTER" -> handleRegister(payload);
+            case "LOGIN" -> handleLogin(payload);
             case "SEND_USER" -> handleSendUser(payload);
             case "SEND_CHANNEL" -> handleSendChannel(payload);
             case "CREATE_CHANNEL" -> handleCreateChannel(payload);
@@ -149,6 +151,19 @@ public class ConnectionHandler implements Runnable {
         registry.updateCliente(sessionId, cliente.getId(), cliente.getNombreDeUsuario(), request.getIp());
         eventBus.publish(new SessionEvent(SessionEventType.LOGIN, sessionId, cliente.getId(), null));
         send("REGISTER", new AckResponse("Registro exitoso"));
+    }
+
+    private void handleLogin(JsonNode payload) throws IOException {
+        LoginRequest request = mapper.treeToValue(payload, LoginRequest.class);
+        var cliente = registroService.autenticarCliente(request.getEmail(), request.getContrasenia(), request.getIp());
+        this.clienteId = cliente.getId();
+        String ip = request.getIp();
+        if (ip == null || ip.isBlank()) {
+            ip = cliente.getIp();
+        }
+        registry.updateCliente(sessionId, cliente.getId(), cliente.getNombreDeUsuario(), ip);
+        eventBus.publish(new SessionEvent(SessionEventType.LOGIN, sessionId, cliente.getId(), null));
+        send("LOGIN", new AckResponse("Login exitoso"));
     }
 
     private void handleSendUser(JsonNode payload) throws IOException {

@@ -37,6 +37,27 @@ A continuación, se describen los comandos soportados, los datos de entrada que 
   ```
 - **Notas**: Al registrarse, la sesión queda autenticada y se publica un evento `LOGIN`.
 
+### `LOGIN`
+- **Payload de solicitud** (`LoginRequest`):
+  ```json
+  {
+    "email": "string",
+    "contrasenia": "string",
+    "ip": "string (opcional)"
+  }
+  ```
+- **Respuesta** (`AckResponse`):
+  ```json
+  {
+    "command": "LOGIN",
+    "payload": {
+      "success": true,
+      "message": "Login exitoso"
+    }
+  }
+  ```
+- **Notas**: Autentica a un usuario existente, actualiza su dirección IP cuando se proporciona y publica un evento `LOGIN`.
+
 ### `SEND_USER`
 - **Payload de solicitud** (`MessageRequest`):
   ```json
