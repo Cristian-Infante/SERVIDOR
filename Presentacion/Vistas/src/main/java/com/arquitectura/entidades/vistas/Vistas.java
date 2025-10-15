@@ -1,11 +1,12 @@
 package com.arquitectura.entidades.vistas;
 
-import javax.swing.*;
-
 public class Vistas {
     public static void main(String[] args) {
-        SwingUtilities.invokeLater(() -> {
-            new ServidorVista().setVisible(true);
+        javax.swing.SwingUtilities.invokeLater(() -> {
+            ServidorApplication application = new ServidorApplication();
+            ServidorVistaAdapter vista = new ServidorVistaAdapter();
+            application.createServidorController(vista);
+            vista.setVisible(true);
         });
     }
 }
