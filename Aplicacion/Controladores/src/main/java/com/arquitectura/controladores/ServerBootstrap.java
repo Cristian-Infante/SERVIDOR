@@ -12,7 +12,7 @@ import com.arquitectura.repositorios.jdbc.JdbcCanalRepository;
 import com.arquitectura.repositorios.jdbc.JdbcClienteRepository;
 import com.arquitectura.repositorios.jdbc.JdbcLogRepository;
 import com.arquitectura.repositorios.jdbc.JdbcMensajeRepository;
-import com.arquitectura.entidades.vistas.ServidorVista;
+import com.arquitectura.entidades.vistas.ServidorVistaAdapter;
 import com.arquitectura.servicios.CanalService;
 import com.arquitectura.servicios.ConexionService;
 import com.arquitectura.servicios.MensajeriaService;
@@ -44,40 +44,42 @@ public class ServerBootstrap {
 
     private static final Logger LOGGER = Logger.getLogger(ServerBootstrap.class.getName());
 
-    public static void main(String[] args) throws IOException {
-        new ServerBootstrap().start();
+    private DBConfig config;
+    private DataSource dataSource;
+    private ClienteRepository clienteRepository;
+    private CanalRepository canalRepository;
+    private MensajeRepository mensajeRepository;
+    private LogRepository logRepository;
+    private SessionEventBus eventBus;
+    private ConnectionRegistry registry;
+    private ConnectionHandlerPool pool;
+    private RegistroService registroService;
+    private CanalService canalService;
+    private MensajeriaService mensajeriaService;
+    private ReporteService reporteService;
+    private ConexionService conexionService;
+    private boolean initialized;
+    private int port;
+    private int maxConnections;
+    private boolean launchViewOnStart = true;
+
+    public static void main(String[] args) {
+        MainServidor.main(args);
+    }
+
+    public static ServerBootstrap createDefault() {
+        ServerBootstrap bootstrap = new ServerBootstrap();
+        bootstrap.launchViewOnStart = false;
+        bootstrap.ensureInitialized();
+        return bootstrap;
     }
 
     public void start() throws IOException {
-        DBConfig config = DBConfig.getInstance();
-        configureLogging(config);
+        ensureInitialized();
 
-        DataSource dataSource = config.getMySqlDataSource();
-        ClienteRepository clienteRepository = new JdbcClienteRepository(dataSource);
-        CanalRepository canalRepository = new JdbcCanalRepository(dataSource);
-        MensajeRepository mensajeRepository = new JdbcMensajeRepository(dataSource);
-        LogRepository logRepository = new JdbcLogRepository(dataSource);
-
-        SessionEventBus eventBus = new SessionEventBus();
-        ConnectionRegistry registry = new ConnectionRegistry();
-        ConnectionGateway gateway = registry;
-        PasswordHasher hasher = new Sha256PasswordHasher(config);
-
-        RegistroService registroService = new RegistroServiceImpl(clienteRepository, hasher);
-        CanalService canalService = new CanalServiceImpl(canalRepository, clienteRepository, eventBus);
-        MensajeriaService mensajeriaService = new MensajeriaServiceImpl(mensajeRepository, logRepository, gateway, eventBus);
-        ReporteService reporteService = new ReporteServiceImpl(clienteRepository, canalRepository, mensajeRepository, logRepository);
-        ConexionService conexionService = new ConexionServiceImpl(gateway, clienteRepository, eventBus);
-
-        new LogSubscriber(logRepository, eventBus);
-
-        launchUi(reporteService, conexionService, eventBus);
-
-        int port = config.getIntProperty("server.port", 5050);
-        int maxConnections = config.getIntProperty("server.maxConnections", 5);
-
-        ConnectionHandlerPool pool = new ConnectionHandlerPool(maxConnections,
-                () -> new ConnectionHandler(registroService, canalService, mensajeriaService, reporteService, conexionService, eventBus, registry));
+        if (launchViewOnStart) {
+            launchUi(reporteService, conexionService, eventBus);
+        }
 
         try (ServerSocket serverSocket = new ServerSocket(port)) {
             LOGGER.info(() -> "Servidor iniciado en puerto " + port + " capacidad " + maxConnections);
@@ -91,6 +93,40 @@ public class ServerBootstrap {
                 new Thread(handler).start();
             }
         }
+    }
+
+    private synchronized void ensureInitialized() {
+        if (initialized) {
+            return;
+        }
+        this.config = DBConfig.getInstance();
+        configureLogging(config);
+
+        this.dataSource = config.getMySqlDataSource();
+        this.clienteRepository = new JdbcClienteRepository(dataSource);
+        this.canalRepository = new JdbcCanalRepository(dataSource);
+        this.mensajeRepository = new JdbcMensajeRepository(dataSource);
+        this.logRepository = new JdbcLogRepository(dataSource);
+
+        this.eventBus = new SessionEventBus();
+        this.registry = new ConnectionRegistry();
+        ConnectionGateway gateway = registry;
+        PasswordHasher hasher = new Sha256PasswordHasher(config);
+
+        this.registroService = new RegistroServiceImpl(clienteRepository, hasher);
+        this.canalService = new CanalServiceImpl(canalRepository, clienteRepository, eventBus);
+        this.mensajeriaService = new MensajeriaServiceImpl(mensajeRepository, logRepository, gateway, eventBus);
+        this.reporteService = new ReporteServiceImpl(clienteRepository, canalRepository, mensajeRepository, logRepository);
+        this.conexionService = new ConexionServiceImpl(gateway, clienteRepository, eventBus);
+
+        new LogSubscriber(logRepository, eventBus);
+
+        this.port = config.getIntProperty("server.port", 5050);
+        this.maxConnections = config.getIntProperty("server.maxConnections", 5);
+
+        this.pool = new ConnectionHandlerPool(maxConnections,
+                () -> new ConnectionHandler(registroService, canalService, mensajeriaService, reporteService, conexionService, eventBus, registry));
+        this.initialized = true;
     }
 
     private void configureLogging(DBConfig config) {
@@ -114,9 +150,29 @@ public class ServerBootstrap {
 
     private void launchUi(ReporteService reporteService, ConexionService conexionService, SessionEventBus eventBus) {
         SwingUtilities.invokeLater(() -> {
-            ServidorVista vista = new ServidorVista();
-            new ServidorController(vista, reporteService, conexionService, eventBus);
+            ServidorVistaAdapter vista = new ServidorVistaAdapter();
+            new ServidorController(vista, registroService, reporteService, conexionService, eventBus);
             vista.setVisible(true);
         });
+    }
+
+    public RegistroService getRegistroService() {
+        ensureInitialized();
+        return registroService;
+    }
+
+    public ReporteService getReporteService() {
+        ensureInitialized();
+        return reporteService;
+    }
+
+    public ConexionService getConexionService() {
+        ensureInitialized();
+        return conexionService;
+    }
+
+    public SessionEventBus getEventBus() {
+        ensureInitialized();
+        return eventBus;
     }
 }
