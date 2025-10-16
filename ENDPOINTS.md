@@ -71,7 +71,9 @@ Este servidor opera sobre sockets TCP y utiliza **JSON codificado en UTF-8** com
 {
   "command": "MESSAGE_SYNC",
   "payload": {
-    "mensajes": [ /* todos los mensajes del usuario */ ],
+    "mensajes": [
+      /* mensajes enviados y recibidos con metadatos de usuario/canal */
+    ],
     "totalMensajes": 25,
     "ultimaSincronizacion": "2025-10-16T11:30:00"
   }
@@ -600,20 +602,36 @@ El servidor envía notificaciones mediante:
     "mensajes": [
       {
         "id": 123,
-        "tipo": "TEXTO",
-        "emisor": 1,
-        "receptor": 2,
-        "timeStamp": "2025-10-16T10:30:00",
-        "contenido": "Hola"
+        "tipoMensaje": "TEXTO",
+        "timestamp": "2025-10-16T10:30:00",
+        "tipoConversacion": "DIRECTO",
+        "emisorId": 1,
+        "emisorNombre": "alice",
+        "receptorId": 2,
+        "receptorNombre": "bob",
+        "canalId": null,
+        "canalNombre": null,
+        "contenido": {
+          "contenido": "Hola"
+        }
       },
       {
         "id": 124,
-        "tipo": "AUDIO",
-        "emisor": 2,
-        "receptor": 1,
-        "timeStamp": "2025-10-16T10:31:00",
-        "rutaArchivo": "media/audio/usuarios/2/rec_123.wav",
-        "transcripcion": "hola cómo estás"
+        "tipoMensaje": "AUDIO",
+        "timestamp": "2025-10-16T10:31:00",
+        "tipoConversacion": "CANAL",
+        "emisorId": 2,
+        "emisorNombre": "bob",
+        "receptorId": null,
+        "receptorNombre": null,
+        "canalId": 7,
+        "canalNombre": "general",
+        "contenido": {
+          "rutaArchivo": "media/audio/usuarios/2/rec_123.wav",
+          "mime": "audio/wav",
+          "duracionSeg": 12,
+          "transcripcion": "hola cómo estás"
+        }
       }
     ],
     "totalMensajes": 2,
@@ -621,6 +639,14 @@ El servidor envía notificaciones mediante:
   }
 }
 ```
+**Notas:**
+- `mensajes` incluye tanto los mensajes enviados como los recibidos por el usuario.
+- `tipoConversacion` puede ser `DIRECTO` (persona a persona) o `CANAL`; sirve para interpretar si se debe usar la metadata de `receptor*` o `canal*`.
+- `emisorNombre`, `receptorNombre` y `canalNombre` están resueltos por el servidor para evitar consultas adicionales del cliente.
+- La clave `contenido` es un objeto cuya estructura varía según `tipoMensaje`:
+  - `TEXTO`: `{ "contenido": "mensaje plano" }`
+  - `AUDIO`: `{ "rutaArchivo", "mime", "duracionSeg", "transcripcion" }`
+  - `ARCHIVO`: `{ "rutaArchivo", "mime" }`
 **Acción del cliente**: Cargar todos los mensajes en la interfaz para mostrar el historial completo.
 
 ### Eventos de Mensajes en Tiempo Real
