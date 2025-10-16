@@ -44,8 +44,8 @@ public class JdbcMensajeRepository extends JdbcSupport implements MensajeReposit
     }
 
     private Mensaje insert(Mensaje mensaje) {
-        String sql = "INSERT INTO mensajes(timestamp, tipo, emisor_id, receptor_id, canal_id, contenido, ruta_archivo, mime, duracion_seg) " +
-                "VALUES(?,?,?,?,?,?,?,?,?)";
+        String sql = "INSERT INTO mensajes(timestamp, tipo, emisor_id, receptor_id, canal_id, contenido, ruta_archivo, mime, duracion_seg, transcripcion) " +
+                "VALUES(?,?,?,?,?,?,?,?,?,?)";
         try (Connection conn = getConnection();
              PreparedStatement ps = conn.prepareStatement(sql, Statement.RETURN_GENERATED_KEYS)) {
             bindCommonFields(mensaje, ps);
@@ -62,11 +62,11 @@ public class JdbcMensajeRepository extends JdbcSupport implements MensajeReposit
     }
 
     private Mensaje update(Mensaje mensaje) {
-        String sql = "UPDATE mensajes SET timestamp=?, tipo=?, emisor_id=?, receptor_id=?, canal_id=?, contenido=?, ruta_archivo=?, mime=?, duracion_seg=? WHERE id=?";
+        String sql = "UPDATE mensajes SET timestamp=?, tipo=?, emisor_id=?, receptor_id=?, canal_id=?, contenido=?, ruta_archivo=?, mime=?, duracion_seg=?, transcripcion=? WHERE id=?";
         try (Connection conn = getConnection();
              PreparedStatement ps = conn.prepareStatement(sql)) {
             bindCommonFields(mensaje, ps);
-            ps.setLong(10, mensaje.getId());
+            ps.setLong(11, mensaje.getId());
             ps.executeUpdate();
             return mensaje;
         } catch (SQLException e) {
@@ -85,21 +85,25 @@ public class JdbcMensajeRepository extends JdbcSupport implements MensajeReposit
             ps.setNull(7, Types.VARCHAR);
             ps.setNull(8, Types.VARCHAR);
             ps.setNull(9, Types.INTEGER);
+            ps.setNull(10, Types.VARCHAR);
         } else if (mensaje instanceof AudioMensaje audio) {
             ps.setNull(6, Types.VARCHAR);
             ps.setString(7, audio.getRutaArchivo());
             ps.setString(8, audio.getMime());
             ps.setInt(9, audio.getDuracionSeg());
+            ps.setString(10, audio.getTranscripcion());
         } else if (mensaje instanceof ArchivoMensaje archivo) {
             ps.setNull(6, Types.VARCHAR);
             ps.setString(7, archivo.getRutaArchivo());
             ps.setString(8, archivo.getMime());
             ps.setNull(9, Types.INTEGER);
+            ps.setNull(10, Types.VARCHAR);
         } else {
             ps.setNull(6, Types.VARCHAR);
             ps.setNull(7, Types.VARCHAR);
             ps.setNull(8, Types.VARCHAR);
             ps.setNull(9, Types.INTEGER);
+            ps.setNull(10, Types.VARCHAR);
         }
     }
 
@@ -119,6 +123,12 @@ public class JdbcMensajeRepository extends JdbcSupport implements MensajeReposit
     public List<Mensaje> findBetweenUsers(Long emisor, Long receptor) {
         String sql = "SELECT * FROM mensajes WHERE (emisor_id=? AND receptor_id=?) OR (emisor_id=? AND receptor_id=?) ORDER BY timestamp";
         return queryMessages(sql, emisor, receptor, receptor, emisor);
+    }
+    
+    @Override
+    public List<Mensaje> findAllByUser(Long usuarioId) {
+        String sql = "SELECT * FROM mensajes WHERE emisor_id=? OR receptor_id=? ORDER BY timestamp";
+        return queryMessages(sql, usuarioId, usuarioId);
     }
 
     private List<Mensaje> queryMessages(String sql, Object... params) {
@@ -148,6 +158,7 @@ public class JdbcMensajeRepository extends JdbcSupport implements MensajeReposit
                 audio.setRutaArchivo(rs.getString("ruta_archivo"));
                 audio.setMime(rs.getString("mime"));
                 audio.setDuracionSeg(rs.getInt("duracion_seg"));
+                audio.setTranscripcion(rs.getString("transcripcion"));
                 mensaje = audio;
             }
             case "ARCHIVO" -> {

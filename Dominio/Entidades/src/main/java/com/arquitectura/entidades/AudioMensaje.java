@@ -4,6 +4,7 @@ public class AudioMensaje extends Mensaje {
     private String rutaArchivo;
     private String mime;
     private int duracionSeg;
+    private String transcripcion;
 
     public AudioMensaje() {
     }
@@ -36,6 +37,14 @@ public class AudioMensaje extends Mensaje {
 
     public void setDuracionSeg(int duracionSeg) {
         this.duracionSeg = duracionSeg;
+    }
+
+    public String getTranscripcion() {
+        return transcripcion;
+    }
+
+    public void setTranscripcion(String transcripcion) {
+        this.transcripcion = transcripcion;
     }
 }
 

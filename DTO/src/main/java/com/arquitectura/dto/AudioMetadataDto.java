@@ -9,6 +9,7 @@ public class AudioMetadataDto {
     private String ruta;
     private String mime;
     private Integer duracion;
+    private String transcripcion;
 
     public Long getMensajeId() {
         return mensajeId;
@@ -80,5 +81,13 @@ public class AudioMetadataDto {
 
     public void setDuracionSeg(Integer duracionSeg) {
         this.duracion = duracionSeg;
+    }
+
+    public String getTranscripcion() {
+        return transcripcion;
+    }
+
+    public void setTranscripcion(String transcripcion) {
+        this.transcripcion = transcripcion;
     }
 }

@@ -1,10 +1,10 @@
 package com.arquitectura.repositorios;
 
-import com.arquitectura.entidades.Canal;
-import com.arquitectura.entidades.Cliente;
-
 import java.util.List;
 import java.util.Optional;
+
+import com.arquitectura.entidades.Canal;
+import com.arquitectura.entidades.Cliente;
 
 public interface CanalRepository {
     Canal save(Canal canal);

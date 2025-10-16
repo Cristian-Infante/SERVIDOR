@@ -12,4 +12,11 @@ public interface MensajeRepository {
     List<Mensaje> findByCanal(Long canalId);
 
     List<Mensaje> findBetweenUsers(Long emisor, Long receptor);
+    
+    /**
+     * Encuentra todos los mensajes donde el usuario es emisor o receptor
+     * @param usuarioId ID del usuario
+     * @return Lista de mensajes ordenados por timestamp
+     */
+    List<Mensaje> findAllByUser(Long usuarioId);
 }

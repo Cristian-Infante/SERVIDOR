@@ -22,17 +22,35 @@
     </properties>
 
     <dependencies>
+        <!-- Capa de Dominio -->
         <dependency>
             <groupId>com.arquitectura.entidades</groupId>
             <artifactId>Entidades</artifactId>
+            <version>1.0-SNAPSHOT</version>
         </dependency>
+        <!-- Capa de Persistencia -->
         <dependency>
             <groupId>com.arquitectura.repositorios</groupId>
             <artifactId>Repositorios</artifactId>
+            <version>1.0-SNAPSHOT</version>
         </dependency>
+        <!-- DTOs -->
         <dependency>
             <groupId>com.arquitectura.dtos</groupId>
             <artifactId>DTO</artifactId>
+            <version>1.0-SNAPSHOT</version>
+        </dependency>
+        <!-- Vosk Speech Recognition -->
+        <dependency>
+            <groupId>com.alphacephei</groupId>
+            <artifactId>vosk</artifactId>
+            <version>0.3.45</version>
+        </dependency>
+        <!-- Jackson JSR310 para LocalDateTime -->
+        <dependency>
+            <groupId>com.fasterxml.jackson.datatype</groupId>
+            <artifactId>jackson-datatype-jsr310</artifactId>
+            <version>2.17.1</version>
         </dependency>
     </dependencies>
 </project>

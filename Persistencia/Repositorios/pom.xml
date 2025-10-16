@@ -22,14 +22,25 @@
     </properties>
 
     <dependencies>
-        <dependency>
-            <groupId>com.arquitectura.entidades</groupId>
-            <artifactId>Entidades</artifactId>
-        </dependency>
+        <!-- Capa de Datos -->
         <dependency>
             <groupId>com.arquitectura</groupId>
             <artifactId>ConfigDB</artifactId>
+            <version>1.0-SNAPSHOT</version>
         </dependency>
+        <!-- Capa de Dominio -->
+        <dependency>
+            <groupId>com.arquitectura.entidades</groupId>
+            <artifactId>Entidades</artifactId>
+            <version>1.0-SNAPSHOT</version>
+        </dependency>
+        <!-- DTOs -->
+        <dependency>
+            <groupId>com.arquitectura.dtos</groupId>
+            <artifactId>DTO</artifactId>
+            <version>1.0-SNAPSHOT</version>
+        </dependency>
+        <!-- Dependencias externas -->
         <dependency>
             <groupId>mysql</groupId>
             <artifactId>mysql-connector-java</artifactId>

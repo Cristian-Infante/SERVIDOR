@@ -1,10 +1,43 @@
 package com.arquitectura.entidades.vistas;
 
-import javax.swing.*;
-import java.awt.*;
+import java.awt.BorderLayout;
+import java.awt.Color;
+import java.awt.Component;
+import java.awt.Dimension;
+import java.awt.FlowLayout;
+import java.awt.Font;
+import java.awt.GridBagConstraints;
+import java.awt.GridBagLayout;
+import java.awt.GridLayout;
+import java.awt.Insets;
+
+import javax.swing.BorderFactory;
+import javax.swing.Box;
+import javax.swing.BoxLayout;
+import javax.swing.DefaultListModel;
+import javax.swing.JButton;
+import javax.swing.JFrame;
+import javax.swing.JLabel;
+import javax.swing.JList;
+import javax.swing.JPanel;
+import javax.swing.JPasswordField;
+import javax.swing.JScrollPane;
+import javax.swing.JTextField;
 
 public class ServidorVista extends JFrame {
-    // Registrar Cliente
+    // Colores modernos
+    private static final Color BG_PRIMARY = new Color(17, 24, 39);      // Gris oscuro principal
+    private static final Color BG_SECONDARY = new Color(31, 41, 55);    // Gris oscuro secundario
+    private static final Color BG_CARD = new Color(55, 65, 81);         // Gris para tarjetas
+    private static final Color TEXT_PRIMARY = new Color(243, 244, 246); // Blanco suave
+    private static final Color TEXT_SECONDARY = new Color(156, 163, 175); // Gris texto
+    private static final Color ACCENT_BLUE = new Color(59, 130, 246);   // Azul moderno
+    private static final Color ACCENT_BLUE_HOVER = new Color(37, 99, 235);
+    private static final Color ACCENT_RED = new Color(239, 68, 68);     // Rojo moderno
+    private static final Color ACCENT_RED_HOVER = new Color(220, 38, 38);
+    private static final Color BORDER_COLOR = new Color(75, 85, 99);    // Borde sutil
+
+    // Componentes de registro (mantenidos para compatibilidad pero no se muestran)
     private final JTextField txtEmail;
     private final JTextField txtUsuario;
     private final JPasswordField txtContrasena;
@@ -22,178 +55,293 @@ public class ServidorVista extends JFrame {
     private final JButton btnGenerarCanales;
     private final JButton btnGenerarConectados;
     private final JButton btnGenerarLogs;
+    
+    // Control del servidor
+    private final JButton btnApagarServidor;
 
     public ServidorVista() {
-        super("Servidor - Panel");
+        super("Panel de Control del Servidor");
         setDefaultCloseOperation(JFrame.DISPOSE_ON_CLOSE);
-        setSize(1100, 700);
+        setMinimumSize(new Dimension(900, 650));
+        setSize(1000, 700);
         setLocationRelativeTo(null);
 
-        // Inicializar componentes finales aquí (constructor)
+        // Inicializar componentes (mantenidos para compatibilidad)
         txtEmail = new JTextField();
         txtUsuario = new JTextField();
         txtContrasena = new JPasswordField();
         txtFotoRuta = new JTextField();
         txtFotoRuta.setEditable(false);
         btnSeleccionarFoto = new JButton("Seleccionar");
-        stylePrimary(btnSeleccionarFoto);
         txtDireccionIp = new JTextField();
         btnEnviarRegistro = new JButton("Enviar");
-        stylePrimary(btnEnviarRegistro);
 
         lstConexiones = new JList<>(new DefaultListModel<>());
-        btnCerrarConexion = new JButton("Cerrar");
-        stylePrimary(btnCerrarConexion);
+        lstConexiones.setBackground(BG_CARD);
+        lstConexiones.setForeground(TEXT_PRIMARY);
+        lstConexiones.setSelectionBackground(ACCENT_BLUE);
+        lstConexiones.setSelectionForeground(Color.WHITE);
+        lstConexiones.setFont(new Font("Segoe UI", Font.PLAIN, 13));
+        lstConexiones.setBorder(BorderFactory.createEmptyBorder(8, 8, 8, 8));
+
+        btnCerrarConexion = new JButton("Cerrar Conexión");
+        styleModernButton(btnCerrarConexion, ACCENT_BLUE, ACCENT_BLUE_HOVER);
 
         btnGenerarUsuarios = new JButton("Generar");
-        stylePrimary(btnGenerarUsuarios);
+        styleModernButton(btnGenerarUsuarios, ACCENT_BLUE, ACCENT_BLUE_HOVER);
+        
         btnGenerarCanales = new JButton("Generar");
-        stylePrimary(btnGenerarCanales);
+        styleModernButton(btnGenerarCanales, ACCENT_BLUE, ACCENT_BLUE_HOVER);
+        
         btnGenerarConectados = new JButton("Generar");
-        stylePrimary(btnGenerarConectados);
+        styleModernButton(btnGenerarConectados, ACCENT_BLUE, ACCENT_BLUE_HOVER);
+        
         btnGenerarLogs = new JButton("Generar");
-        stylePrimary(btnGenerarLogs);
+        styleModernButton(btnGenerarLogs, ACCENT_BLUE, ACCENT_BLUE_HOVER);
+        
+        btnApagarServidor = new JButton("Apagar Servidor");
+        styleDangerButton(btnApagarServidor);
 
-        JPanel main = new JPanel(new GridLayout(1, 2, 24, 0));
-        main.setBorder(BorderFactory.createEmptyBorder(24, 24, 24, 24));
+        // Crear panel principal con fondo oscuro
+        JPanel mainPanel = new JPanel(new BorderLayout());
+        mainPanel.setBackground(BG_PRIMARY);
+        mainPanel.setBorder(BorderFactory.createEmptyBorder(24, 24, 24, 24));
 
-        // Panel Derecho: Conexiones + Reportes
-        JPanel right = new JPanel();
-        right.setLayout(new BoxLayout(right, BoxLayout.Y_AXIS));
-        right.add(buildTitulo("Conexiones activas"));
-        right.add(Box.createVerticalStrut(8));
-        right.add(buildConexionesPanel());
-        right.add(Box.createVerticalStrut(24));
-        right.add(buildTitulo("Reportes"));
-        right.add(Box.createVerticalStrut(8));
-        right.add(buildReportesPanel());
+        // Header
+        JPanel header = createHeader();
+        mainPanel.add(header, BorderLayout.NORTH);
 
-        main.add(right);
-        setContentPane(main);
+        // Contenido principal en grid responsivo
+        JPanel content = new JPanel(new GridLayout(1, 2, 20, 0));
+        content.setBackground(BG_PRIMARY);
+        content.setBorder(BorderFactory.createEmptyBorder(20, 0, 0, 0));
+
+        // Panel izquierdo: Conexiones
+        content.add(buildConexionesCard());
+
+        // Panel derecho: Reportes + Control
+        JPanel rightPanel = new JPanel();
+        rightPanel.setLayout(new BoxLayout(rightPanel, BoxLayout.Y_AXIS));
+        rightPanel.setBackground(BG_PRIMARY);
+        rightPanel.add(buildReportesCard());
+        rightPanel.add(Box.createVerticalStrut(20));
+        rightPanel.add(buildControlCard());
+        content.add(rightPanel);
+
+        mainPanel.add(content, BorderLayout.CENTER);
+        setContentPane(mainPanel);
     }
 
-    private JComponent buildTitulo(String texto) {
-        JLabel title = new JLabel(texto);
-        title.setFont(new Font(Font.SANS_SERIF, Font.BOLD, 32));
-        title.setAlignmentX(Component.LEFT_ALIGNMENT);
-        return title;
+    private JPanel createHeader() {
+        JPanel header = new JPanel(new BorderLayout());
+        header.setBackground(BG_PRIMARY);
+        header.setBorder(BorderFactory.createEmptyBorder(0, 0, 16, 0));
+
+        JLabel title = new JLabel("Servidor de Mensajería");
+        title.setFont(new Font("Segoe UI", Font.BOLD, 28));
+        title.setForeground(TEXT_PRIMARY);
+        
+        JLabel subtitle = new JLabel("Panel de administración y monitoreo");
+        subtitle.setFont(new Font("Segoe UI", Font.PLAIN, 14));
+        subtitle.setForeground(TEXT_SECONDARY);
+
+        JPanel titlePanel = new JPanel();
+        titlePanel.setLayout(new BoxLayout(titlePanel, BoxLayout.Y_AXIS));
+        titlePanel.setBackground(BG_PRIMARY);
+        titlePanel.add(title);
+        titlePanel.add(Box.createVerticalStrut(4));
+        titlePanel.add(subtitle);
+
+        header.add(titlePanel, BorderLayout.WEST);
+        return header;
     }
 
-    private JComponent buildRegistroPanel() {
-        JPanel p = new JPanel(new GridBagLayout());
-        p.setBorder(BorderFactory.createEmptyBorder(8, 8, 8, 24));
-        GridBagConstraints gbc = new GridBagConstraints();
-        gbc.gridx = 0; gbc.gridy = 0; gbc.anchor = GridBagConstraints.WEST;
-        gbc.insets = new Insets(8, 0, 2, 0);
+    private JPanel buildConexionesCard() {
+        JPanel card = createCard();
+        card.setLayout(new BorderLayout(0, 12));
 
-        JLabel lblEmail = new JLabel("Email");
-        p.add(lblEmail, gbc);
-        gbc.gridy++;
-        gbc.insets = new Insets(0, 0, 8, 0);
-        gbc.fill = GridBagConstraints.HORIZONTAL; gbc.weightx = 1.0;
-        txtEmail.setName("txtEmail");
-        txtEmail.putClientProperty("JTextField.placeholderText", "Ingresa tu Email");
-        p.add(txtEmail, gbc);
+        // Título de la sección
+        JLabel sectionTitle = new JLabel("Conexiones Activas");
+        sectionTitle.setFont(new Font("Segoe UI", Font.BOLD, 18));
+        sectionTitle.setForeground(TEXT_PRIMARY);
 
-        gbc.gridy++; gbc.insets = new Insets(8, 0, 2, 0); gbc.fill = GridBagConstraints.NONE; gbc.weightx = 0;
-        JLabel lblUsuario = new JLabel("Usuario");
-        p.add(lblUsuario, gbc);
-        gbc.gridy++; gbc.insets = new Insets(0, 0, 8, 0); gbc.fill = GridBagConstraints.HORIZONTAL; gbc.weightx = 1.0;
-        txtUsuario.setName("txtUsuarioRegistro");
-        txtUsuario.putClientProperty("JTextField.placeholderText", "Ingresa un Usuario");
-        p.add(txtUsuario, gbc);
+        JLabel maxLabel = new JLabel("Máximo: 5 conexiones");
+        maxLabel.setFont(new Font("Segoe UI", Font.PLAIN, 12));
+        maxLabel.setForeground(TEXT_SECONDARY);
 
-        gbc.gridy++; gbc.insets = new Insets(8, 0, 2, 0); gbc.fill = GridBagConstraints.NONE; gbc.weightx = 0;
-        JLabel lblContrasena = new JLabel("Contraseña");
-        p.add(lblContrasena, gbc);
-        gbc.gridy++; gbc.insets = new Insets(0, 0, 8, 0); gbc.fill = GridBagConstraints.HORIZONTAL; gbc.weightx = 1.0;
-        txtContrasena.setName("txtContrasenaRegistro");
-        txtContrasena.putClientProperty("JTextField.placeholderText", "Ingresa una contraseña de acceso");
-        p.add(txtContrasena, gbc);
+        JPanel headerPanel = new JPanel(new BorderLayout());
+        headerPanel.setBackground(BG_SECONDARY);
+        headerPanel.add(sectionTitle, BorderLayout.WEST);
+        headerPanel.add(maxLabel, BorderLayout.EAST);
 
-        gbc.gridy++; gbc.insets = new Insets(8, 0, 2, 0); gbc.fill = GridBagConstraints.NONE; gbc.weightx = 0;
-        JLabel lblFoto = new JLabel("Foto");
-        p.add(lblFoto, gbc);
-        gbc.gridy++; gbc.insets = new Insets(0, 0, 8, 0); gbc.fill = GridBagConstraints.HORIZONTAL; gbc.weightx = 1.0;
-        JPanel fotoRow = new JPanel(new BorderLayout(8, 0));
-        txtFotoRuta.setName("txtFotoRuta");
-        txtFotoRuta.putClientProperty("JTextField.placeholderText", "Selecciona una foto de perfil");
-        btnSeleccionarFoto.setName("btnSeleccionarFoto");
-        fotoRow.add(txtFotoRuta, BorderLayout.CENTER);
-        fotoRow.add(btnSeleccionarFoto, BorderLayout.EAST);
-        p.add(fotoRow, gbc);
+        card.add(headerPanel, BorderLayout.NORTH);
 
-        gbc.gridy++; gbc.insets = new Insets(8, 0, 2, 0); gbc.fill = GridBagConstraints.NONE; gbc.weightx = 0;
-        JLabel lblIp = new JLabel("DireccionIp (Con puntos)");
-        p.add(lblIp, gbc);
-        gbc.gridy++; gbc.insets = new Insets(0, 0, 12, 0); gbc.fill = GridBagConstraints.HORIZONTAL; gbc.weightx = 1.0;
-        txtDireccionIp.setName("txtDireccionIp");
-        txtDireccionIp.putClientProperty("JTextField.placeholderText", "xxx.xx.xx.xxx");
-        p.add(txtDireccionIp, gbc);
-
-        gbc.gridy++; gbc.insets = new Insets(8, 0, 8, 0); gbc.fill = GridBagConstraints.NONE; gbc.anchor = GridBagConstraints.WEST;
-        btnEnviarRegistro.setName("btnEnviarRegistro");
-        p.add(btnEnviarRegistro, gbc);
-
-        return p;
-    }
-
-    private JComponent buildConexionesPanel() {
-        JPanel p = new JPanel();
-        p.setLayout(new BorderLayout(8, 8));
-        p.setBorder(BorderFactory.createEmptyBorder(0, 0, 0, 24));
-
-        JLabel lblMax = new JLabel("Máximo: 5");
-        p.add(lblMax, BorderLayout.NORTH);
-
+        // Lista de conexiones
         lstConexiones.setName("lstConexiones");
-        JScrollPane scroll = new JScrollPane(lstConexiones);
-        scroll.setPreferredSize(new Dimension(380, 280));
-        p.add(scroll, BorderLayout.CENTER);
+        JScrollPane scrollPane = new JScrollPane(lstConexiones);
+        scrollPane.setBackground(BG_CARD);
+        scrollPane.setBorder(BorderFactory.createLineBorder(BORDER_COLOR, 1));
+        scrollPane.setPreferredSize(new Dimension(420, 400));
+        card.add(scrollPane, BorderLayout.CENTER);
 
-        JPanel actions = new JPanel(new FlowLayout(FlowLayout.RIGHT));
+        // Botón de acción
+        JPanel actionPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT, 0, 0));
+        actionPanel.setBackground(BG_SECONDARY);
         btnCerrarConexion.setName("btnCerrarConexion");
-        actions.add(btnCerrarConexion);
-        p.add(actions, BorderLayout.SOUTH);
+        actionPanel.add(btnCerrarConexion);
+        card.add(actionPanel, BorderLayout.SOUTH);
 
-        return p;
+        return card;
     }
 
-    private JComponent buildReportesPanel() {
-        JPanel p = new JPanel(new GridBagLayout());
+    private JPanel buildReportesCard() {
+        JPanel card = createCard();
+        card.setLayout(new BorderLayout(0, 16));
+
+        // Título
+        JLabel sectionTitle = new JLabel("Reportes del Sistema");
+        sectionTitle.setFont(new Font("Segoe UI", Font.BOLD, 18));
+        sectionTitle.setForeground(TEXT_PRIMARY);
+        card.add(sectionTitle, BorderLayout.NORTH);
+
+        // Grid de reportes
+        JPanel grid = new JPanel(new GridBagLayout());
+        grid.setBackground(BG_SECONDARY);
         GridBagConstraints gbc = new GridBagConstraints();
-        gbc.insets = new Insets(8, 0, 8, 8);
-        gbc.gridx = 0; gbc.gridy = 0; gbc.anchor = GridBagConstraints.WEST;
+        gbc.fill = GridBagConstraints.HORIZONTAL;
+        gbc.weightx = 1.0;
+        gbc.insets = new Insets(8, 0, 8, 0);
 
         // Usuarios registrados
-        p.add(new JLabel("Usuarios registrados"), gbc);
-        gbc.gridx = 1; btnGenerarUsuarios.setName("btnGenerarUsuarios");
-        p.add(btnGenerarUsuarios, gbc);
+        gbc.gridx = 0; gbc.gridy = 0;
+        grid.add(createReportRow("Usuarios Registrados", "Total de usuarios en el sistema"), gbc);
+        gbc.gridx = 1; gbc.weightx = 0; gbc.insets = new Insets(8, 12, 8, 0);
+        btnGenerarUsuarios.setName("btnGenerarUsuarios");
+        grid.add(btnGenerarUsuarios, gbc);
 
-        // Canales con usuarios vinculados
-        gbc.gridx = 0; gbc.gridy++; p.add(new JLabel("Canales con usuarios vinculados"), gbc);
-        gbc.gridx = 1; btnGenerarCanales.setName("btnGenerarCanales");
-        p.add(btnGenerarCanales, gbc);
+        // Canales
+        gbc.gridx = 0; gbc.gridy = 1; gbc.weightx = 1.0; gbc.insets = new Insets(8, 0, 8, 0);
+        grid.add(createReportRow("Canales", "Canales con usuarios vinculados"), gbc);
+        gbc.gridx = 1; gbc.weightx = 0; gbc.insets = new Insets(8, 12, 8, 0);
+        btnGenerarCanales.setName("btnGenerarCanales");
+        grid.add(btnGenerarCanales, gbc);
 
-        // Usuarios conectados
-        gbc.gridx = 0; gbc.gridy++; p.add(new JLabel("Usuarios conectados"), gbc);
-        gbc.gridx = 1; btnGenerarConectados.setName("btnGenerarConectados");
-        p.add(btnGenerarConectados, gbc);
+        // Conectados
+        gbc.gridx = 0; gbc.gridy = 2; gbc.weightx = 1.0; gbc.insets = new Insets(8, 0, 8, 0);
+        grid.add(createReportRow("Usuarios Conectados", "Conexiones activas en tiempo real"), gbc);
+        gbc.gridx = 1; gbc.weightx = 0; gbc.insets = new Insets(8, 12, 8, 0);
+        btnGenerarConectados.setName("btnGenerarConectados");
+        grid.add(btnGenerarConectados, gbc);
 
         // Logs
-        gbc.gridx = 0; gbc.gridy++; p.add(new JLabel("Logs"), gbc);
-        gbc.gridx = 1; btnGenerarLogs.setName("btnGenerarLogs");
-        p.add(btnGenerarLogs, gbc);
+        gbc.gridx = 0; gbc.gridy = 3; gbc.weightx = 1.0; gbc.insets = new Insets(8, 0, 8, 0);
+        grid.add(createReportRow("Logs del Sistema", "Registro de eventos y actividades"), gbc);
+        gbc.gridx = 1; gbc.weightx = 0; gbc.insets = new Insets(8, 12, 8, 0);
+        btnGenerarLogs.setName("btnGenerarLogs");
+        grid.add(btnGenerarLogs, gbc);
 
-        p.setAlignmentX(Component.LEFT_ALIGNMENT);
-        return p;
+        card.add(grid, BorderLayout.CENTER);
+        return card;
     }
 
-    private void stylePrimary(AbstractButton b) {
-        b.setBackground(new Color(63, 35, 255));
-        b.setForeground(Color.BLACK);
-        b.setFocusPainted(false);
-        b.setBorder(BorderFactory.createEmptyBorder(8, 16, 8, 16));
+    private JPanel buildControlCard() {
+        JPanel card = createCard();
+        card.setLayout(new BorderLayout(0, 16));
+
+        JLabel sectionTitle = new JLabel("Control del Servidor");
+        sectionTitle.setFont(new Font("Segoe UI", Font.BOLD, 18));
+        sectionTitle.setForeground(TEXT_PRIMARY);
+        card.add(sectionTitle, BorderLayout.NORTH);
+
+        JPanel content = new JPanel(new BorderLayout());
+        content.setBackground(BG_SECONDARY);
+        
+        JLabel warningLabel = new JLabel("<html><body style='width: 300px;'>Esta acción cerrará todas las conexiones activas y detendrá el servidor.</body></html>");
+        warningLabel.setFont(new Font("Segoe UI", Font.PLAIN, 12));
+        warningLabel.setForeground(TEXT_SECONDARY);
+        warningLabel.setBorder(BorderFactory.createEmptyBorder(0, 0, 12, 0));
+        content.add(warningLabel, BorderLayout.NORTH);
+
+        btnApagarServidor.setName("btnApagarServidor");
+        JPanel buttonPanel = new JPanel(new FlowLayout(FlowLayout.LEFT, 0, 0));
+        buttonPanel.setBackground(BG_SECONDARY);
+        buttonPanel.add(btnApagarServidor);
+        content.add(buttonPanel, BorderLayout.CENTER);
+
+        card.add(content, BorderLayout.CENTER);
+        return card;
+    }
+
+    private JPanel createCard() {
+        JPanel card = new JPanel();
+        card.setBackground(BG_SECONDARY);
+        card.setBorder(BorderFactory.createCompoundBorder(
+            BorderFactory.createLineBorder(BORDER_COLOR, 1),
+            BorderFactory.createEmptyBorder(20, 20, 20, 20)
+        ));
+        return card;
+    }
+
+    private JPanel createReportRow(String title, String description) {
+        JPanel row = new JPanel();
+        row.setLayout(new BoxLayout(row, BoxLayout.Y_AXIS));
+        row.setBackground(BG_SECONDARY);
+
+        JLabel titleLabel = new JLabel(title);
+        titleLabel.setFont(new Font("Segoe UI", Font.BOLD, 14));
+        titleLabel.setForeground(TEXT_PRIMARY);
+        titleLabel.setAlignmentX(Component.LEFT_ALIGNMENT);
+
+        JLabel descLabel = new JLabel(description);
+        descLabel.setFont(new Font("Segoe UI", Font.PLAIN, 11));
+        descLabel.setForeground(TEXT_SECONDARY);
+        descLabel.setAlignmentX(Component.LEFT_ALIGNMENT);
+
+        row.add(titleLabel);
+        row.add(Box.createVerticalStrut(2));
+        row.add(descLabel);
+
+        return row;
+    }
+
+    private void styleModernButton(JButton button, Color bgColor, Color hoverColor) {
+        button.setBackground(bgColor);
+        button.setForeground(Color.WHITE);
+        button.setFont(new Font("Segoe UI", Font.BOLD, 12));
+        button.setFocusPainted(false);
+        button.setBorderPainted(false);
+        button.setOpaque(true);
+        button.setCursor(new java.awt.Cursor(java.awt.Cursor.HAND_CURSOR));
+        button.setBorder(BorderFactory.createEmptyBorder(10, 20, 10, 20));
+        
+        button.addMouseListener(new java.awt.event.MouseAdapter() {
+            public void mouseEntered(java.awt.event.MouseEvent evt) {
+                button.setBackground(hoverColor);
+            }
+            public void mouseExited(java.awt.event.MouseEvent evt) {
+                button.setBackground(bgColor);
+            }
+        });
+    }
+
+    private void styleDangerButton(JButton button) {
+        button.setBackground(ACCENT_RED);
+        button.setForeground(Color.WHITE);
+        button.setFont(new Font("Segoe UI", Font.BOLD, 13));
+        button.setFocusPainted(false);
+        button.setBorderPainted(false);
+        button.setOpaque(true);
+        button.setCursor(new java.awt.Cursor(java.awt.Cursor.HAND_CURSOR));
+        button.setBorder(BorderFactory.createEmptyBorder(12, 24, 12, 24));
+        
+        button.addMouseListener(new java.awt.event.MouseAdapter() {
+            public void mouseEntered(java.awt.event.MouseEvent evt) {
+                button.setBackground(ACCENT_RED_HOVER);
+            }
+            public void mouseExited(java.awt.event.MouseEvent evt) {
+                button.setBackground(ACCENT_RED);
+            }
+        });
     }
 
     // Getters para uso posterior en controladores/handlers
@@ -210,4 +358,16 @@ public class ServidorVista extends JFrame {
     public JButton getBtnGenerarCanales() { return btnGenerarCanales; }
     public JButton getBtnGenerarConectados() { return btnGenerarConectados; }
     public JButton getBtnGenerarLogs() { return btnGenerarLogs; }
+    public JButton getBtnApagarServidor() { return btnApagarServidor; }
+    
+    /**
+     * Muestra un diálogo moderno con el reporte y permite guardarlo.
+     * Mantiene la separación de capas permitiendo que el controlador
+     * use esta funcionalidad sin conocer la implementación específica.
+     */
+    public boolean mostrarDialogoReporte(String titulo, String contenido) {
+        java.awt.Window window = javax.swing.SwingUtilities.getWindowAncestor(this);
+        java.awt.Frame frame = (window instanceof java.awt.Frame) ? (java.awt.Frame) window : null;
+        return ModernReportDialog.showReportDialog(frame, titulo, contenido);
+    }
 }

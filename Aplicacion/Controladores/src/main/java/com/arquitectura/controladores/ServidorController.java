@@ -16,16 +16,20 @@ import javax.swing.DefaultListModel;
 import javax.swing.JFileChooser;
 import javax.swing.JOptionPane;
 import javax.swing.SwingUtilities;
+import javax.swing.filechooser.FileNameExtensionFilter;
 import java.awt.event.ActionEvent;
 import java.io.File;
 import java.io.IOException;
+import java.io.PrintWriter;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.stream.Collectors;
 
 public class ServidorController implements SessionObserver {
 
@@ -61,48 +65,169 @@ public class ServidorController implements SessionObserver {
         vista.getBtnCerrarConexion().addActionListener(this::cerrarSeleccionada);
         vista.getBtnEnviarRegistro().addActionListener(this::registrarCliente);
         vista.getBtnSeleccionarFoto().addActionListener(this::seleccionarFoto);
+        vista.getBtnApagarServidor().addActionListener(this::apagarServidor);
     }
 
     private void mostrarUsuarios(ActionEvent e) {
-        List<UserSummary> usuarios = reporteService.usuariosRegistrados();
-        String mensaje = usuarios.stream()
-                .map(u -> u.getId() + " - " + u.getUsuario() + " (" + (u.isConectado() ? "conectado" : "desconectado") + ")")
-                .collect(Collectors.joining("\n"));
-        JOptionPane.showMessageDialog(vista.asComponent(), mensaje.isBlank() ? "Sin usuarios" : mensaje, "Usuarios registrados", JOptionPane.INFORMATION_MESSAGE);
+        List<UserSummary> usuarios = reporteService.usuariosRegistrados(null);
+        StringBuilder contenido = new StringBuilder();
+        contenido.append("=== REPORTE DE USUARIOS REGISTRADOS ===\n");
+        contenido.append("Fecha: ").append(LocalDateTime.now().format(DateTimeFormatter.ofPattern("dd/MM/yyyy HH:mm:ss"))).append("\n");
+        contenido.append("Total de usuarios: ").append(usuarios.size()).append("\n\n");
+        
+        for (UserSummary u : usuarios) {
+            contenido.append(String.format("ID: %d | Usuario: %s | Email: %s | Estado: %s\n",
+                    u.getId(), u.getUsuario(), u.getEmail(), 
+                    u.isConectado() ? "Conectado" : "Desconectado"));
+        }
+        
+        mostrarYGuardarReporte("Usuarios Registrados", contenido.toString(), "reporte_usuarios.txt");
     }
 
     private void mostrarCanales(ActionEvent e) {
         List<ChannelSummary> canales = reporteService.canalesConUsuarios();
-        String mensaje = canales.stream()
-                .map(c -> c.getId() + " - " + c.getNombre() + " -> " + c.getUsuarios().size() + " usuarios")
-                .collect(Collectors.joining("\n"));
-        JOptionPane.showMessageDialog(vista.asComponent(), mensaje.isBlank() ? "Sin canales" : mensaje, "Canales", JOptionPane.INFORMATION_MESSAGE);
+        StringBuilder contenido = new StringBuilder();
+        contenido.append("=== REPORTE DE CANALES ===\n");
+        contenido.append("Fecha: ").append(LocalDateTime.now().format(DateTimeFormatter.ofPattern("dd/MM/yyyy HH:mm:ss"))).append("\n");
+        contenido.append("Total de canales: ").append(canales.size()).append("\n\n");
+        
+        for (ChannelSummary c : canales) {
+            contenido.append(String.format("ID: %d | Nombre: %s | Tipo: %s | Miembros: %d\n",
+                    c.getId(), c.getNombre(), 
+                    c.isPrivado() ? "Privado" : "Público",
+                    c.getUsuarios().size()));
+            
+            if (!c.getUsuarios().isEmpty()) {
+                contenido.append("  Usuarios:\n");
+                for (UserSummary u : c.getUsuarios()) {
+                    contenido.append(String.format("    - %s (%s)\n", 
+                            u.getUsuario(), 
+                            u.isConectado() ? "conectado" : "desconectado"));
+                }
+            }
+            contenido.append("\n");
+        }
+        
+        mostrarYGuardarReporte("Canales", contenido.toString(), "reporte_canales.txt");
     }
 
     private void mostrarConectados(ActionEvent e) {
-        List<UserSummary> conectados = reporteService.usuariosConectados();
-        String mensaje = conectados.stream()
-                .map(u -> u.getId() + " - " + u.getUsuario())
-                .collect(Collectors.joining("\n"));
-        JOptionPane.showMessageDialog(vista.asComponent(), mensaje.isBlank() ? "Sin usuarios conectados" : mensaje, "Conectados", JOptionPane.INFORMATION_MESSAGE);
+        List<UserSummary> conectados = reporteService.usuariosConectados(null);
+        StringBuilder contenido = new StringBuilder();
+        contenido.append("=== REPORTE DE USUARIOS CONECTADOS ===\n");
+        contenido.append("Fecha: ").append(LocalDateTime.now().format(DateTimeFormatter.ofPattern("dd/MM/yyyy HH:mm:ss"))).append("\n");
+        contenido.append("Total conectados: ").append(conectados.size()).append("\n\n");
+        
+        for (UserSummary u : conectados) {
+            contenido.append(String.format("ID: %d | Usuario: %s | Email: %s\n",
+                    u.getId(), u.getUsuario(), u.getEmail()));
+        }
+        
+        mostrarYGuardarReporte("Usuarios Conectados", contenido.toString(), "reporte_conectados.txt");
     }
 
     private void mostrarLogs(ActionEvent e) {
         List<LogEntryDto> logs = reporteService.logs();
-        String mensaje = logs.stream()
-                .map(l -> l.getFechaHora() + " - " + l.getDetalle())
-                .collect(Collectors.joining("\n"));
-        JOptionPane.showMessageDialog(vista.asComponent(), mensaje.isBlank() ? "Sin logs" : mensaje, "Logs", JOptionPane.INFORMATION_MESSAGE);
+        StringBuilder contenido = new StringBuilder();
+        contenido.append("=== REPORTE DE LOGS DEL SISTEMA ===\n");
+        contenido.append("Fecha del reporte: ").append(LocalDateTime.now().format(DateTimeFormatter.ofPattern("dd/MM/yyyy HH:mm:ss"))).append("\n");
+        contenido.append("Total de registros: ").append(logs.size()).append("\n\n");
+        
+        for (LogEntryDto l : logs) {
+            contenido.append(String.format("[%s] %s\n", l.getFechaHora(), l.getDetalle()));
+        }
+        
+        mostrarYGuardarReporte("Logs del Sistema", contenido.toString(), "reporte_logs.txt");
+    }
+
+    /**
+     * Muestra el reporte en un diálogo y ofrece la opción de guardarlo en un archivo.
+     */
+    private void mostrarYGuardarReporte(String titulo, String contenido, String nombreSugerido) {
+        // Usar la interfaz de la vista para mostrar el diálogo moderno
+        boolean deseaGuardar = vista.mostrarDialogoReporte(
+                titulo, 
+                contenido.isBlank() ? "Sin datos para mostrar" : contenido
+        );
+        
+        // Si el usuario eligió guardar
+        if (deseaGuardar) {
+            guardarReporte(contenido, nombreSugerido);
+        }
+    }
+
+    /**
+     * Permite al usuario seleccionar dónde guardar el reporte y lo guarda en formato .txt
+     */
+    private void guardarReporte(String contenido, String nombreSugerido) {
+        JFileChooser fileChooser = new JFileChooser();
+        fileChooser.setDialogTitle("Guardar reporte");
+        fileChooser.setSelectedFile(new File(nombreSugerido));
+        
+        // Filtro para archivos .txt
+        FileNameExtensionFilter filter = new FileNameExtensionFilter("Archivos de texto (*.txt)", "txt");
+        fileChooser.setFileFilter(filter);
+        
+        int resultado = fileChooser.showSaveDialog(vista.asComponent());
+        
+        if (resultado == JFileChooser.APPROVE_OPTION) {
+            File archivo = fileChooser.getSelectedFile();
+            
+            // Asegurar que tenga extensión .txt
+            if (!archivo.getName().toLowerCase().endsWith(".txt")) {
+                archivo = new File(archivo.getAbsolutePath() + ".txt");
+            }
+            
+            try (PrintWriter writer = new PrintWriter(archivo, StandardCharsets.UTF_8)) {
+                writer.print(contenido);
+                JOptionPane.showMessageDialog(
+                        vista.asComponent(),
+                        "Reporte guardado exitosamente en:\n" + archivo.getAbsolutePath(),
+                        "Guardado exitoso",
+                        JOptionPane.INFORMATION_MESSAGE
+                );
+            } catch (IOException ex) {
+                JOptionPane.showMessageDialog(
+                        vista.asComponent(),
+                        "Error al guardar el archivo: " + ex.getMessage(),
+                        "Error",
+                        JOptionPane.ERROR_MESSAGE
+                );
+            }
+        }
     }
 
     private void cerrarSeleccionada(ActionEvent e) {
         String value = vista.getLstConexiones().getSelectedValue();
         if (value == null) {
+            JOptionPane.showMessageDialog(
+                    vista.asComponent(),
+                    "Por favor selecciona una conexión de la lista",
+                    "Advertencia",
+                    JOptionPane.WARNING_MESSAGE
+            );
             return;
         }
-        String sessionId = mapping.get(value);
-        if (sessionId != null) {
-            conexionService.cerrarConexion(sessionId);
+        
+        int confirm = JOptionPane.showConfirmDialog(
+                vista.asComponent(),
+                "¿Está seguro de que desea cerrar la conexión:\n" + value + "?",
+                "Confirmar cierre de conexión",
+                JOptionPane.YES_NO_OPTION,
+                JOptionPane.WARNING_MESSAGE
+        );
+        
+        if (confirm == JOptionPane.YES_OPTION) {
+            String sessionId = mapping.get(value);
+            if (sessionId != null) {
+                conexionService.cerrarConexion(sessionId);
+                JOptionPane.showMessageDialog(
+                        vista.asComponent(),
+                        "Conexión cerrada exitosamente",
+                        "Información",
+                        JOptionPane.INFORMATION_MESSAGE
+                );
+            }
         }
     }
 
@@ -172,9 +297,56 @@ public class ServidorController implements SessionObserver {
         });
     }
 
+    private void apagarServidor(ActionEvent e) {
+        int confirm = JOptionPane.showConfirmDialog(
+                vista.asComponent(),
+                "¿Está seguro de que desea apagar el servidor?\nTodos los clientes serán desconectados.",
+                "Confirmar apagado",
+                JOptionPane.YES_NO_OPTION,
+                JOptionPane.WARNING_MESSAGE
+        );
+        
+        if (confirm == JOptionPane.YES_OPTION) {
+            try {
+                // Notificar a todos los clientes que el servidor se está apagando
+                conexionService.notificarApagado("El servidor se está apagando. Serás desconectado.");
+                
+                // Dar tiempo para que lleguen las notificaciones
+                Thread.sleep(500);
+                
+                JOptionPane.showMessageDialog(
+                        vista.asComponent(),
+                        "Notificaciones enviadas.\nCerrando servidor...",
+                        "Servidor",
+                        JOptionPane.INFORMATION_MESSAGE
+                );
+                
+                // Cerrar la aplicación
+                System.exit(0);
+            } catch (InterruptedException ex) {
+                Thread.currentThread().interrupt();
+            } catch (Exception ex) {
+                JOptionPane.showMessageDialog(
+                        vista.asComponent(),
+                        "Error al apagar el servidor: " + ex.getMessage(),
+                        "Error",
+                        JOptionPane.ERROR_MESSAGE
+                );
+            }
+        }
+    }
+
     @Override
     public void onEvent(SessionEvent event) {
-        if (event.getType() == SessionEventType.LOGIN || event.getType() == SessionEventType.LOGOUT) {
+        // Actualizar la lista de conexiones cuando:
+        // - Se establece una nueva conexión TCP
+        // - Se cierra una conexión TCP
+        // - Un usuario hace LOGIN
+        // - Un usuario hace LOGOUT
+        if (event.getType() == SessionEventType.LOGIN || 
+            event.getType() == SessionEventType.LOGOUT ||
+            event.getType() == SessionEventType.TCP_CONNECTED ||
+            event.getType() == SessionEventType.TCP_DISCONNECTED) {
             refreshConexiones();
         }
     }

@@ -15,6 +15,8 @@ public interface ClienteRepository {
     List<Cliente> findConnected();
 
     void setConnected(Long id, boolean connected);
+    
+    void disconnectAll();
 
     List<Cliente> all();
 }

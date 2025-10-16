@@ -1,11 +1,15 @@
 package com.arquitectura.servicios.impl;
 
+import com.arquitectura.dto.ServerNotification;
 import com.arquitectura.entidades.Cliente;
 import com.arquitectura.repositorios.ClienteRepository;
+import com.arquitectura.servicios.ConexionService;
 import com.arquitectura.servicios.RegistroService;
+import com.arquitectura.servicios.conexion.SessionDescriptor;
 import com.arquitectura.servicios.security.PasswordHasher;
 
 import java.util.Objects;
+import java.util.Optional;
 import java.util.logging.Logger;
 
 public class RegistroServiceImpl implements RegistroService {
@@ -14,10 +18,18 @@ public class RegistroServiceImpl implements RegistroService {
 
     private final ClienteRepository clienteRepository;
     private final PasswordHasher passwordHasher;
+    private ConexionService conexionService; // Inyección circular - se establece después
 
     public RegistroServiceImpl(ClienteRepository clienteRepository, PasswordHasher passwordHasher) {
         this.clienteRepository = Objects.requireNonNull(clienteRepository, "clienteRepository");
         this.passwordHasher = Objects.requireNonNull(passwordHasher, "passwordHasher");
+    }
+    
+    /**
+     * Establece el servicio de conexión (para evitar dependencia circular)
+     */
+    public void setConexionService(ConexionService conexionService) {
+        this.conexionService = conexionService;
     }
 
     @Override
@@ -52,6 +64,24 @@ public class RegistroServiceImpl implements RegistroService {
 
         if (!passwordHasher.matches(contrasenia, cliente.getContrasenia())) {
             throw new IllegalArgumentException("Credenciales inválidas");
+        }
+
+        // Verificar si el usuario ya tiene una sesión activa
+        if (conexionService != null) {
+            Optional<SessionDescriptor> sesionExistente = conexionService.sesionesActivas()
+                    .stream()
+                    .filter(session -> cliente.getId().equals(session.getClienteId()))
+                    .findFirst();
+                    
+            if (sesionExistente.isPresent()) {
+                SessionDescriptor sesion = sesionExistente.get();
+                LOGGER.warning(() -> "Usuario " + cliente.getNombreDeUsuario() + 
+                              " intentó login múltiple desde " + ip + 
+                              ". Sesión activa en: " + sesion.getSessionId());
+                
+                // Rechazar el nuevo intento de login
+                throw new IllegalArgumentException("Ya tienes una sesión activa. Solo se permite una sesión por usuario.");
+            }
         }
 
         if (ip != null && !ip.isBlank() && !ip.equals(cliente.getIp())) {

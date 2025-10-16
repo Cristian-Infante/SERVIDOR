@@ -1,18 +1,20 @@
 package com.arquitectura.servicios;
 
+import java.util.List;
+
 import com.arquitectura.dto.AudioMetadataDto;
 import com.arquitectura.dto.ChannelSummary;
 import com.arquitectura.dto.LogEntryDto;
 import com.arquitectura.dto.UserSummary;
 
-import java.util.List;
-
 public interface ReporteService {
-    List<UserSummary> usuariosRegistrados();
+    List<UserSummary> usuariosRegistrados(Long excluirUsuarioId);
 
     List<ChannelSummary> canalesConUsuarios();
+    
+    List<ChannelSummary> canalesAccesiblesParaUsuario(Long usuarioId);
 
-    List<UserSummary> usuariosConectados();
+    List<UserSummary> usuariosConectados(Long excluirUsuarioId);
 
     List<AudioMetadataDto> textoDeMensajesDeAudio();
 

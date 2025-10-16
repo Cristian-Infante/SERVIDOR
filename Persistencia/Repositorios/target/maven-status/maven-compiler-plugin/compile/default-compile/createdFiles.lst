@@ -1,0 +1,14 @@
+com\arquitectura\repositorios\jdbc\JdbcClienteRepository.class
+com\arquitectura\repositorios\MensajeRepository.class
+com\arquitectura\repositorios\jdbc\JdbcMensajeRepository.class
+com\arquitectura\repositorios\InvitacionRepositoryImpl.class
+com\arquitectura\repositorios\ClienteRepository.class
+com\arquitectura\repositorios\jdbc\DatabaseInitializer.class
+com\arquitectura\repositorios\jdbc\DatabaseMigrations.class
+com\arquitectura\repositorios\jdbc\BaseJdbcRepository.class
+com\arquitectura\repositorios\CanalRepository.class
+com\arquitectura\repositorios\InvitacionRepository.class
+com\arquitectura\repositorios\jdbc\JdbcCanalRepository.class
+com\arquitectura\repositorios\jdbc\JdbcLogRepository.class
+com\arquitectura\repositorios\jdbc\JdbcSupport.class
+com\arquitectura\repositorios\LogRepository.class

@@ -1,5 +1,6 @@
 package com.arquitectura.servicios.impl;
 
+import com.arquitectura.dto.ServerNotification;
 import com.arquitectura.repositorios.ClienteRepository;
 import com.arquitectura.servicios.ConexionService;
 import com.arquitectura.servicios.conexion.ConnectionGateway;
@@ -32,8 +33,32 @@ public class ConexionServiceImpl implements ConexionService, SessionObserver {
 
     @Override
     public void cerrarConexion(String sessionId) {
-        LOGGER.info(() -> "Cerrando conexión " + sessionId);
+        cerrarConexion(sessionId, "El administrador cerró tu conexión");
+    }
+    
+    @Override
+    public void cerrarConexion(String sessionId, String razon) {
+        LOGGER.info(() -> "Cerrando conexión " + sessionId + " - Razón: " + razon);
         var descriptor = connectionGateway.descriptor(sessionId);
+        
+        // Enviar notificación al cliente antes de cerrar
+        try {
+            ServerNotification notificacion = new ServerNotification(
+                "KICKED",
+                "Tu conexión ha sido cerrada por el servidor",
+                razon
+            );
+            connectionGateway.sendToSession(sessionId, notificacion);
+            
+            // Dar tiempo para que llegue la notificación
+            Thread.sleep(100);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+        } catch (Exception e) {
+            LOGGER.warning(() -> "Error enviando notificación de cierre: " + e.getMessage());
+        }
+        
+        // Cerrar la conexión
         connectionGateway.closeSession(sessionId);
         Long actor = descriptor != null ? descriptor.getClienteId() : null;
         eventBus.publish(new SessionEvent(SessionEventType.LOGOUT, sessionId, actor, null));
@@ -42,6 +67,17 @@ public class ConexionServiceImpl implements ConexionService, SessionObserver {
     @Override
     public void broadcast(String mensaje) {
         connectionGateway.broadcast(mensaje);
+    }
+    
+    @Override
+    public void notificarApagado(String mensaje) {
+        LOGGER.info(() -> "Notificando apagado del servidor a todos los clientes");
+        ServerNotification notificacion = new ServerNotification(
+            "SERVER_SHUTDOWN",
+            mensaje != null ? mensaje : "El servidor se está apagando",
+            "Mantenimiento programado"
+        );
+        connectionGateway.broadcast(notificacion);
     }
 
     @Override

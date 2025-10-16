@@ -1,0 +1,10 @@
+com\arquitectura\entidades\Cliente.class
+com\arquitectura\entidades\ArchivoMensaje.class
+com\arquitectura\entidades\Mensaje.class
+com\arquitectura\entidades\MensajeFactory$TipoMensaje.class
+com\arquitectura\entidades\Canal.class
+com\arquitectura\entidades\AudioMensaje.class
+com\arquitectura\entidades\Invitacion.class
+com\arquitectura\entidades\Log.class
+com\arquitectura\entidades\MensajeFactory.class
+com\arquitectura\entidades\TextoMensaje.class

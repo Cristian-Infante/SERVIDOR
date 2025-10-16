@@ -1,10 +1,11 @@
 package com.arquitectura.repositorios.jdbc;
 
-import javax.sql.DataSource;
 import java.sql.Connection;
 import java.sql.SQLException;
 import java.sql.Statement;
 import java.util.List;
+
+import javax.sql.DataSource;
 
 /**
  * Utility class that makes sure the minimum schema required by the
@@ -26,6 +27,9 @@ public final class DatabaseInitializer {
         } catch (SQLException e) {
             throw new IllegalStateException("Unable to initialise database schema", e);
         }
+        
+        // Ejecutar migraciones después de crear las tablas
+        DatabaseMigrations.runMigrations(dataSource);
     }
 
     private static List<String> schemaStatements() {
@@ -41,15 +45,11 @@ public final class DatabaseInitializer {
                         "UNIQUE KEY uk_clientes_usuario (usuario)," +
                         "UNIQUE KEY uk_clientes_email (email)" +
                         ")",
-                "ALTER TABLE clientes ADD COLUMN IF NOT EXISTS foto LONGBLOB",
-                "ALTER TABLE clientes ADD COLUMN IF NOT EXISTS ip VARCHAR(64)",
-                "ALTER TABLE clientes ADD COLUMN IF NOT EXISTS estado TINYINT(1) DEFAULT 0",
                 "CREATE TABLE IF NOT EXISTS canales (" +
                         "id BIGINT AUTO_INCREMENT PRIMARY KEY," +
                         "nombre VARCHAR(160) NOT NULL," +
-                        "privado TINYINT(1) NOT NULL" +
+                        "privado TINYINT(1) NOT NULL DEFAULT 0" +
                         ")",
-                "ALTER TABLE canales ADD COLUMN IF NOT EXISTS privado TINYINT(1) NOT NULL DEFAULT 0",
                 "CREATE TABLE IF NOT EXISTS canal_clientes (" +
                         "canal_id BIGINT NOT NULL," +
                         "cliente_id BIGINT NOT NULL," +
@@ -68,13 +68,11 @@ public final class DatabaseInitializer {
                         "ruta_archivo VARCHAR(400) NULL," +
                         "mime VARCHAR(120) NULL," +
                         "duracion_seg INT NULL," +
+                        "transcripcion TEXT NULL," +
                         "KEY idx_mensajes_canal (canal_id)," +
                         "KEY idx_mensajes_emisor (emisor_id)," +
                         "KEY idx_mensajes_receptor (receptor_id)" +
                         ")",
-                "ALTER TABLE mensajes ADD COLUMN IF NOT EXISTS ruta_archivo VARCHAR(400) NULL",
-                "ALTER TABLE mensajes ADD COLUMN IF NOT EXISTS mime VARCHAR(120) NULL",
-                "ALTER TABLE mensajes ADD COLUMN IF NOT EXISTS duracion_seg INT NULL",
                 "CREATE TABLE IF NOT EXISTS logs (" +
                         "id BIGINT AUTO_INCREMENT PRIMARY KEY," +
                         "tipo TINYINT(1) NOT NULL," +

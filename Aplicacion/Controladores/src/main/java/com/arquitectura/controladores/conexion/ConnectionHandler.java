@@ -8,9 +8,14 @@ import com.arquitectura.dto.InviteRequest;
 import com.arquitectura.dto.LoginRequest;
 import com.arquitectura.dto.MessageRequest;
 import com.arquitectura.dto.RegisterRequest;
+import com.arquitectura.dto.MessageSyncResponse;
+import com.arquitectura.dto.UploadAudioRequest;
+import com.arquitectura.dto.UploadAudioResponse;
+import com.arquitectura.servicios.AudioStorageService;
 import com.arquitectura.servicios.CanalService;
 import com.arquitectura.servicios.ConexionService;
 import com.arquitectura.servicios.MensajeriaService;
+import com.arquitectura.servicios.MessageSyncService;
 import com.arquitectura.servicios.RegistroService;
 import com.arquitectura.servicios.ReporteService;
 import com.arquitectura.servicios.eventos.SessionEvent;
@@ -18,6 +23,7 @@ import com.arquitectura.servicios.eventos.SessionEventBus;
 import com.arquitectura.servicios.eventos.SessionEventType;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 
 import java.io.BufferedReader;
 import java.io.BufferedWriter;
@@ -40,10 +46,19 @@ public class ConnectionHandler implements Runnable {
     private final MensajeriaService mensajeriaService;
     private final ReporteService reporteService;
     private final ConexionService conexionService;
+    private final AudioStorageService audioStorageService;
+    private final MessageSyncService messageSyncService;
     private final SessionEventBus eventBus;
     private final ConnectionRegistry registry;
     private ConnectionHandlerPool pool;
-    private final ObjectMapper mapper = new ObjectMapper();
+    private final ObjectMapper mapper;
+    
+    {
+        // Configurar Jackson para manejar LocalDateTime
+        mapper = new ObjectMapper();
+        mapper.registerModule(new JavaTimeModule());
+        mapper.disable(com.fasterxml.jackson.databind.SerializationFeature.WRITE_DATES_AS_TIMESTAMPS);
+    }
 
     private Socket socket;
     private BufferedReader reader;
@@ -56,6 +71,8 @@ public class ConnectionHandler implements Runnable {
                               MensajeriaService mensajeriaService,
                               ReporteService reporteService,
                               ConexionService conexionService,
+                              AudioStorageService audioStorageService,
+                              MessageSyncService messageSyncService,
                               SessionEventBus eventBus,
                               ConnectionRegistry registry) {
         this.registroService = Objects.requireNonNull(registroService, "registroService");
@@ -63,6 +80,8 @@ public class ConnectionHandler implements Runnable {
         this.mensajeriaService = Objects.requireNonNull(mensajeriaService, "mensajeriaService");
         this.reporteService = Objects.requireNonNull(reporteService, "reporteService");
         this.conexionService = Objects.requireNonNull(conexionService, "conexionService");
+        this.audioStorageService = Objects.requireNonNull(audioStorageService, "audioStorageService");
+        this.messageSyncService = Objects.requireNonNull(messageSyncService, "messageSyncService");
         this.eventBus = Objects.requireNonNull(eventBus, "eventBus");
         this.registry = Objects.requireNonNull(registry, "registry");
     }
@@ -82,6 +101,9 @@ public class ConnectionHandler implements Runnable {
             writer = registry.writerOf(sessionId);
             reader = new BufferedReader(new InputStreamReader(socket.getInputStream(), StandardCharsets.UTF_8));
             listen();
+        } catch (java.net.SocketException e) {
+            // Conexión cerrada por el cliente, no loguear como error
+            LOGGER.log(Level.FINE, "Cliente desconectado: {0}", e.getMessage());
         } catch (IOException e) {
             LOGGER.log(Level.SEVERE, "Error registrando conexión", e);
         } finally {
@@ -102,27 +124,51 @@ public class ConnectionHandler implements Runnable {
                 JsonNode node = mapper.readTree(line);
                 String command = node.hasNonNull("command") ? node.get("command").asText() : "";
                 JsonNode payload = node.get("payload");
+                
+                // Logging del comando y payload
+                LOGGER.log(Level.INFO, "Comando recibido: {0}", command);
+                if (payload != null) {
+                    LOGGER.log(Level.INFO, "Payload: {0}", sanitizePayload(command, payload));
+                }
+                
                 processCommand(command.toUpperCase(Locale.ROOT), payload);
-            } catch (Exception e) {
-                LOGGER.log(Level.WARNING, "Comando inválido", e);
+            } catch (IllegalArgumentException e) {
+                // Error de validación o credenciales inválidas
+                LOGGER.log(Level.INFO, "Error de validación: {0}", e.getMessage());
                 send("ERROR", new ErrorResponse(e.getMessage()));
+            } catch (com.fasterxml.jackson.core.JsonProcessingException e) {
+                // Error de parseo JSON
+                LOGGER.log(Level.WARNING, "JSON inválido: {0}", e.getMessage());
+                send("ERROR", new ErrorResponse("Formato JSON inválido"));
+            } catch (Exception e) {
+                // Otros errores inesperados
+                LOGGER.log(Level.WARNING, "Error procesando comando: {0}", e.getMessage());
+                send("ERROR", new ErrorResponse("Error interno del servidor"));
             }
         }
     }
 
     private void processCommand(String command, JsonNode payload) throws IOException {
         switch (command) {
+            case "PING" -> handlePing();
             case "REGISTER" -> handleRegister(payload);
             case "LOGIN" -> handleLogin(payload);
+            case "LOGOUT" -> handleLogout();
+            case "UPLOAD_AUDIO" -> handleUploadAudio(payload);
             case "SEND_USER" -> handleSendUser(payload);
             case "SEND_CHANNEL" -> handleSendChannel(payload);
             case "CREATE_CHANNEL" -> handleCreateChannel(payload);
             case "INVITE" -> handleInvite(payload);
             case "ACCEPT" -> handleAccept(payload);
             case "REJECT" -> handleReject(payload);
-            case "LIST_USERS" -> send("LIST_USERS", reporteService.usuariosRegistrados());
-            case "LIST_CHANNELS" -> send("LIST_CHANNELS", reporteService.canalesConUsuarios());
-            case "LIST_CONNECTED" -> send("LIST_CONNECTED", reporteService.usuariosConectados());
+            case "LIST_RECEIVED_INVITATIONS" -> handleListReceivedInvitations();
+            case "LIST_SENT_INVITATIONS" -> handleListSentInvitations();
+            case "LIST_USERS" -> send("LIST_USERS", reporteService.usuariosRegistrados(clienteId));
+            case "LIST_CHANNELS" -> {
+                ensureAuthenticated();
+                send("LIST_CHANNELS", reporteService.canalesAccesiblesParaUsuario(clienteId));
+            }
+            case "LIST_CONNECTED" -> send("LIST_CONNECTED", reporteService.usuariosConectados(clienteId));
             case "CLOSE_CONN" -> handleClose();
             case "BROADCAST" -> handleBroadcast(payload);
             default -> processReports(command);
@@ -131,13 +177,17 @@ public class ConnectionHandler implements Runnable {
 
     private void processReports(String command) throws IOException {
         switch (command) {
-            case "REPORT_USUARIOS" -> send("REPORT_USUARIOS", reporteService.usuariosRegistrados());
+            case "REPORT_USUARIOS" -> send("REPORT_USUARIOS", reporteService.usuariosRegistrados(clienteId));
             case "REPORT_CANALES" -> send("REPORT_CANALES", reporteService.canalesConUsuarios());
-            case "REPORT_CONECTADOS" -> send("REPORT_CONECTADOS", reporteService.usuariosConectados());
+            case "REPORT_CONECTADOS" -> send("REPORT_CONECTADOS", reporteService.usuariosConectados(clienteId));
             case "REPORT_AUDIO" -> send("REPORT_AUDIO", reporteService.textoDeMensajesDeAudio());
             case "REPORT_LOGS" -> send("REPORT_LOGS", reporteService.logs());
             default -> send("ERROR", new ErrorResponse("Comando no soportado: " + command));
         }
+    }
+
+    private void handlePing() throws IOException {
+        send("PING", new AckResponse("PONG"));
     }
 
     private void handleRegister(JsonNode payload) throws IOException {
@@ -147,10 +197,7 @@ public class ConnectionHandler implements Runnable {
             foto = Base64.getDecoder().decode(request.getFotoBase64());
         }
         var cliente = registroService.registrarCliente(request.getUsuario(), request.getEmail(), request.getContrasenia(), foto, request.getIp());
-        this.clienteId = cliente.getId();
-        registry.updateCliente(sessionId, cliente.getId(), cliente.getNombreDeUsuario(), request.getIp());
-        eventBus.publish(new SessionEvent(SessionEventType.LOGIN, sessionId, cliente.getId(), null));
-        send("REGISTER", new AckResponse("Registro exitoso"));
+        send("REGISTER", new AckResponse("Registro exitoso. Por favor inicia sesión."));
     }
 
     private void handleLogin(JsonNode payload) throws IOException {
@@ -163,7 +210,65 @@ public class ConnectionHandler implements Runnable {
         }
         registry.updateCliente(sessionId, cliente.getId(), cliente.getNombreDeUsuario(), ip);
         eventBus.publish(new SessionEvent(SessionEventType.LOGIN, sessionId, cliente.getId(), null));
+        
+        // Enviar respuesta de login exitoso
         send("LOGIN", new AckResponse("Login exitoso"));
+        
+        // Sincronizar mensajes del usuario
+        try {
+            MessageSyncResponse syncResponse = messageSyncService.sincronizarMensajes(cliente.getId());
+            send("MESSAGE_SYNC", syncResponse);
+            LOGGER.info(() -> "Mensajes sincronizados para usuario " + cliente.getNombreDeUsuario() + 
+                             ": " + syncResponse.getTotalMensajes() + " mensajes");
+        } catch (Exception e) {
+            LOGGER.warning(() -> "Error sincronizando mensajes para usuario " + cliente.getId() + ": " + e.getMessage());
+            // No fallar el login por error de sincronización
+        }
+    }
+
+    private void handleLogout() throws IOException {
+        ensureAuthenticated();
+        
+        Long userId = this.clienteId;
+        String userName = registry.descriptorOf(sessionId) != null 
+            ? registry.descriptorOf(sessionId).getUsuario() 
+            : "Usuario desconocido";
+        
+        // Publicar evento de logout antes de limpiar el estado
+        eventBus.publish(new SessionEvent(SessionEventType.LOGOUT, sessionId, userId, null));
+        
+        // Limpiar el estado de autenticación pero mantener la conexión
+        registry.updateCliente(sessionId, null, null, null);
+        this.clienteId = null;
+        
+        send("LOGOUT", new AckResponse("Sesión cerrada exitosamente"));
+        LOGGER.info(() -> "Usuario '" + userName + "' (ID: " + userId + ") cerró sesión");
+    }
+
+    private void handleUploadAudio(JsonNode payload) throws IOException {
+        ensureAuthenticated();
+        UploadAudioRequest request = mapper.treeToValue(payload, UploadAudioRequest.class);
+        
+        try {
+            String rutaGuardada = audioStorageService.guardarAudio(
+                request.getAudioBase64(),
+                clienteId,
+                request.getMime()
+            );
+            
+            UploadAudioResponse response = new UploadAudioResponse(
+                true,
+                rutaGuardada,
+                "Audio guardado exitosamente"
+            );
+            send("UPLOAD_AUDIO", response);
+            
+        } catch (IllegalArgumentException e) {
+            send("ERROR", new ErrorResponse("Datos de audio inválidos: " + e.getMessage()));
+        } catch (Exception e) {
+            LOGGER.log(Level.SEVERE, "Error guardando audio", e);
+            send("ERROR", new ErrorResponse("Error guardando audio en el servidor"));
+        }
     }
 
     private void handleSendUser(JsonNode payload) throws IOException {
@@ -179,16 +284,13 @@ public class ConnectionHandler implements Runnable {
         MessageRequest request = mapper.treeToValue(payload, MessageRequest.class);
         request.setEmisor(clienteId);
         mensajeriaService.enviarMensajeACanal(request);
-        if (request.getCanalId() != null) {
-            registry.joinChannel(sessionId, request.getCanalId());
-        }
         send("SEND_CHANNEL", new AckResponse("Mensaje a canal enviado"));
     }
 
     private void handleCreateChannel(JsonNode payload) throws IOException {
         ensureAuthenticated();
         ChannelRequest request = mapper.treeToValue(payload, ChannelRequest.class);
-        var canal = canalService.crearCanal(request.getNombre(), request.isPrivado());
+        var canal = canalService.crearCanal(request.getNombre(), request.isPrivado(), clienteId);
         registry.joinChannel(sessionId, canal.getId());
         send("CREATE_CHANNEL", canal);
     }
@@ -216,6 +318,16 @@ public class ConnectionHandler implements Runnable {
         send("REJECT", new AckResponse("Invitación rechazada"));
     }
 
+    private void handleListReceivedInvitations() throws IOException {
+        ensureAuthenticated();
+        send("LIST_RECEIVED_INVITATIONS", canalService.obtenerInvitacionesRecibidas(clienteId));
+    }
+
+    private void handleListSentInvitations() throws IOException {
+        ensureAuthenticated();
+        send("LIST_SENT_INVITATIONS", canalService.obtenerInvitacionesEnviadas(clienteId));
+    }
+
     private void handleBroadcast(JsonNode payload) throws IOException {
         ensureAuthenticated();
         String message = payload != null && payload.hasNonNull("message") ? payload.get("message").asText() : "";
@@ -234,14 +346,44 @@ public class ConnectionHandler implements Runnable {
         }
     }
 
+    private String sanitizePayload(String command, JsonNode payload) {
+        try {
+            // Para LOGIN y REGISTER, ocultar la contraseña
+            if ("LOGIN".equalsIgnoreCase(command) || "REGISTER".equalsIgnoreCase(command)) {
+                JsonNode copy = payload.deepCopy();
+                if (copy instanceof com.fasterxml.jackson.databind.node.ObjectNode) {
+                    com.fasterxml.jackson.databind.node.ObjectNode objectNode = 
+                        (com.fasterxml.jackson.databind.node.ObjectNode) copy;
+                    if (objectNode.has("contrasenia")) {
+                        objectNode.put("contrasenia", "*******");
+                    }
+                    return objectNode.toPrettyString();
+                }
+            }
+            return payload.toPrettyString();
+        } catch (Exception e) {
+            return payload.toString();
+        }
+    }
+
     private void send(String command, Object payload) throws IOException {
         if (writer == null) {
             return;
         }
         CommandEnvelope response = new CommandEnvelope(command, payload);
-        writer.write(mapper.writeValueAsString(response));
+        String jsonResponse = mapper.writeValueAsString(response);
+        writer.write(jsonResponse);
         writer.write('\n');
         writer.flush();
+        
+        // Logging de la respuesta enviada
+        LOGGER.log(Level.INFO, "Respuesta enviada: {0}", command);
+        try {
+            JsonNode responseNode = mapper.readTree(jsonResponse);
+            LOGGER.log(Level.INFO, "Payload respuesta: {0}", responseNode.toPrettyString());
+        } catch (Exception e) {
+            LOGGER.log(Level.FINE, "No se pudo formatear la respuesta para logging", e);
+        }
     }
 
     private void cleanup() {

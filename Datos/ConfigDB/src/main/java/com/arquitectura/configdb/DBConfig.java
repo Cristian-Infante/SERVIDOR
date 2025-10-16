@@ -12,13 +12,13 @@ import java.util.logging.Level;
 import java.util.logging.Logger;
 
 /**
- * Centralised configuration helper that reads the <code>properties/DB.properties</code> file
- * from the classpath and exposes typed accessors used by the infrastructure layers.
+ * Centralised configuration helper that reads the <code>properties/database.properties</code> file
+ * from the classpath and exposes typed accessors used by the data access layers.
  */
 public final class DBConfig {
 
     private static final Logger LOGGER = Logger.getLogger(DBConfig.class.getName());
-    private static final String CONFIG_PATH = "/properties/DB.properties";
+    private static final String DATABASE_CONFIG_PATH = "/properties/database.properties";
     private static final DBConfig INSTANCE = new DBConfig();
 
     private final Properties properties = new Properties();
@@ -34,13 +34,13 @@ public final class DBConfig {
     }
 
     private void loadProperties() {
-        try (InputStream in = DBConfig.class.getResourceAsStream(CONFIG_PATH)) {
+        try (InputStream in = DBConfig.class.getResourceAsStream(DATABASE_CONFIG_PATH)) {
             if (in == null) {
-                throw new IllegalStateException("Configuration file not found at " + CONFIG_PATH);
+                throw new IllegalStateException("Configuration file not found at " + DATABASE_CONFIG_PATH);
             }
             properties.load(in);
         } catch (IOException e) {
-            throw new IllegalStateException("Unable to load configuration properties", e);
+            throw new IllegalStateException("Unable to load database configuration properties", e);
         }
     }
 
@@ -92,19 +92,6 @@ public final class DBConfig {
         } catch (NumberFormatException e) {
             LOGGER.log(Level.WARNING, "Invalid integer for {0}: {1}", new Object[]{key, raw});
             return defaultValue;
-        }
-    }
-
-    public Level getLogLevel() {
-        String level = properties.getProperty("log.level");
-        if (Objects.isNull(level)) {
-            return Level.INFO;
-        }
-        try {
-            return Level.parse(level.trim().toUpperCase());
-        } catch (IllegalArgumentException ex) {
-            LOGGER.log(Level.WARNING, "Invalid log level {0}, defaulting to INFO", level);
-            return Level.INFO;
         }
     }
 }

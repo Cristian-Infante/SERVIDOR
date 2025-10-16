@@ -8,6 +8,7 @@ import com.arquitectura.entidades.Mensaje;
 import com.arquitectura.entidades.MensajeFactory;
 import com.arquitectura.repositorios.LogRepository;
 import com.arquitectura.repositorios.MensajeRepository;
+import com.arquitectura.servicios.AudioTranscriptionService;
 import com.arquitectura.servicios.MensajeriaService;
 import com.arquitectura.servicios.conexion.ConnectionGateway;
 import com.arquitectura.servicios.eventos.SessionEvent;
@@ -28,15 +29,18 @@ public class MensajeriaServiceImpl implements MensajeriaService, SessionObserver
     private final LogRepository logRepository;
     private final ConnectionGateway connectionGateway;
     private final SessionEventBus eventBus;
+    private final AudioTranscriptionService transcriptionService;
 
     public MensajeriaServiceImpl(MensajeRepository mensajeRepository,
                                  LogRepository logRepository,
                                  ConnectionGateway connectionGateway,
-                                 SessionEventBus eventBus) {
+                                 SessionEventBus eventBus,
+                                 AudioTranscriptionService transcriptionService) {
         this.mensajeRepository = Objects.requireNonNull(mensajeRepository, "mensajeRepository");
         this.logRepository = Objects.requireNonNull(logRepository, "logRepository");
         this.connectionGateway = Objects.requireNonNull(connectionGateway, "connectionGateway");
         this.eventBus = Objects.requireNonNull(eventBus, "eventBus");
+        this.transcriptionService = Objects.requireNonNull(transcriptionService, "transcriptionService");
         this.eventBus.subscribe(this);
     }
 
@@ -45,11 +49,16 @@ public class MensajeriaServiceImpl implements MensajeriaService, SessionObserver
         Mensaje mensaje = construirMensaje(request, false);
         Mensaje saved = mensajeRepository.save(mensaje);
         registrarLog(saved);
+        
+        // Eventos para logs y estadísticas
         eventBus.publish(new SessionEvent(SessionEventType.MESSAGE_SENT, null, request.getEmisor(), saved));
         if (saved instanceof AudioMensaje) {
             eventBus.publish(new SessionEvent(SessionEventType.AUDIO_SENT, null, request.getEmisor(), saved));
         }
-        entregar(saved);
+        
+        // Evento específico para notificar al receptor
+        eventBus.publish(new SessionEvent(SessionEventType.NEW_MESSAGE, null, saved.getReceptor(), saved));
+        
         return saved;
     }
 
@@ -58,11 +67,16 @@ public class MensajeriaServiceImpl implements MensajeriaService, SessionObserver
         Mensaje mensaje = construirMensaje(request, true);
         Mensaje saved = mensajeRepository.save(mensaje);
         registrarLog(saved);
+        
+        // Eventos para logs y estadísticas
         eventBus.publish(new SessionEvent(SessionEventType.MESSAGE_SENT, null, request.getEmisor(), saved));
         if (saved instanceof AudioMensaje) {
             eventBus.publish(new SessionEvent(SessionEventType.AUDIO_SENT, null, request.getEmisor(), saved));
         }
-        entregar(saved);
+        
+        // Evento específico para notificar a los miembros del canal
+        eventBus.publish(new SessionEvent(SessionEventType.NEW_CHANNEL_MESSAGE, null, request.getEmisor(), saved));
+        
         return saved;
     }
 
@@ -72,13 +86,25 @@ public class MensajeriaServiceImpl implements MensajeriaService, SessionObserver
         Long canalId = esCanal ? request.getCanalId() : null;
         Mensaje mensaje;
         switch (tipo) {
-            case "AUDIO" -> mensaje = MensajeFactory.crearMensajeAudio(
-                    request.getRutaArchivo(),
-                    request.getDuracionSeg() != null ? request.getDuracionSeg() : 0,
-                    request.getMime(),
-                    request.getEmisor(),
-                    receptor,
-                    canalId);
+            case "AUDIO" -> {
+                AudioMensaje audioMensaje = MensajeFactory.crearMensajeAudio(
+                        request.getRutaArchivo(),
+                        request.getDuracionSeg() != null ? request.getDuracionSeg() : 0,
+                        request.getMime(),
+                        request.getEmisor(),
+                        receptor,
+                        canalId);
+                // Transcribir el audio automáticamente
+                try {
+                    String transcripcion = transcriptionService.transcribir(request.getRutaArchivo());
+                    audioMensaje.setTranscripcion(transcripcion);
+                    LOGGER.info(() -> "Audio transcrito: " + transcripcion);
+                } catch (Exception e) {
+                    LOGGER.warning(() -> "Error transcribiendo audio: " + e.getMessage());
+                    audioMensaje.setTranscripcion("[Error al transcribir audio]");
+                }
+                mensaje = audioMensaje;
+            }
             case "ARCHIVO" -> mensaje = MensajeFactory.crearMensajeArchivo(
                     request.getRutaArchivo(),
                     request.getMime(),

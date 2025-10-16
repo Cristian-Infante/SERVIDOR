@@ -141,6 +141,20 @@ public class JdbcClienteRepository extends JdbcSupport implements ClienteReposit
     }
 
     @Override
+    public void disconnectAll() {
+        String sql = "UPDATE clientes SET estado=0";
+        try (Connection conn = getConnection();
+             PreparedStatement ps = conn.prepareStatement(sql)) {
+            int updated = ps.executeUpdate();
+            if (updated > 0) {
+                System.out.println("Se desconectaron " + updated + " usuario(s) del inicio anterior");
+            }
+        } catch (SQLException e) {
+            throw new IllegalStateException("Error disconnecting all clients", e);
+        }
+    }
+
+    @Override
     public List<Cliente> all() {
         String sql = "SELECT id, usuario, email, contrasenia, foto, ip, estado FROM clientes";
         List<Cliente> result = new ArrayList<>();

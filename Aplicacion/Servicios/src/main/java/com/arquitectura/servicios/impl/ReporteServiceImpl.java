@@ -1,5 +1,10 @@
 package com.arquitectura.servicios.impl;
 
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Objects;
+import java.util.stream.Collectors;
+
 import com.arquitectura.dto.AudioMetadataDto;
 import com.arquitectura.dto.ChannelSummary;
 import com.arquitectura.dto.LogEntryDto;
@@ -12,11 +17,6 @@ import com.arquitectura.repositorios.ClienteRepository;
 import com.arquitectura.repositorios.LogRepository;
 import com.arquitectura.repositorios.MensajeRepository;
 import com.arquitectura.servicios.ReporteService;
-
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Objects;
-import java.util.stream.Collectors;
 
 public class ReporteServiceImpl implements ReporteService {
 
@@ -36,8 +36,9 @@ public class ReporteServiceImpl implements ReporteService {
     }
 
     @Override
-    public List<UserSummary> usuariosRegistrados() {
+    public List<UserSummary> usuariosRegistrados(Long excluirUsuarioId) {
         return clienteRepository.all().stream()
+                .filter(cli -> excluirUsuarioId == null || !cli.getId().equals(excluirUsuarioId))
                 .map(cli -> new UserSummary(cli.getId(), cli.getNombreDeUsuario(), cli.getEmail(), Boolean.TRUE.equals(cli.getEstado())))
                 .collect(Collectors.toList());
     }
@@ -57,8 +58,30 @@ public class ReporteServiceImpl implements ReporteService {
     }
 
     @Override
-    public List<UserSummary> usuariosConectados() {
+    public List<ChannelSummary> canalesAccesiblesParaUsuario(Long usuarioId) {
+        return canalRepository.findAll().stream()
+                .filter(canal -> {
+                    // Solo mostrar canales donde el usuario es miembro
+                    List<Long> miembrosIds = canalRepository.findUsers(canal.getId()).stream()
+                            .map(cli -> cli.getId())
+                            .collect(Collectors.toList());
+                    return miembrosIds.contains(usuarioId);
+                })
+                .map(canal -> {
+                    ChannelSummary summary = new ChannelSummary(canal.getId(), canal.getNombre(), Boolean.TRUE.equals(canal.getPrivado()));
+                    List<UserSummary> usuarios = canalRepository.findUsers(canal.getId()).stream()
+                            .map(cli -> new UserSummary(cli.getId(), cli.getNombreDeUsuario(), cli.getEmail(), Boolean.TRUE.equals(cli.getEstado())))
+                            .collect(Collectors.toCollection(ArrayList::new));
+                    summary.setUsuarios(usuarios);
+                    return summary;
+                })
+                .collect(Collectors.toList());
+    }
+
+    @Override
+    public List<UserSummary> usuariosConectados(Long excluirUsuarioId) {
         return clienteRepository.findConnected().stream()
+                .filter(cli -> excluirUsuarioId == null || !cli.getId().equals(excluirUsuarioId))
                 .map(cli -> new UserSummary(cli.getId(), cli.getNombreDeUsuario(), cli.getEmail(), true))
                 .collect(Collectors.toList());
     }

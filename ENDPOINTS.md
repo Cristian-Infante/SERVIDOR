@@ -1,280 +1,553 @@
 # Protocolo de comunicación del servidor
 
-Este servidor opera sobre sockets TCP y utiliza **JSON codificado en UTF-8** como formato de intercambio. Cada mensaje corresponde a un objeto JSON serializado en una sola línea, compuesto por las siguientes propiedades:
+Este servidor opera sobre sockets TCP y utiliza **JSON codificado en UTF-8** como formato de intercambio. Cada mensaje corresponde a un objeto JSON serializado en una sola línea.
 
-| Campo    | Tipo    | Descripción |
-|----------|---------|-------------|
-| `command` | `string` | Identificador del comando o evento. |
-| `payload` | `object`/`array`/`string` | Datos específicos del comando. Puede omitirse (`null`) cuando no aplica. |
+## Estructura de mensajes
 
-Los comandos recibidos por el servidor se procesan en `ConnectionHandler`, mientras que las respuestas y notificaciones se generan con la misma estructura a través de `CommandEnvelope`. Además, el `ConnectionRegistry` envía eventos asíncronos a los clientes utilizando el comando `EVENT`.
+```json
+{
+  "command": "string",
+  "payload": "object | array | string | null"
+}
+```
 
-## Comandos síncronos
+## Autenticación
 
-A continuación, se describen los comandos soportados, los datos de entrada que esperan y las respuestas que generan. Todos los ejemplos se muestran en JSON.
+- Comandos que **NO** requieren autenticación: `REGISTER`, `LOGIN`, `PING`
+- Todos los demás comandos **requieren autenticación**
+- `LOGOUT`: Cierra sesión pero mantiene la conexión TCP abierta
+- `CLOSE_CONN`: Cierra sesión y termina la conexión TCP
+
+## Comandos
 
 ### `REGISTER`
-- **Payload de solicitud** (`RegisterRequest`):
-  ```json
-  {
+**Request:**
+```json
+{
+  "command": "REGISTER",
+  "payload": {
     "usuario": "string",
     "email": "string",
     "contrasenia": "string",
     "fotoBase64": "string (opcional)",
-    "fotoPath": "string (opcional)",
     "ip": "string"
   }
-  ```
-- **Respuesta** (`AckResponse`):
-  ```json
-  {
-    "command": "REGISTER",
-    "payload": {
-      "success": true,
-      "message": "Registro exitoso"
-    }
+}
+```
+**Response:**
+```json
+{
+  "command": "REGISTER",
+  "payload": {
+    "message": "Registro exitoso. Por favor inicia sesión."
   }
-  ```
-- **Notas**: Al registrarse, la sesión queda autenticada y se publica un evento `LOGIN`.
+}
+```
 
 ### `LOGIN`
-- **Payload de solicitud** (`LoginRequest`):
-  ```json
-  {
+**Request:**
+```json
+{
+  "command": "LOGIN",
+  "payload": {
     "email": "string",
     "contrasenia": "string",
     "ip": "string (opcional)"
   }
-  ```
-- **Respuesta** (`AckResponse`):
-  ```json
-  {
-    "command": "LOGIN",
-    "payload": {
-      "success": true,
-      "message": "Login exitoso"
-    }
+}
+```
+**Response:**
+```json
+{
+  "command": "LOGIN",
+  "payload": {
+    "message": "Login exitoso"
   }
-  ```
-- **Notas**: Autentica a un usuario existente, actualiza su dirección IP cuando se proporciona y publica un evento `LOGIN`.
+}
+```
+
+**Después del login exitoso**, el servidor envía automáticamente:
+```json
+{
+  "command": "MESSAGE_SYNC",
+  "payload": {
+    "mensajes": [ /* todos los mensajes del usuario */ ],
+    "totalMensajes": 25,
+    "ultimaSincronizacion": "2025-10-16T11:30:00"
+  }
+}
+```
+
+**Sesión única**: Si el usuario ya tiene una sesión activa, el nuevo intento será rechazado con error.
+
+### `LOGOUT`
+**Request:**
+```json
+{
+  "command": "LOGOUT",
+  "payload": null
+}
+```
+**Response:**
+```json
+{
+  "command": "LOGOUT",
+  "payload": {
+    "message": "Sesión cerrada exitosamente"
+  }
+}
+```
+
+### `PING`
+**Request:**
+```json
+{
+  "command": "PING",
+  "payload": null
+}
+```
+**Response:**
+```json
+{
+  "command": "PING",
+  "payload": {
+    "message": "PONG"
+  }
+}
+```
+
+### `UPLOAD_AUDIO`
+**Descripción:** Sube un archivo de audio al servidor antes de enviarlo como mensaje.
+
+**Request:**
+```json
+{
+  "command": "UPLOAD_AUDIO",
+  "payload": {
+    "audioBase64": "string (contenido del audio codificado en Base64)",
+    "mime": "audio/wav | audio/mpeg | audio/ogg | etc.",
+    "duracionSeg": 15,
+    "nombreArchivo": "string (opcional)"
+  }
+}
+```
+**Response:**
+```json
+{
+  "command": "UPLOAD_AUDIO",
+  "payload": {
+    "exito": true,
+    "rutaArchivo": "media/audio/usuarios/1/rec_1760597378319.wav",
+    "mensaje": "Audio guardado exitosamente"
+  }
+}
+```
+
+**Notas:**
+- El servidor guarda el audio en `media/audio/usuarios/<userId>/`
+- La `rutaArchivo` devuelta se usa luego en `SEND_USER` o `SEND_CHANNEL`
+- Para transcripción óptima, usa formato **WAV 16kHz mono**
+- Convierte con FFmpeg: `ffmpeg -i audio.mp3 -ar 16000 -ac 1 audio.wav`
 
 ### `SEND_USER`
-- **Payload de solicitud** (`MessageRequest`):
-  ```json
-  {
-    "tipo": "TEXTO | AUDIO | ARCHIVO",
-    "contenido": "string (solo para TEXTO)",
-    "rutaArchivo": "string (para AUDIO/ARCHIVO)",
-    "mime": "string (para AUDIO/ARCHIVO)",
-    "duracionSeg": 123 (solo AUDIO),
-    "receptor": 42
-  }
-  ```
-- **Respuesta** (`AckResponse`):
-  ```json
-  {
-    "command": "SEND_USER",
-    "payload": {
-      "success": true,
-      "message": "Mensaje enviado"
-    }
-  }
-  ```
-- **Notas**: Requiere sesión autenticada. El receptor recibirá un evento `EVENT` con el mensaje persistido.
+**Descripción:** Envía un mensaje a un usuario. Para mensajes de audio, primero usa `UPLOAD_AUDIO`.
 
-### `SEND_CHANNEL`
-- **Payload de solicitud** (`MessageRequest`):
-  ```json
-  {
+**Request:**
+```json
+{
+  "command": "SEND_USER",
+  "payload": {
     "tipo": "TEXTO | AUDIO | ARCHIVO",
     "contenido": "string (solo TEXTO)",
-    "rutaArchivo": "string (para AUDIO/ARCHIVO)",
-    "mime": "string (para AUDIO/ARCHIVO)",
-    "duracionSeg": 123 (solo AUDIO),
+    "rutaArchivo": "string (AUDIO/ARCHIVO - obtenida de UPLOAD_AUDIO)",
+    "mime": "string (AUDIO/ARCHIVO)",
+    "duracionSeg": 123,
+    "receptor": 42
+  }
+}
+```
+**Response:**
+```json
+{
+  "command": "SEND_USER",
+  "payload": {
+    "message": "Mensaje enviado"
+  }
+}
+```
+
+**Flujo para mensajes de audio:**
+1. Codificar audio en Base64
+2. Enviar `UPLOAD_AUDIO` con el audio
+3. Recibir `rutaArchivo` en la respuesta
+4. Enviar `SEND_USER` con la `rutaArchivo` recibida
+5. El servidor transcribe automáticamente el audio (si está en formato WAV 16kHz mono)
+
+**Evento recibido por el destinatario:**
+```json
+{
+  "command": "EVENT",
+  "payload": {
+    "id": 123,
+    "tipo": "AUDIO",
+    "emisor": 1,
+    "receptor": 2,
+    "timeStamp": "2025-10-16T14:30:00",
+    "rutaArchivo": "media/audio/usuarios/1/rec_1760597378319.wav",
+    "mime": "audio/wav",
+    "duracionSeg": 15,
+    "transcripcion": "hola cómo estás me gustaría coordinar una reunión"
+  }
+}
+```
+
+### `SEND_CHANNEL`
+**Descripción:** Envía un mensaje a un canal. Para mensajes de audio, primero usa `UPLOAD_AUDIO`.
+
+**Request:**
+```json
+{
+  "command": "SEND_CHANNEL",
+  "payload": {
+    "tipo": "TEXTO | AUDIO | ARCHIVO",
+    "contenido": "string (solo TEXTO)",
+    "rutaArchivo": "string (AUDIO/ARCHIVO - obtenida de UPLOAD_AUDIO)",
+    "mime": "string (AUDIO/ARCHIVO)",
+    "duracionSeg": 123,
     "canalId": 99
   }
-  ```
-- **Respuesta** (`AckResponse`):
-  ```json
-  {
-    "command": "SEND_CHANNEL",
-    "payload": {
-      "success": true,
-      "message": "Mensaje a canal enviado"
-    }
+}
+```
+**Response:**
+```json
+{
+  "command": "SEND_CHANNEL",
+  "payload": {
+    "message": "Mensaje a canal enviado"
   }
-  ```
-- **Notas**: El servidor agrega automáticamente al remitente al canal y reenvía el mensaje a todos los miembros mediante eventos `EVENT`.
+}
+```
+
+**Notas:**
+- Mismo flujo que `SEND_USER` para mensajes de audio
+- Todos los miembros del canal reciben el mensaje con transcripción incluida
 
 ### `CREATE_CHANNEL`
-- **Payload de solicitud** (`ChannelRequest`):
-  ```json
-  {
+**Request:**
+```json
+{
+  "command": "CREATE_CHANNEL",
+  "payload": {
     "nombre": "string",
     "privado": true
   }
-  ```
-- **Respuesta** (`Canal`):
-  ```json
-  {
-    "command": "CREATE_CHANNEL",
-    "payload": {
-      "id": 99,
-      "nombre": "general",
-      "privado": false
-    }
+}
+```
+**Response:**
+```json
+{
+  "command": "CREATE_CHANNEL",
+  "payload": {
+    "id": 99,
+    "nombre": "general",
+    "privado": false
   }
-  ```
-- **Notas**: Publica un evento `CHANNEL_CREATED` accesible mediante notificaciones `EVENT` para los clientes suscritos.
+}
+```
 
 ### `INVITE`
-- **Payload de solicitud** (`InviteRequest`):
-  ```json
-  {
+**Request:**
+```json
+{
+  "command": "INVITE",
+  "payload": {
     "canalId": 99,
     "invitadoId": 42
   }
-  ```
-- **Respuesta** (`AckResponse`):
-  ```json
-  {
-    "command": "INVITE",
-    "payload": {
-      "success": true,
-      "message": "Invitación enviada"
-    }
+}
+```
+**Response:**
+```json
+{
+  "command": "INVITE",
+  "payload": {
+    "message": "Invitación enviada"
   }
-  ```
+}
+```
 
 ### `ACCEPT`
-- **Payload de solicitud** (`InviteRequest`):
-  ```json
-  {
+**Request:**
+```json
+{
+  "command": "ACCEPT",
+  "payload": {
     "canalId": 99
   }
-  ```
-- **Respuesta** (`AckResponse`):
-  ```json
-  {
-    "command": "ACCEPT",
-    "payload": {
-      "success": true,
-      "message": "Canal aceptado"
-    }
+}
+```
+**Response:**
+```json
+{
+  "command": "ACCEPT",
+  "payload": {
+    "message": "Canal aceptado"
   }
-  ```
+}
+```
 
 ### `REJECT`
-- **Payload de solicitud** (`InviteRequest`):
-  ```json
-  {
+**Request:**
+```json
+{
+  "command": "REJECT",
+  "payload": {
     "canalId": 99
   }
-  ```
-- **Respuesta** (`AckResponse`):
-  ```json
-  {
-    "command": "REJECT",
-    "payload": {
-      "success": true,
-      "message": "Invitación rechazada"
-    }
+}
+```
+**Response:**
+```json
+{
+  "command": "REJECT",
+  "payload": {
+    "message": "Invitación rechazada"
   }
-  ```
+}
+```
+
+### `LIST_RECEIVED_INVITATIONS`
+Muestra las invitaciones recibidas (que puedes aceptar o rechazar).
+
+**Request:**
+```json
+{
+  "command": "LIST_RECEIVED_INVITATIONS",
+  "payload": null
+}
+```
+**Response:**
+```json
+{
+  "command": "LIST_RECEIVED_INVITATIONS",
+  "payload": [
+    {
+      "canalId": 99,
+      "canalNombre": "desarrollo",
+      "canalPrivado": true,
+      "invitadorId": 42,
+      "invitadorNombre": "alice"
+    }
+  ]
+}
+```
+
+### `LIST_SENT_INVITATIONS`
+Muestra las invitaciones que has enviado y su estado actual.
+
+**Request:**
+```json
+{
+  "command": "LIST_SENT_INVITATIONS",
+  "payload": null
+}
+```
+**Response:**
+```json
+{
+  "command": "LIST_SENT_INVITATIONS",
+  "payload": [
+    {
+      "canalId": 99,
+      "canalNombre": "desarrollo",
+      "canalPrivado": true,
+      "invitadoId": 55,
+      "invitadoNombre": "bob",
+      "estado": "PENDIENTE"
+    }
+  ]
+}
+```
 
 ### `LIST_USERS`
-- **Payload de solicitud**: `null`
-- **Respuesta** (`List<UserSummary>`):
-  ```json
-  {
-    "command": "LIST_USERS",
-    "payload": [
-      {
-        "id": 1,
-        "usuario": "alice",
-        "email": "alice@example.com",
-        "conectado": true
-      }
-    ]
-  }
-  ```
+**Request:**
+```json
+{
+  "command": "LIST_USERS",
+  "payload": null
+}
+```
+**Response:**
+```json
+{
+  "command": "LIST_USERS",
+  "payload": [
+    {
+      "id": 1,
+      "usuario": "alice",
+      "email": "alice@example.com",
+      "conectado": true
+    }
+  ]
+}
+```
 
 ### `LIST_CHANNELS`
-- **Payload de solicitud**: `null`
-- **Respuesta** (`List<ChannelSummary>`):
-  ```json
-  {
-    "command": "LIST_CHANNELS",
-    "payload": [
-      {
-        "id": 10,
-        "nombre": "general",
-        "privado": false,
-        "usuarios": [
-          {
-            "id": 1,
-            "usuario": "alice",
-            "email": "alice@example.com",
-            "conectado": true
-          }
-        ]
-      }
-    ]
-  }
-  ```
+**Request:**
+```json
+{
+  "command": "LIST_CHANNELS",
+  "payload": null
+}
+```
+**Response:**
+```json
+{
+  "command": "LIST_CHANNELS",
+  "payload": [
+    {
+      "id": 10,
+      "nombre": "general",
+      "privado": false,
+      "usuarios": [...]
+    }
+  ]
+}
+```
 
 ### `LIST_CONNECTED`
-- **Payload de solicitud**: `null`
-- **Respuesta** (`List<UserSummary>`): Igual formato que `LIST_USERS`, filtrado solo por usuarios conectados.
+**Request:**
+```json
+{
+  "command": "LIST_CONNECTED",
+  "payload": null
+}
+```
+**Response:**
+```json
+{
+  "command": "LIST_CONNECTED",
+  "payload": [
+    {
+      "id": 1,
+      "usuario": "alice",
+      "email": "alice@example.com",
+      "conectado": true
+    }
+  ]
+}
+```
 
 ### `BROADCAST`
-- **Payload de solicitud**:
-  ```json
-  {
+**Request:**
+```json
+{
+  "command": "BROADCAST",
+  "payload": {
     "message": "string"
   }
-  ```
-- **Respuesta** (`AckResponse`):
-  ```json
-  {
-    "command": "BROADCAST",
-    "payload": {
-      "success": true,
-      "message": "Broadcast enviado"
-    }
+}
+```
+**Response:**
+```json
+{
+  "command": "BROADCAST",
+  "payload": {
+    "message": "Broadcast enviado"
   }
-  ```
-- **Notas**: Envía el texto indicado a todas las sesiones activas mediante un evento `EVENT` cuyo payload es la cadena original.
+}
+```
 
 ### `CLOSE_CONN`
-- **Payload de solicitud**: `null`
-- **Respuesta** (`AckResponse`):
-  ```json
-  {
-    "command": "CLOSE_CONN",
-    "payload": {
-      "success": true,
-      "message": "Conexión cerrada"
-    }
+**Request:**
+```json
+{
+  "command": "CLOSE_CONN",
+  "payload": null
+}
+```
+**Response:**
+```json
+{
+  "command": "CLOSE_CONN",
+  "payload": {
+    "message": "Conexión cerrada"
   }
-  ```
-- **Notas**: Tras la respuesta el servidor cierra la sesión actual.
+}
+```
 
-### Comandos de reporte
-Los siguientes comandos comparten la estructura de respuesta `{"command": "<COMANDO>", "payload": [...]}`. Cada uno devuelve una colección especializada:
+### `REPORT_USUARIOS`
+**Request:**
+```json
+{
+  "command": "REPORT_USUARIOS",
+  "payload": null
+}
+```
+**Response:** Lista de `UserSummary` (igual que `LIST_USERS`)
 
-| Comando | Payload de respuesta |
-|---------|---------------------|
-| `REPORT_USUARIOS` | Lista de `UserSummary`, equivalente a `LIST_USERS`. |
-| `REPORT_CANALES` | Lista de `ChannelSummary`, equivalente a `LIST_CHANNELS`. |
-| `REPORT_CONECTADOS` | Lista de `UserSummary` solo con usuarios conectados. |
-| `REPORT_AUDIO` | Lista de `AudioMetadataDto` con metadatos de mensajes de audio/archivo. |
-| `REPORT_LOGS` | Lista de `LogEntryDto` con los registros de actividad. |
+### `REPORT_CANALES`
+**Request:**
+```json
+{
+  "command": "REPORT_CANALES",
+  "payload": null
+}
+```
+**Response:** Lista de `ChannelSummary` con todos los canales (sin filtro)
 
-## Notificaciones asíncronas (`EVENT`)
+### `REPORT_CONECTADOS`
+**Request:**
+```json
+{
+  "command": "REPORT_CONECTADOS",
+  "payload": null
+}
+```
+**Response:** Lista de `UserSummary` conectados
 
-Además de las respuestas directas, el servidor puede enviar notificaciones espontáneas utilizando:
+### `REPORT_AUDIO`
+**Descripción:** Obtiene un reporte de todos los mensajes de audio con sus transcripciones.
 
+**Request:**
+```json
+{
+  "command": "REPORT_AUDIO",
+  "payload": null
+}
+```
+**Response:** 
+```json
+{
+  "command": "REPORT_AUDIO",
+  "payload": [
+    {
+      "mensajeId": 123,
+      "emisorId": 1,
+      "receptorId": 2,
+      "canalId": null,
+      "ruta": "media/audio/usuarios/1/rec_1760597378319.wav",
+      "mime": "audio/wav",
+      "duracion": 15,
+      "transcripcion": "hola cómo estás me gustaría coordinar una reunión"
+    }
+  ]
+}
+```
+
+### `REPORT_LOGS`
+**Request:**
+```json
+{
+  "command": "REPORT_LOGS",
+  "payload": null
+}
+```
+**Response:** Lista de `LogEntryDto`
+
+## Eventos asíncronos
+
+El servidor envía notificaciones mediante:
 ```json
 {
   "command": "EVENT",
@@ -282,17 +555,19 @@ Además de las respuestas directas, el servidor puede enviar notificaciones espo
 }
 ```
 
-El contenido del payload depende del origen del evento:
-
-- Mensajes enviados a usuarios o canales: instancia de `Mensaje` (`TextoMensaje`, `AudioMensaje` o `ArchivoMensaje`).
-- Difusiones (`BROADCAST`): cadena con el mensaje difundido.
-- Creación de canales e invitaciones: objetos dominio asociados (`Canal` o mapa con `canalId` / `invitadoId`).
-
-Se recomienda que los clientes distingan el tipo concreto inspeccionando la propiedad `tipo` en los mensajes o el shape del objeto.
+**Tipos de eventos:**
+- `MESSAGE_SYNC`: Sincronización de mensajes (después de LOGIN)
+- `NEW_MESSAGE`: Nuevo mensaje privado recibido
+- `NEW_CHANNEL_MESSAGE`: Nuevo mensaje en canal
+- `LOGIN`: Usuario inicia sesión
+- `LOGOUT`: Usuario cierra sesión
+- `CHANNEL_CREATED`: Canal creado
+- `INVITE_SENT`: Invitación enviada
+- Broadcast: String con mensaje del servidor
+- `KICKED`: Conexión cerrada por servidor
+- `SERVER_SHUTDOWN`: Servidor apagándose
 
 ## Errores
-
-Cuando un comando no es válido o se produce una excepción, el servidor responde con:
 
 ```json
 {
@@ -303,5 +578,123 @@ Cuando un comando no es válido o se produce una excepción, el servidor respond
 }
 ```
 
-Los errores pueden deberse a comandos desconocidos, falta de autenticación, datos inválidos o recursos inexistentes.
+**Errores comunes:**
+- `"Debes iniciar sesión para usar este comando"`
+- `"Credenciales inválidas"`
+- `"Ya tienes una sesión activa. Solo se permite una sesión por usuario."`
+- `"El correo ya está registrado"`
+- `"Usuario no encontrado"`
+- `"Canal no encontrado"`
+- `"Comando desconocido: <nombre>"`
+- `"Servidor lleno. Máximo de conexiones alcanzado."` (al intentar conectar)
+- `"Datos de audio inválidos: ..."` (audio Base64 corrupto o vacío)
+- `"Error guardando audio en el servidor"` (problemas de almacenamiento)
 
+## Eventos Importantes para el Cliente
+
+### MESSAGE_SYNC - Sincronización después de LOGIN
+```json
+{
+  "command": "MESSAGE_SYNC",
+  "payload": {
+    "mensajes": [
+      {
+        "id": 123,
+        "tipo": "TEXTO",
+        "emisor": 1,
+        "receptor": 2,
+        "timeStamp": "2025-10-16T10:30:00",
+        "contenido": "Hola"
+      },
+      {
+        "id": 124,
+        "tipo": "AUDIO",
+        "emisor": 2,
+        "receptor": 1,
+        "timeStamp": "2025-10-16T10:31:00",
+        "rutaArchivo": "media/audio/usuarios/2/rec_123.wav",
+        "transcripcion": "hola cómo estás"
+      }
+    ],
+    "totalMensajes": 2,
+    "ultimaSincronizacion": "2025-10-16T11:30:00"
+  }
+}
+```
+**Acción del cliente**: Cargar todos los mensajes en la interfaz para mostrar el historial completo.
+
+### Eventos de Mensajes en Tiempo Real
+
+#### NEW_MESSAGE - Nuevo mensaje privado
+```json
+{
+  "command": "NEW_MESSAGE",
+  "payload": {
+    "id": 125,
+    "tipo": "TEXTO",
+    "emisor": 2,
+    "receptor": 1,
+    "timeStamp": "2025-10-16T12:30:00",
+    "contenido": "¿Cómo estás?"
+  }
+}
+```
+
+#### NEW_CHANNEL_MESSAGE - Nuevo mensaje en canal
+```json
+{
+  "command": "NEW_CHANNEL_MESSAGE",
+  "payload": {
+    "id": 126,
+    "tipo": "AUDIO",
+    "emisor": 3,
+    "canalId": 5,
+    "timeStamp": "2025-10-16T12:31:00",
+    "rutaArchivo": "media/audio/usuarios/3/rec_456.wav",
+    "transcripcion": "reunión mañana a las 10"
+  }
+}
+```
+
+**Acción del cliente**: Agregar el mensaje a la interfaz en tiempo real.
+
+## Eventos de Desconexión
+
+El cliente debe detectar estas situaciones:
+
+### 1. EOF - Socket Cerrado
+```java
+String line = reader.readLine();
+if (line == null) {
+    // El servidor cerró la conexión
+    manejarDesconexion();
+}
+```
+
+### 2. EVENT con tipo KICKED
+El servidor expulsó tu conexión.
+```json
+{
+  "command": "EVENT",
+  "payload": {
+    "tipo": "KICKED",
+    "mensaje": "Tu conexión ha sido cerrada por el servidor",
+    "razon": "El administrador cerró tu conexión"
+  }
+}
+```
+
+### 3. EVENT con tipo SERVER_SHUTDOWN
+El servidor se está apagando.
+```json
+{
+  "command": "EVENT",
+  "payload": {
+    "tipo": "SERVER_SHUTDOWN",
+    "mensaje": "El servidor se está apagando. Serás desconectado.",
+    "razon": "Mantenimiento programado"
+  }
+}
+```
+
+**Acción del cliente**: Cerrar socket, limpiar sesión, volver a login.
