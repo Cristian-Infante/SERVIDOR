@@ -127,8 +127,9 @@ public class JdbcMensajeRepository extends JdbcSupport implements MensajeReposit
     
     @Override
     public List<Mensaje> findAllByUser(Long usuarioId) {
-        String sql = "SELECT * FROM mensajes WHERE emisor_id=? OR receptor_id=? ORDER BY timestamp";
-        return queryMessages(sql, usuarioId, usuarioId);
+        String sql = "SELECT * FROM mensajes WHERE emisor_id=? OR receptor_id=? " +
+            "OR canal_id IN (SELECT canal_id FROM canal_clientes WHERE cliente_id=?) ORDER BY timestamp";
+        return queryMessages(sql, usuarioId, usuarioId, usuarioId);
     }
 
     private List<Mensaje> queryMessages(String sql, Object... params) {
