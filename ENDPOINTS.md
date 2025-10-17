@@ -13,10 +13,12 @@ Este servidor opera sobre sockets TCP y utiliza **JSON codificado en UTF-8** com
 
 ## Autenticación
 
-- Comandos que **NO** requieren autenticación: `REGISTER`, `LOGIN`, `PING`
-- Todos los demás comandos **requieren autenticación**
-- `LOGOUT`: Cierra sesión pero mantiene la conexión TCP abierta
-- `CLOSE_CONN`: Cierra sesión y termina la conexión TCP
+- Comandos que **NO** requieren autenticación**:** `REGISTER`, `LOGIN`, `PING`, `LIST_USERS`, `LIST_CONNECTED`, `CLOSE_CONN`,
+  `REPORT_USUARIOS`, `REPORT_CANALES`, `REPORT_CONECTADOS`, `REPORT_AUDIO`, `REPORT_LOGS`.
+- Comandos que **SÍ** validan sesión**:** todos los demás (`UPLOAD_AUDIO`, `SEND_USER`, `SEND_CHANNEL`, `CREATE_CHANNEL`,
+  `INVITE`, `ACCEPT`, `REJECT`, `LIST_RECEIVED_INVITATIONS`, `LIST_SENT_INVITATIONS`, `LIST_CHANNELS`, `BROADCAST`, `LOGOUT`).
+- `LOGOUT`: Cierra sesión pero mantiene la conexión TCP abierta.
+- `CLOSE_CONN`: Cierra sesión y termina la conexión TCP (no requiere estar autenticado).
 
 ## Comandos
 
@@ -39,6 +41,7 @@ Este servidor opera sobre sockets TCP y utiliza **JSON codificado en UTF-8** com
 {
   "command": "REGISTER",
   "payload": {
+    "success": true,
     "message": "Registro exitoso. Por favor inicia sesión."
   }
 }
@@ -61,6 +64,7 @@ Este servidor opera sobre sockets TCP y utiliza **JSON codificado en UTF-8** com
 {
   "command": "LOGIN",
   "payload": {
+    "success": true,
     "message": "Login exitoso",
     "fotoBase64": "..." // Puede ser null si el usuario no tiene foto
   }
@@ -81,7 +85,7 @@ Este servidor opera sobre sockets TCP y utiliza **JSON codificado en UTF-8** com
 }
 ```
 
-Los mensajes de audio dentro de `mensajes` incluyen ahora el campo `audioBase64` con el contenido codificado para que el cliente pueda reproducirlos sin descargar archivos adicionales.
+Los mensajes de audio dentro de `mensajes` incluyen el campo `audioBase64` dentro de `payload.mensajes[*].contenido` con el contenido codificado para que el cliente pueda reproducirlos sin descargar archivos adicionales.
 
 **Sesión única**: Si el usuario ya tiene una sesión activa, el nuevo intento será rechazado con error.
 
@@ -98,6 +102,7 @@ Los mensajes de audio dentro de `mensajes` incluyen ahora el campo `audioBase64`
 {
   "command": "LOGOUT",
   "payload": {
+    "success": true,
     "message": "Sesión cerrada exitosamente"
   }
 }
@@ -116,6 +121,7 @@ Los mensajes de audio dentro de `mensajes` incluyen ahora el campo `audioBase64`
 {
   "command": "PING",
   "payload": {
+    "success": true,
     "message": "PONG"
   }
 }
@@ -153,7 +159,7 @@ Los mensajes de audio dentro de `mensajes` incluyen ahora el campo `audioBase64`
 - La `rutaArchivo` devuelta se usa luego en `SEND_USER` o `SEND_CHANNEL`
 - Para transcripción óptima, usa formato **WAV 16kHz mono**
 - Convierte con FFmpeg: `ffmpeg -i audio.mp3 -ar 16000 -ac 1 audio.wav`
-- El contenido binario se distribuye automáticamente en los mensajes enviados para que emisor y receptor puedan reproducirlo desde el campo `audioBase64`
+- El contenido codificado en Base64 se adjunta durante la sincronización de mensajes (`MESSAGE_SYNC`).
 
 ### `SEND_USER`
 **Descripción:** Envía un mensaje a un usuario. Para mensajes de audio, primero usa `UPLOAD_AUDIO`.
@@ -177,6 +183,7 @@ Los mensajes de audio dentro de `mensajes` incluyen ahora el campo `audioBase64`
 {
   "command": "SEND_USER",
   "payload": {
+    "success": true,
     "message": "Mensaje enviado"
   }
 }
@@ -189,26 +196,33 @@ Los mensajes de audio dentro de `mensajes` incluyen ahora el campo `audioBase64`
 4. Enviar `SEND_USER` con la `rutaArchivo` recibida
 5. El servidor transcribe automáticamente el audio (si está en formato WAV 16kHz mono)
 
-**Evento recibido por el destinatario:**
+**Evento recibido por el destinatario (`command: EVENT`):**
 ```json
 {
   "command": "EVENT",
   "payload": {
+    "evento": "NEW_MESSAGE",
     "id": 123,
-    "tipo": "AUDIO",
-    "emisor": 1,
-    "receptor": 2,
-    "timeStamp": "2025-10-16T14:30:00",
-    "rutaArchivo": "media/audio/usuarios/1/rec_1760597378319.wav",
-    "mime": "audio/wav",
-    "duracionSeg": 15,
-    "transcripcion": "hola cómo estás me gustaría coordinar una reunión",
-    "audioBase64": "UklGRlIAAABXQVZFZm10IBAAAAABAAEA..."
+    "tipoMensaje": "AUDIO",
+    "timestamp": "2025-10-16T14:30:00",
+    "tipoConversacion": "DIRECTO",
+    "emisorId": 1,
+    "emisorNombre": "alice",
+    "receptorId": 2,
+    "receptorNombre": "bob",
+    "canalId": null,
+    "canalNombre": null,
+    "contenido": {
+      "rutaArchivo": "media/audio/usuarios/1/rec_1760597378319.wav",
+      "mime": "audio/wav",
+      "duracionSeg": 15,
+      "transcripcion": "hola cómo estás me gustaría coordinar una reunión"
+    }
   }
 }
 ```
 
-> **Importante:** El mismo evento (con el campo `audioBase64`) se reenvía también al emisor para mantener sincronizado su historial local.
+> **Importante:** El evento en tiempo real **no** incluye el `audioBase64`. Ese campo llega únicamente en `MESSAGE_SYNC` al iniciar sesión.
 
 ### `SEND_CHANNEL`
 **Descripción:** Envía un mensaje a un canal. Para mensajes de audio, primero usa `UPLOAD_AUDIO`.
@@ -232,15 +246,39 @@ Los mensajes de audio dentro de `mensajes` incluyen ahora el campo `audioBase64`
 {
   "command": "SEND_CHANNEL",
   "payload": {
+    "success": true,
     "message": "Mensaje a canal enviado"
   }
 }
 ```
 
+**Evento recibido por los miembros (`command: EVENT`):**
+```json
+{
+  "command": "EVENT",
+  "payload": {
+    "evento": "NEW_CHANNEL_MESSAGE",
+    "id": 456,
+    "tipoMensaje": "TEXTO",
+    "timestamp": "2025-10-16T14:35:00",
+    "tipoConversacion": "CANAL",
+    "emisorId": 3,
+    "emisorNombre": "carla",
+    "receptorId": null,
+    "receptorNombre": null,
+    "canalId": 99,
+    "canalNombre": "desarrollo",
+    "contenido": {
+      "contenido": "Hola a todos"
+    }
+  }
+}
+```
+
 **Notas:**
-- Mismo flujo que `SEND_USER` para mensajes de audio
-- Todos los miembros del canal reciben el mensaje con transcripción incluida
-- El campo `audioBase64` se entrega a cada miembro para reproducción inmediata sin acceder al almacenamiento del servidor
+- Mismo flujo que `SEND_USER` para mensajes de audio.
+- Todos los miembros del canal reciben el mensaje con la transcripción en tiempo real (cuando aplica).
+- El contenido codificado en Base64 para audios se entrega únicamente durante la sincronización (`MESSAGE_SYNC`).
 
 ### `CREATE_CHANNEL`
 **Request:**
@@ -281,6 +319,7 @@ Los mensajes de audio dentro de `mensajes` incluyen ahora el campo `audioBase64`
 {
   "command": "INVITE",
   "payload": {
+    "success": true,
     "message": "Invitación enviada"
   }
 }
@@ -301,6 +340,7 @@ Los mensajes de audio dentro de `mensajes` incluyen ahora el campo `audioBase64`
 {
   "command": "ACCEPT",
   "payload": {
+    "success": true,
     "message": "Canal aceptado"
   }
 }
@@ -321,6 +361,7 @@ Los mensajes de audio dentro de `mensajes` incluyen ahora el campo `audioBase64`
 {
   "command": "REJECT",
   "payload": {
+    "success": true,
     "message": "Invitación rechazada"
   }
 }
@@ -463,6 +504,7 @@ Muestra las invitaciones que has enviado y su estado actual.
 {
   "command": "BROADCAST",
   "payload": {
+    "success": true,
     "message": "Broadcast enviado"
   }
 }
@@ -481,6 +523,7 @@ Muestra las invitaciones que has enviado y su estado actual.
 {
   "command": "CLOSE_CONN",
   "payload": {
+    "success": true,
     "message": "Conexión cerrada"
   }
 }
@@ -539,11 +582,13 @@ Muestra las invitaciones que has enviado y su estado actual.
       "ruta": "media/audio/usuarios/1/rec_1760597378319.wav",
       "mime": "audio/wav",
       "duracion": 15,
-      "transcripcion": "hola cómo estás me gustaría coordinar una reunión"
+      "transcripcion": null
     }
   ]
 }
 ```
+
+El campo `transcripcion` puede venir `null` porque la persistencia sólo almacena el texto cuando está disponible.
 
 ### `REPORT_LOGS`
 **Request:**
@@ -557,25 +602,25 @@ Muestra las invitaciones que has enviado y su estado actual.
 
 ## Eventos asíncronos
 
-El servidor envía notificaciones mediante:
+El servidor envía notificaciones mediante mensajes `EVENT`. El contenido varía según el tipo:
+
 ```json
 {
   "command": "EVENT",
-  "payload": { ... }
+  "payload": {
+    "evento": "NEW_MESSAGE" | "NEW_CHANNEL_MESSAGE" | ...,
+    /* resto de campos según el tipo */
+  }
 }
 ```
 
-**Tipos de eventos:**
-- `MESSAGE_SYNC`: Sincronización de mensajes (después de LOGIN)
-- `NEW_MESSAGE`: Nuevo mensaje privado recibido
-- `NEW_CHANNEL_MESSAGE`: Nuevo mensaje en canal
-- `LOGIN`: Usuario inicia sesión
-- `LOGOUT`: Usuario cierra sesión
-- `CHANNEL_CREATED`: Canal creado
-- `INVITE_SENT`: Invitación enviada
-- Broadcast: String con mensaje del servidor
-- `KICKED`: Conexión cerrada por servidor
-- `SERVER_SHUTDOWN`: Servidor apagándose
+**Valores observados de `payload.evento`:**
+- `NEW_MESSAGE`: Nuevo mensaje privado recibido (`payload.contenido` depende del tipo de mensaje).
+- `NEW_CHANNEL_MESSAGE`: Nuevo mensaje en canal.
+
+Otros avisos del servidor utilizan estructuras distintas:
+- `KICKED` / `SERVER_SHUTDOWN`: llegan como `ServerNotification` con campos `tipo`, `mensaje` y `razon`.
+- Broadcasts simples se entregan como `payload` texto sin envoltorio adicional.
 
 ## Errores
 
@@ -589,16 +634,22 @@ El servidor envía notificaciones mediante:
 ```
 
 **Errores comunes:**
-- `"Debes iniciar sesión para usar este comando"`
+- `"Error interno del servidor"` (respuesta genérica cuando se envía un comando protegido sin iniciar sesión).
 - `"Credenciales inválidas"`
 - `"Ya tienes una sesión activa. Solo se permite una sesión por usuario."`
-- `"El correo ya está registrado"`
-- `"Usuario no encontrado"`
-- `"Canal no encontrado"`
-- `"Comando desconocido: <nombre>"`
-- `"Servidor lleno. Máximo de conexiones alcanzado."` (al intentar conectar)
-- `"Datos de audio inválidos: ..."` (audio Base64 corrupto o vacío)
-- `"Error guardando audio en el servidor"` (problemas de almacenamiento)
+- `"El email ya está registrado"`
+- `"El usuario ya está registrado"`
+- `"Usuario inexistente"`
+- `"Canal inexistente"`
+- `"No existe invitación pendiente para el canal"`
+- `"El usuario ya es miembro del canal"`
+- `"Ya existe una invitación pendiente para este usuario"`
+- `"El contenido del audio no puede estar vacío"`
+- `"El ID de usuario es requerido"`
+- `"El audio Base64 es inválido"`
+- `"No se pudo guardar el archivo de audio"`
+- `"La ruta del audio no puede estar vacía"`
+- `"Comando no soportado: <nombre>"`
 
 ## Eventos Importantes para el Cliente
 
@@ -638,7 +689,8 @@ El servidor envía notificaciones mediante:
           "rutaArchivo": "media/audio/usuarios/2/rec_123.wav",
           "mime": "audio/wav",
           "duracionSeg": 12,
-          "transcripcion": "hola cómo estás"
+          "transcripcion": "hola cómo estás",
+          "audioBase64": "UklGRlIAAABXQVZFZm10IBAAAAABAAEA..."
         }
       }
     ],
@@ -653,23 +705,33 @@ El servidor envía notificaciones mediante:
 - `emisorNombre`, `receptorNombre` y `canalNombre` están resueltos por el servidor para evitar consultas adicionales del cliente.
 - La clave `contenido` es un objeto cuya estructura varía según `tipoMensaje`:
   - `TEXTO`: `{ "contenido": "mensaje plano" }`
-  - `AUDIO`: `{ "rutaArchivo", "mime", "duracionSeg", "transcripcion" }`
+  - `AUDIO`: `{ "rutaArchivo", "mime", "duracionSeg", "transcripcion", "audioBase64" }`
   - `ARCHIVO`: `{ "rutaArchivo", "mime" }`
 **Acción del cliente**: Cargar todos los mensajes en la interfaz para mostrar el historial completo.
 
 ### Eventos de Mensajes en Tiempo Real
 
+Los mensajes en tiempo real llegan como `EVENT` y se identifican por `payload.evento`.
+
 #### NEW_MESSAGE - Nuevo mensaje privado
 ```json
 {
-  "command": "NEW_MESSAGE",
+  "command": "EVENT",
   "payload": {
+    "evento": "NEW_MESSAGE",
     "id": 125,
-    "tipo": "TEXTO",
-    "emisor": 2,
-    "receptor": 1,
-    "timeStamp": "2025-10-16T12:30:00",
-    "contenido": "¿Cómo estás?"
+    "tipoMensaje": "TEXTO",
+    "timestamp": "2025-10-16T12:30:00",
+    "tipoConversacion": "DIRECTO",
+    "emisorId": 2,
+    "emisorNombre": "bob",
+    "receptorId": 1,
+    "receptorNombre": "alice",
+    "canalId": null,
+    "canalNombre": null,
+    "contenido": {
+      "contenido": "¿Cómo estás?"
+    }
   }
 }
 ```
@@ -677,15 +739,25 @@ El servidor envía notificaciones mediante:
 #### NEW_CHANNEL_MESSAGE - Nuevo mensaje en canal
 ```json
 {
-  "command": "NEW_CHANNEL_MESSAGE",
+  "command": "EVENT",
   "payload": {
+    "evento": "NEW_CHANNEL_MESSAGE",
     "id": 126,
-    "tipo": "AUDIO",
-    "emisor": 3,
+    "tipoMensaje": "AUDIO",
+    "timestamp": "2025-10-16T12:31:00",
+    "tipoConversacion": "CANAL",
+    "emisorId": 3,
+    "emisorNombre": "carla",
+    "receptorId": null,
+    "receptorNombre": null,
     "canalId": 5,
-    "timeStamp": "2025-10-16T12:31:00",
-    "rutaArchivo": "media/audio/usuarios/3/rec_456.wav",
-    "transcripcion": "reunión mañana a las 10"
+    "canalNombre": "marketing",
+    "contenido": {
+      "rutaArchivo": "media/audio/usuarios/3/rec_456.wav",
+      "mime": "audio/wav",
+      "duracionSeg": 8,
+      "transcripcion": "reunión mañana a las 10"
+    }
   }
 }
 ```
@@ -732,3 +804,26 @@ El servidor se está apagando.
 ```
 
 **Acción del cliente**: Cerrar socket, limpiar sesión, volver a login.
+
+## Integración de chats persona a persona
+
+1. **Descubrir usuarios disponibles**
+   - Enviar `LIST_USERS` (no requiere login). El servidor responde con la lista de usuarios y su estado de conexión para que el
+     cliente construya el panel de contactos.
+2. **Autenticar y sincronizar historial**
+   - Hacer `LOGIN` y esperar el `ACK` con `success=true`.
+   - Procesar inmediatamente el `MESSAGE_SYNC` para reconstruir el historial local. Los mensajes de audio incluyen `audioBase64`
+     dentro de `payload.mensajes[*].contenido.audioBase64`, ideal para precargar el reproductor.
+3. **Enviar mensajes**
+   - Para texto: mandar `SEND_USER` con `tipo="TEXTO"` y el `contenido` plano.
+   - Para audio/archivos: subir primero el recurso con `UPLOAD_AUDIO` (u otro mecanismo equivalente) y reutilizar la
+     `rutaArchivo` devuelta al llamar a `SEND_USER`.
+4. **Recibir mensajes entrantes**
+   - Suscribirse a los mensajes `EVENT` y filtrar `payload.evento === "NEW_MESSAGE"`.
+   - Cada evento incluye metadatos (`emisorId`, `receptorId`, `tipoConversacion`) y `payload.contenido` según el tipo de mensaje.
+     Los audios traen la transcripción inmediata; el contenido Base64 llega en la próxima sincronización.
+5. **Actualizar estados de conexión**
+   - Ocasionalmente reenviar `LIST_CONNECTED` para refrescar el listado de usuarios activos o escuchar eventos `LOGIN`/`LOGOUT`
+     emitidos por el servidor (vía `EVENT`).
+6. **Cerrar sesión o la conexión**
+   - `LOGOUT` mantiene el socket abierto, `CLOSE_CONN` lo finaliza. Ambos devuelven `success=true`.
