@@ -6,6 +6,7 @@ import java.util.logging.Level;
 import java.util.logging.Logger;
 
 import javax.sound.sampled.AudioFormat;
+import javax.sound.sampled.AudioFormat.Encoding;
 import javax.sound.sampled.AudioInputStream;
 import javax.sound.sampled.AudioSystem;
 
@@ -53,31 +54,39 @@ public class VoskTranscriptionService implements AudioTranscriptionService {
             return "[Audio no encontrado]";
         }
         
-        try (AudioInputStream ais = AudioSystem.getAudioInputStream(audioFile)) {
-            AudioFormat format = ais.getFormat();
-            
-            // Vosk requiere 16kHz mono
-            if (format.getSampleRate() != 16000 || format.getChannels() != 1) {
-                LOGGER.warning("Formato de audio no compatible. Requiere 16kHz mono.");
-                return "[Formato de audio no compatible - requiere 16kHz mono]";
+        try (AudioInputStream originalStream = AudioSystem.getAudioInputStream(audioFile)) {
+            AudioInputStream preparedStream = prepareStreamForVosk(originalStream);
+            if (preparedStream == null) {
+                return "[Formato de audio no compatible - requiere PCM 16kHz mono]";
             }
-            
-            try (Recognizer recognizer = new Recognizer(model, 16000)) {
+
+            try (AudioInputStream stream = preparedStream;
+                 Recognizer recognizer = new Recognizer(model, 16000)) {
                 StringBuilder transcripcion = new StringBuilder();
                 byte[] buffer = new byte[4096];
                 int bytesRead;
-                
-                while ((bytesRead = ais.read(buffer)) != -1) {
+                String ultimoParcial = "";
+
+                while ((bytesRead = stream.read(buffer)) != -1) {
                     if (recognizer.acceptWaveForm(buffer, bytesRead)) {
                         String result = recognizer.getResult();
-                        transcripcion.append(extractText(result)).append(" ");
+                        appendIfNotBlank(transcripcion, extractText(result));
+                        ultimoParcial = "";
+                    } else {
+                        String partial = extractText(recognizer.getPartialResult());
+                        if (!partial.isBlank() && !partial.equalsIgnoreCase(ultimoParcial)) {
+                            appendIfNotBlank(transcripcion, partial);
+                            ultimoParcial = partial;
+                        }
                     }
                 }
-                
-                // Obtener el resultado final
-                String finalResult = recognizer.getFinalResult();
-                transcripcion.append(extractText(finalResult));
-                
+
+                // Obtener el resultado final evitando duplicados con el último parcial registrado
+                String finalText = extractText(recognizer.getFinalResult());
+                if (!finalText.isBlank() && !finalText.equalsIgnoreCase(ultimoParcial)) {
+                    appendIfNotBlank(transcripcion, finalText);
+                }
+
                 String texto = transcripcion.toString().trim();
                 return texto.isEmpty() ? "[Sin contenido de voz detectado]" : texto;
             }
@@ -86,16 +95,121 @@ public class VoskTranscriptionService implements AudioTranscriptionService {
             return "[Error en transcripción: " + e.getMessage() + "]";
         }
     }
-    
+
+    private AudioInputStream prepareStreamForVosk(AudioInputStream source) {
+        try {
+            AudioInputStream currentStream = source;
+            AudioFormat format = currentStream.getFormat();
+
+            if (!Encoding.PCM_SIGNED.equals(format.getEncoding()) || format.getSampleSizeInBits() != 16) {
+                AudioFormat pcmFormat = new AudioFormat(
+                        Encoding.PCM_SIGNED,
+                        format.getSampleRate(),
+                        16,
+                        format.getChannels(),
+                        Math.max(1, format.getChannels()) * 2,
+                        format.getSampleRate(),
+                        false);
+                if (!AudioSystem.isConversionSupported(pcmFormat, format)) {
+                    LOGGER.warning(() -> "No se puede convertir el audio a PCM_SIGNED 16 bits desde formato: " + format);
+                    return null;
+                }
+                currentStream = AudioSystem.getAudioInputStream(pcmFormat, currentStream);
+                format = currentStream.getFormat();
+            }
+
+            if (format.getChannels() != 1) {
+                int frameSize = Math.max(1, format.getSampleSizeInBits() / 8);
+                AudioFormat monoFormat = new AudioFormat(
+                        format.getEncoding(),
+                        format.getSampleRate(),
+                        format.getSampleSizeInBits(),
+                        1,
+                        frameSize,
+                        format.getSampleRate(),
+                        format.isBigEndian());
+                if (!AudioSystem.isConversionSupported(monoFormat, format)) {
+                    LOGGER.warning(() -> "No se puede convertir el audio a mono desde formato: " + format);
+                    return null;
+                }
+                currentStream = AudioSystem.getAudioInputStream(monoFormat, currentStream);
+                format = currentStream.getFormat();
+            }
+
+            if (format.getSampleRate() != 16000f) {
+                int frameSize = Math.max(1, format.getSampleSizeInBits() / 8) * format.getChannels();
+                AudioFormat targetSampleRate = new AudioFormat(
+                        format.getEncoding(),
+                        16000f,
+                        format.getSampleSizeInBits(),
+                        format.getChannels(),
+                        frameSize,
+                        16000f,
+                        format.isBigEndian());
+                if (!AudioSystem.isConversionSupported(targetSampleRate, format)) {
+                    LOGGER.warning(() -> "No se puede convertir el audio a 16kHz desde formato: " + format);
+                    return null;
+                }
+                currentStream = AudioSystem.getAudioInputStream(targetSampleRate, currentStream);
+                format = currentStream.getFormat();
+            }
+
+            if (format.isBigEndian()) {
+                int frameSize = Math.max(1, format.getSampleSizeInBits() / 8) * format.getChannels();
+                AudioFormat littleEndian = new AudioFormat(
+                        format.getEncoding(),
+                        format.getSampleRate(),
+                        format.getSampleSizeInBits(),
+                        format.getChannels(),
+                        frameSize,
+                        format.getSampleRate(),
+                        false);
+                if (!AudioSystem.isConversionSupported(littleEndian, format)) {
+                    LOGGER.warning(() -> "No se puede convertir el audio a little-endian desde formato: " + format);
+                    return null;
+                }
+                currentStream = AudioSystem.getAudioInputStream(littleEndian, currentStream);
+            }
+
+            return currentStream;
+        } catch (Exception e) {
+            LOGGER.log(Level.WARNING, "Error preparando audio para Vosk", e);
+            return null;
+        }
+    }
+
+    private void appendIfNotBlank(StringBuilder builder, String text) {
+        if (text != null && !text.isBlank()) {
+            if (builder.length() > 0) {
+                builder.append(' ');
+            }
+            builder.append(text.trim());
+        }
+    }
+
     private String extractText(String jsonResult) {
         // Extrae el texto del JSON {"text": "..."}
         try {
+            if (jsonResult == null || jsonResult.isBlank()) {
+                return "";
+            }
+
             int start = jsonResult.indexOf("\"text\"");
+            if (start == -1) {
+                start = jsonResult.indexOf("\"partial\"");
+            }
             if (start == -1) return "";
-            start = jsonResult.indexOf(":", start) + 1;
-            int end = jsonResult.indexOf("\"", start + 1);
-            if (end == -1) return "";
-            return jsonResult.substring(start + 1, end).trim();
+
+            int colon = jsonResult.indexOf(":", start);
+            if (colon == -1) return "";
+
+            int firstQuote = jsonResult.indexOf('"', colon + 1);
+            if (firstQuote == -1) return "";
+
+            int secondQuote = jsonResult.indexOf('"', firstQuote + 1);
+            if (secondQuote == -1) return "";
+
+            return jsonResult.substring(firstQuote + 1, secondQuote).trim();
         } catch (Exception e) {
             return "";
         }
