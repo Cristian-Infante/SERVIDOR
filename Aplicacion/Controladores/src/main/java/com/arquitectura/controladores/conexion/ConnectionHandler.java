@@ -34,6 +34,7 @@ import java.net.Socket;
 import java.nio.charset.StandardCharsets;
 import java.util.Base64;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Objects;
 import java.util.logging.Level;
 import java.util.logging.Logger;
@@ -41,6 +42,7 @@ import java.util.logging.Logger;
 public class ConnectionHandler implements Runnable {
 
     private static final Logger LOGGER = Logger.getLogger(ConnectionHandler.class.getName());
+    private static final int BASE64_PREVIEW_LENGTH = 10;
 
     private final RegistroService registroService;
     private final CanalService canalService;
@@ -387,10 +389,50 @@ public class ConnectionHandler implements Runnable {
         LOGGER.log(Level.INFO, "Respuesta enviada: {0}", command);
         try {
             JsonNode responseNode = mapper.readTree(jsonResponse);
-            LOGGER.log(Level.INFO, "Payload respuesta: {0}", responseNode.toPrettyString());
+            JsonNode sanitizedNode = sanitizeBase64ForLogging(responseNode.deepCopy());
+            LOGGER.log(Level.INFO, "Payload respuesta: {0}", sanitizedNode.toPrettyString());
         } catch (Exception e) {
             LOGGER.log(Level.FINE, "No se pudo formatear la respuesta para logging", e);
         }
+    }
+
+    private JsonNode sanitizeBase64ForLogging(JsonNode node) {
+        if (node == null) {
+            return null;
+        }
+
+        if (node.isObject()) {
+            var objectNode = (com.fasterxml.jackson.databind.node.ObjectNode) node;
+            var fields = objectNode.fields();
+            while (fields.hasNext()) {
+                Map.Entry<String, JsonNode> entry = fields.next();
+                String fieldName = entry.getKey();
+                JsonNode child = entry.getValue();
+
+                if (child.isTextual() && shouldTruncateBase64(fieldName)) {
+                    String value = child.asText();
+                    if (value != null && value.length() > BASE64_PREVIEW_LENGTH) {
+                        objectNode.put(fieldName, value.substring(0, BASE64_PREVIEW_LENGTH) + "...");
+                    }
+                } else {
+                    sanitizeBase64ForLogging(child);
+                }
+            }
+        } else if (node.isArray()) {
+            for (JsonNode item : node) {
+                sanitizeBase64ForLogging(item);
+            }
+        }
+
+        return node;
+    }
+
+    private boolean shouldTruncateBase64(String fieldName) {
+        if (fieldName == null) {
+            return false;
+        }
+        String normalized = fieldName.toLowerCase(Locale.ROOT);
+        return normalized.equals("audiobase64") || normalized.equals("fotobase64") || normalized.contains("fotoperfil");
     }
 
     private void cleanup() {
