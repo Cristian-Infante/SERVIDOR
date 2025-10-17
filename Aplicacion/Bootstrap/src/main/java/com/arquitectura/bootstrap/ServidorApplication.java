@@ -77,7 +77,7 @@ public final class ServidorApplication {
         eventBus.subscribe(new LogSubscriber());
         
         // Servicio para notificar mensajes a los clientes
-        new MessageNotificationService(connectionRegistry, canalRepository, eventBus);
+        new MessageNotificationService(connectionRegistry, canalRepository, clienteRepository, eventBus);
 
         PasswordHasher passwordHasher = new Sha256PasswordHasher(config);
         RegistroServiceImpl registroServiceImpl = new RegistroServiceImpl(clienteRepository, passwordHasher);
