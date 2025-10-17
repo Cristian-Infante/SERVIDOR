@@ -68,7 +68,6 @@ public class ConnectionHandler implements Runnable {
     private BufferedWriter writer;
     private String sessionId;
     private Long clienteId;
-    private boolean logoutRequested;
 
     public ConnectionHandler(RegistroService registroService,
                               CanalService canalService,
@@ -101,7 +100,6 @@ public class ConnectionHandler implements Runnable {
     @Override
     public void run() {
         try {
-            logoutRequested = false;
             sessionId = registry.register(socket);
             writer = registry.writerOf(sessionId);
             reader = new BufferedReader(new InputStreamReader(socket.getInputStream(), StandardCharsets.UTF_8));
@@ -121,7 +119,7 @@ public class ConnectionHandler implements Runnable {
 
     private void listen() throws IOException {
         String line;
-        while (!logoutRequested && (line = reader.readLine()) != null) {
+        while ((line = reader.readLine()) != null) {
             if (line.isBlank()) {
                 continue;
             }
@@ -248,15 +246,12 @@ public class ConnectionHandler implements Runnable {
         // Publicar evento de logout antes de limpiar el estado
         eventBus.publish(new SessionEvent(SessionEventType.LOGOUT, sessionId, userId, null));
         
-        // Limpiar el estado de autenticación
+        // Limpiar el estado de autenticación pero mantener la conexión
         registry.updateCliente(sessionId, null, null, null);
         this.clienteId = null;
-
+        
         send("LOGOUT", new AckResponse("Sesión cerrada exitosamente"));
         LOGGER.info(() -> "Usuario '" + userName + "' (ID: " + userId + ") cerró sesión");
-
-        // Solicitar el cierre de la conexión una vez enviado el ACK
-        logoutRequested = true;
     }
 
     private void handleUploadAudio(JsonNode payload) throws IOException {
@@ -464,6 +459,5 @@ public class ConnectionHandler implements Runnable {
         this.writer = null;
         this.sessionId = null;
         this.clienteId = null;
-        this.logoutRequested = false;
     }
 }
