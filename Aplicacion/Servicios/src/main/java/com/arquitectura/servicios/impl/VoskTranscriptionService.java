@@ -65,27 +65,19 @@ public class VoskTranscriptionService implements AudioTranscriptionService {
                 StringBuilder transcripcion = new StringBuilder();
                 byte[] buffer = new byte[4096];
                 int bytesRead;
-                String ultimoParcial = "";
 
+                // Nota: ignoramos los resultados parciales porque suelen repetir el contenido
+                // previo y generan transcripciones con palabras duplicadas.
                 while ((bytesRead = stream.read(buffer)) != -1) {
                     if (recognizer.acceptWaveForm(buffer, bytesRead)) {
                         String result = recognizer.getResult();
                         appendIfNotBlank(transcripcion, extractText(result));
-                        ultimoParcial = "";
-                    } else {
-                        String partial = extractText(recognizer.getPartialResult());
-                        if (!partial.isBlank() && !partial.equalsIgnoreCase(ultimoParcial)) {
-                            appendIfNotBlank(transcripcion, partial);
-                            ultimoParcial = partial;
-                        }
                     }
                 }
 
-                // Obtener el resultado final evitando duplicados con el último parcial registrado
+                // Obtener el resultado final que pueda quedar pendiente al terminar el audio
                 String finalText = extractText(recognizer.getFinalResult());
-                if (!finalText.isBlank() && !finalText.equalsIgnoreCase(ultimoParcial)) {
-                    appendIfNotBlank(transcripcion, finalText);
-                }
+                appendIfNotBlank(transcripcion, finalText);
 
                 String texto = transcripcion.toString().trim();
                 return texto.isEmpty() ? "[Sin contenido de voz detectado]" : texto;
