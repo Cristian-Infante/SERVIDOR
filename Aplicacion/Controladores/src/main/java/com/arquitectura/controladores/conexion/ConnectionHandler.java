@@ -6,6 +6,7 @@ import com.arquitectura.dto.CommandEnvelope;
 import com.arquitectura.dto.ErrorResponse;
 import com.arquitectura.dto.InviteRequest;
 import com.arquitectura.dto.LoginRequest;
+import com.arquitectura.dto.LoginResponse;
 import com.arquitectura.dto.MessageRequest;
 import com.arquitectura.dto.RegisterRequest;
 import com.arquitectura.dto.MessageSyncResponse;
@@ -212,7 +213,13 @@ public class ConnectionHandler implements Runnable {
         eventBus.publish(new SessionEvent(SessionEventType.LOGIN, sessionId, cliente.getId(), null));
         
         // Enviar respuesta de login exitoso
-        send("LOGIN", new AckResponse("Login exitoso"));
+        String fotoBase64 = null;
+        byte[] foto = cliente.getFoto();
+        if (foto != null && foto.length > 0) {
+            fotoBase64 = Base64.getEncoder().encodeToString(foto);
+        }
+
+        send("LOGIN", new LoginResponse(true, "Login exitoso", fotoBase64));
         
         // Sincronizar mensajes del usuario
         try {

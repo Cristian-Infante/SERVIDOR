@@ -61,7 +61,8 @@ Este servidor opera sobre sockets TCP y utiliza **JSON codificado en UTF-8** com
 {
   "command": "LOGIN",
   "payload": {
-    "message": "Login exitoso"
+    "message": "Login exitoso",
+    "fotoBase64": "..." // Puede ser null si el usuario no tiene foto
   }
 }
 ```
