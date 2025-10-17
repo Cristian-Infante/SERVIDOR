@@ -94,8 +94,8 @@ public final class ServidorApplication {
         // Instanciar el servicio de almacenamiento de audio
         this.audioStorageService = new AudioStorageServiceImpl();
         // Instanciar el servicio de sincronización de mensajes
-        this.messageSyncService = new MessageSyncServiceImpl(mensajeRepository, clienteRepository, canalRepository);
-        this.mensajeriaService = new MensajeriaServiceImpl(mensajeRepository, logRepository, connectionRegistry, eventBus, transcriptionService);
+        this.messageSyncService = new MessageSyncServiceImpl(mensajeRepository, clienteRepository, canalRepository, audioStorageService);
+        this.mensajeriaService = new MensajeriaServiceImpl(mensajeRepository, logRepository, connectionRegistry, eventBus, transcriptionService, audioStorageService);
 
         // Iniciar servidor TCP
         this.tcpServer = new TCPServer(registroService, canalService, mensajeriaService, reporteService, conexionService, audioStorageService, messageSyncService, eventBus, connectionRegistry);

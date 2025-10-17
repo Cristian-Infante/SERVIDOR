@@ -26,10 +26,18 @@ public interface AudioStorageService {
     
     /**
      * Elimina un archivo de audio
-     * 
+     *
      * @param rutaArchivo Ruta del archivo a eliminar
      * @return true si se eliminó correctamente
      */
     boolean eliminarAudio(String rutaArchivo);
+
+    /**
+     * Carga un archivo de audio y lo codifica en Base64
+     *
+     * @param rutaArchivo Ruta del archivo en el servidor
+     * @return Contenido codificado en Base64
+     */
+    String cargarAudioBase64(String rutaArchivo);
 }
 

@@ -83,7 +83,22 @@ public class AudioStorageServiceImpl implements AudioStorageService {
             return false;
         }
     }
-    
+
+    @Override
+    public String cargarAudioBase64(String rutaArchivo) {
+        if (rutaArchivo == null || rutaArchivo.isBlank()) {
+            throw new IllegalArgumentException("La ruta del audio no puede estar vacía");
+        }
+        try {
+            Path path = Paths.get(rutaArchivo);
+            byte[] audioBytes = Files.readAllBytes(path);
+            return Base64.getEncoder().encodeToString(audioBytes);
+        } catch (IOException e) {
+            LOGGER.log(Level.WARNING, "Error leyendo archivo de audio: " + rutaArchivo, e);
+            throw new IllegalStateException("No se pudo leer el archivo de audio", e);
+        }
+    }
+
     /**
      * Obtiene la extensión del archivo según el tipo MIME
      */
