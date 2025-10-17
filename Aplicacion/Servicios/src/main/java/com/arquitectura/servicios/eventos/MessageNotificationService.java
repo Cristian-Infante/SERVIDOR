@@ -3,8 +3,13 @@ package com.arquitectura.servicios.eventos;
 import java.util.Objects;
 import java.util.logging.Logger;
 
+import com.arquitectura.dto.RealtimeMessageDto;
+import com.arquitectura.entidades.ArchivoMensaje;
+import com.arquitectura.entidades.AudioMensaje;
 import com.arquitectura.entidades.Mensaje;
+import com.arquitectura.entidades.TextoMensaje;
 import com.arquitectura.repositorios.CanalRepository;
+import com.arquitectura.repositorios.ClienteRepository;
 import com.arquitectura.servicios.conexion.ConnectionGateway;
 
 /**
@@ -16,12 +21,15 @@ public class MessageNotificationService implements SessionObserver {
     
     private final ConnectionGateway connectionGateway;
     private final CanalRepository canalRepository;
-    
-    public MessageNotificationService(ConnectionGateway connectionGateway, 
+    private final ClienteRepository clienteRepository;
+
+    public MessageNotificationService(ConnectionGateway connectionGateway,
                                     CanalRepository canalRepository,
+                                    ClienteRepository clienteRepository,
                                     SessionEventBus eventBus) {
         this.connectionGateway = Objects.requireNonNull(connectionGateway, "connectionGateway");
         this.canalRepository = Objects.requireNonNull(canalRepository, "canalRepository");
+        this.clienteRepository = Objects.requireNonNull(clienteRepository, "clienteRepository");
         eventBus.subscribe(this);
     }
     
@@ -45,14 +53,15 @@ public class MessageNotificationService implements SessionObserver {
         if (!(event.getPayload() instanceof Mensaje mensaje)) {
             return;
         }
-        
+
         if (mensaje.getReceptor() == null) {
             return;
         }
-        
+
         try {
+            RealtimeMessageDto dto = construirEventoMensaje(mensaje, "NEW_MESSAGE");
             // Enviar el mensaje al receptor específico
-            connectionGateway.sendToUser(mensaje.getReceptor(), mensaje);
+            connectionGateway.sendToUser(mensaje.getReceptor(), dto);
             LOGGER.fine(() -> "Mensaje privado notificado al usuario " + mensaje.getReceptor());
         } catch (Exception e) {
             LOGGER.warning(() -> "Error notificando mensaje privado: " + e.getMessage());
@@ -69,11 +78,12 @@ public class MessageNotificationService implements SessionObserver {
             LOGGER.warning("NEW_CHANNEL_MESSAGE: mensaje sin canalId - " + mensaje.getId());
             return;
         }
-        
+
         try {
+            RealtimeMessageDto dto = construirEventoMensaje(mensaje, "NEW_CHANNEL_MESSAGE");
             // Log detallado del mensaje que se va a enviar
             LOGGER.info(String.format(
-                "NEW_CHANNEL_MESSAGE - Enviando mensaje ID:%d, Tipo:%s, Emisor:%d, Canal:%d", 
+                "NEW_CHANNEL_MESSAGE - Enviando mensaje ID:%d, Tipo:%s, Emisor:%d, Canal:%d",
                 mensaje.getId(), mensaje.getTipo(), mensaje.getEmisor(), mensaje.getCanalId()));
 
             if (mensaje instanceof com.arquitectura.entidades.TextoMensaje texto) {
@@ -101,7 +111,7 @@ public class MessageNotificationService implements SessionObserver {
                         // No reenviar al emisor
                         continue;
                     }
-                    connectionGateway.sendToUser(cliente.getId(), mensaje);
+                    connectionGateway.sendToUser(cliente.getId(), dto);
                     enviados++;
                     // Mostrar solo el ID del receptor
                     receptores.append(String.format("[ID:%d] ", cliente.getId()));
@@ -118,5 +128,70 @@ public class MessageNotificationService implements SessionObserver {
                                " - Mensaje ID " + mensaje.getId() + ": " + e.getMessage());
             e.printStackTrace();
         }
+    }
+
+    private RealtimeMessageDto construirEventoMensaje(Mensaje mensaje, String tipoEvento) {
+        RealtimeMessageDto dto = new RealtimeMessageDto();
+        dto.setEvento(tipoEvento);
+        dto.setId(mensaje.getId());
+        dto.setTipoMensaje(mensaje.getTipo());
+        dto.setTimestamp(mensaje.getTimeStamp());
+        dto.setEmisorId(mensaje.getEmisor());
+        dto.setEmisorNombre(obtenerNombreUsuario(mensaje.getEmisor()));
+        dto.setReceptorId(mensaje.getReceptor());
+        if (mensaje.getReceptor() != null) {
+            dto.setReceptorNombre(obtenerNombreUsuario(mensaje.getReceptor()));
+        }
+        dto.setCanalId(mensaje.getCanalId());
+        if (mensaje.getCanalId() != null) {
+            dto.setCanalNombre(obtenerNombreCanal(mensaje.getCanalId()));
+        }
+        dto.setTipoConversacion(determinarTipoConversacion(mensaje));
+        dto.setContenido(construirContenido(mensaje));
+        return dto;
+    }
+
+    private String determinarTipoConversacion(Mensaje mensaje) {
+        if (mensaje.getCanalId() != null) {
+            return "CANAL";
+        }
+        if (mensaje.getReceptor() != null) {
+            return "DIRECTO";
+        }
+        return "DESCONOCIDO";
+    }
+
+    private String obtenerNombreUsuario(Long usuarioId) {
+        if (usuarioId == null) {
+            return null;
+        }
+        return clienteRepository.findById(usuarioId)
+                .map(com.arquitectura.entidades.Cliente::getNombreDeUsuario)
+                .orElse("Desconocido");
+    }
+
+    private String obtenerNombreCanal(Long canalId) {
+        if (canalId == null) {
+            return null;
+        }
+        return canalRepository.findById(canalId)
+                .map(com.arquitectura.entidades.Canal::getNombre)
+                .orElse("Canal " + canalId);
+    }
+
+    private java.util.Map<String, Object> construirContenido(Mensaje mensaje) {
+        java.util.Map<String, Object> contenido = new java.util.LinkedHashMap<>();
+        if (mensaje instanceof TextoMensaje texto) {
+            contenido.put("contenido", texto.getContenido());
+        } else if (mensaje instanceof AudioMensaje audio) {
+            contenido.put("rutaArchivo", audio.getRutaArchivo());
+            contenido.put("mime", audio.getMime());
+            contenido.put("duracionSeg", audio.getDuracionSeg());
+            contenido.put("transcripcion", audio.getTranscripcion());
+        } else if (mensaje instanceof ArchivoMensaje archivo) {
+            contenido.put("rutaArchivo", archivo.getRutaArchivo());
+            contenido.put("mime", archivo.getMime());
+        }
+        return contenido;
     }
 }
