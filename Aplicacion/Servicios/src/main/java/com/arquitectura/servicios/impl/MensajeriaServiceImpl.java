@@ -8,6 +8,7 @@ import com.arquitectura.entidades.Mensaje;
 import com.arquitectura.entidades.MensajeFactory;
 import com.arquitectura.repositorios.LogRepository;
 import com.arquitectura.repositorios.MensajeRepository;
+import com.arquitectura.servicios.AudioStorageService;
 import com.arquitectura.servicios.AudioTranscriptionService;
 import com.arquitectura.servicios.MensajeriaService;
 import com.arquitectura.servicios.conexion.ConnectionGateway;
@@ -30,17 +31,20 @@ public class MensajeriaServiceImpl implements MensajeriaService, SessionObserver
     private final ConnectionGateway connectionGateway;
     private final SessionEventBus eventBus;
     private final AudioTranscriptionService transcriptionService;
+    private final AudioStorageService audioStorageService;
 
     public MensajeriaServiceImpl(MensajeRepository mensajeRepository,
                                  LogRepository logRepository,
                                  ConnectionGateway connectionGateway,
                                  SessionEventBus eventBus,
-                                 AudioTranscriptionService transcriptionService) {
+                                 AudioTranscriptionService transcriptionService,
+                                 AudioStorageService audioStorageService) {
         this.mensajeRepository = Objects.requireNonNull(mensajeRepository, "mensajeRepository");
         this.logRepository = Objects.requireNonNull(logRepository, "logRepository");
         this.connectionGateway = Objects.requireNonNull(connectionGateway, "connectionGateway");
         this.eventBus = Objects.requireNonNull(eventBus, "eventBus");
         this.transcriptionService = Objects.requireNonNull(transcriptionService, "transcriptionService");
+        this.audioStorageService = Objects.requireNonNull(audioStorageService, "audioStorageService");
         this.eventBus.subscribe(this);
     }
 
@@ -102,6 +106,18 @@ public class MensajeriaServiceImpl implements MensajeriaService, SessionObserver
                 } catch (Exception e) {
                     LOGGER.warning(() -> "Error transcribiendo audio: " + e.getMessage());
                     audioMensaje.setTranscripcion("[Error al transcribir audio]");
+                }
+                if (audioMensaje.getRutaArchivo() != null && !audioMensaje.getRutaArchivo().isBlank()) {
+                    try {
+                        String audioBase64 = audioStorageService.cargarAudioBase64(audioMensaje.getRutaArchivo());
+                        audioMensaje.setAudioBase64(audioBase64);
+                    } catch (Exception e) {
+                        LOGGER.warning(() -> "No se pudo adjuntar contenido de audio: " + e.getMessage());
+                        audioMensaje.setAudioBase64(null);
+                    }
+                } else {
+                    LOGGER.warning("Ruta de audio vacía, no se adjunta contenido codificado");
+                    audioMensaje.setAudioBase64(null);
                 }
                 mensaje = audioMensaje;
             }

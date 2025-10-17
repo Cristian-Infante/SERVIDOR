@@ -9,6 +9,7 @@ import com.arquitectura.entidades.TextoMensaje;
 import com.arquitectura.repositorios.CanalRepository;
 import com.arquitectura.repositorios.ClienteRepository;
 import com.arquitectura.repositorios.MensajeRepository;
+import com.arquitectura.servicios.AudioStorageService;
 import com.arquitectura.servicios.MessageSyncService;
 
 import java.util.ArrayList;
@@ -29,13 +30,16 @@ public class MessageSyncServiceImpl implements MessageSyncService {
     private final MensajeRepository mensajeRepository;
     private final ClienteRepository clienteRepository;
     private final CanalRepository canalRepository;
+    private final AudioStorageService audioStorageService;
 
     public MessageSyncServiceImpl(MensajeRepository mensajeRepository,
                                   ClienteRepository clienteRepository,
-                                  CanalRepository canalRepository) {
+                                  CanalRepository canalRepository,
+                                  AudioStorageService audioStorageService) {
         this.mensajeRepository = Objects.requireNonNull(mensajeRepository, "mensajeRepository");
         this.clienteRepository = Objects.requireNonNull(clienteRepository, "clienteRepository");
         this.canalRepository = Objects.requireNonNull(canalRepository, "canalRepository");
+        this.audioStorageService = Objects.requireNonNull(audioStorageService, "audioStorageService");
     }
 
     @Override
@@ -106,6 +110,14 @@ public class MessageSyncServiceImpl implements MessageSyncService {
             contenido.put("mime", audio.getMime());
             contenido.put("duracionSeg", audio.getDuracionSeg());
             contenido.put("transcripcion", audio.getTranscripcion());
+            if (audio.getRutaArchivo() != null && !audio.getRutaArchivo().isBlank()) {
+                try {
+                    String audioBase64 = audioStorageService.cargarAudioBase64(audio.getRutaArchivo());
+                    contenido.put("audioBase64", audioBase64);
+                } catch (Exception e) {
+                    LOGGER.warning(() -> "No se pudo cargar audio para sincronización: " + e.getMessage());
+                }
+            }
         } else if (mensaje instanceof ArchivoMensaje archivo) {
             contenido.put("rutaArchivo", archivo.getRutaArchivo());
             contenido.put("mime", archivo.getMime());
