@@ -80,6 +80,8 @@ Este servidor opera sobre sockets TCP y utiliza **JSON codificado en UTF-8** com
 }
 ```
 
+Los mensajes de audio dentro de `mensajes` incluyen ahora el campo `audioBase64` con el contenido codificado para que el cliente pueda reproducirlos sin descargar archivos adicionales.
+
 **Sesión única**: Si el usuario ya tiene una sesión activa, el nuevo intento será rechazado con error.
 
 ### `LOGOUT`
@@ -150,6 +152,7 @@ Este servidor opera sobre sockets TCP y utiliza **JSON codificado en UTF-8** com
 - La `rutaArchivo` devuelta se usa luego en `SEND_USER` o `SEND_CHANNEL`
 - Para transcripción óptima, usa formato **WAV 16kHz mono**
 - Convierte con FFmpeg: `ffmpeg -i audio.mp3 -ar 16000 -ac 1 audio.wav`
+- El contenido binario se distribuye automáticamente en los mensajes enviados para que emisor y receptor puedan reproducirlo desde el campo `audioBase64`
 
 ### `SEND_USER`
 **Descripción:** Envía un mensaje a un usuario. Para mensajes de audio, primero usa `UPLOAD_AUDIO`.
@@ -198,10 +201,13 @@ Este servidor opera sobre sockets TCP y utiliza **JSON codificado en UTF-8** com
     "rutaArchivo": "media/audio/usuarios/1/rec_1760597378319.wav",
     "mime": "audio/wav",
     "duracionSeg": 15,
-    "transcripcion": "hola cómo estás me gustaría coordinar una reunión"
+    "transcripcion": "hola cómo estás me gustaría coordinar una reunión",
+    "audioBase64": "UklGRlIAAABXQVZFZm10IBAAAAABAAEA..."
   }
 }
 ```
+
+> **Importante:** El mismo evento (con el campo `audioBase64`) se reenvía también al emisor para mantener sincronizado su historial local.
 
 ### `SEND_CHANNEL`
 **Descripción:** Envía un mensaje a un canal. Para mensajes de audio, primero usa `UPLOAD_AUDIO`.
@@ -233,6 +239,7 @@ Este servidor opera sobre sockets TCP y utiliza **JSON codificado en UTF-8** com
 **Notas:**
 - Mismo flujo que `SEND_USER` para mensajes de audio
 - Todos los miembros del canal reciben el mensaje con transcripción incluida
+- El campo `audioBase64` se entrega a cada miembro para reproducción inmediata sin acceder al almacenamiento del servidor
 
 ### `CREATE_CHANNEL`
 **Request:**
