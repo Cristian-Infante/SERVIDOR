@@ -111,7 +111,8 @@ public class VoskTranscriptionService implements AudioTranscriptionService {
                         format.getSampleRate(),
                         false);
                 if (!AudioSystem.isConversionSupported(pcmFormat, format)) {
-                    LOGGER.warning(() -> "No se puede convertir el audio a PCM_SIGNED 16 bits desde formato: " + format);
+                    final AudioFormat formatSnapshot = format;
+                    LOGGER.warning(() -> "No se puede convertir el audio a PCM_SIGNED 16 bits desde formato: " + formatSnapshot);
                     return null;
                 }
                 currentStream = AudioSystem.getAudioInputStream(pcmFormat, currentStream);
@@ -129,7 +130,8 @@ public class VoskTranscriptionService implements AudioTranscriptionService {
                         format.getSampleRate(),
                         format.isBigEndian());
                 if (!AudioSystem.isConversionSupported(monoFormat, format)) {
-                    LOGGER.warning(() -> "No se puede convertir el audio a mono desde formato: " + format);
+                    final AudioFormat formatSnapshot = format;
+                    LOGGER.warning(() -> "No se puede convertir el audio a mono desde formato: " + formatSnapshot);
                     return null;
                 }
                 currentStream = AudioSystem.getAudioInputStream(monoFormat, currentStream);
@@ -147,7 +149,8 @@ public class VoskTranscriptionService implements AudioTranscriptionService {
                         16000f,
                         format.isBigEndian());
                 if (!AudioSystem.isConversionSupported(targetSampleRate, format)) {
-                    LOGGER.warning(() -> "No se puede convertir el audio a 16kHz desde formato: " + format);
+                    final AudioFormat formatSnapshot = format;
+                    LOGGER.warning(() -> "No se puede convertir el audio a 16kHz desde formato: " + formatSnapshot);
                     return null;
                 }
                 currentStream = AudioSystem.getAudioInputStream(targetSampleRate, currentStream);
@@ -165,7 +168,8 @@ public class VoskTranscriptionService implements AudioTranscriptionService {
                         format.getSampleRate(),
                         false);
                 if (!AudioSystem.isConversionSupported(littleEndian, format)) {
-                    LOGGER.warning(() -> "No se puede convertir el audio a little-endian desde formato: " + format);
+                    final AudioFormat formatSnapshot = format;
+                    LOGGER.warning(() -> "No se puede convertir el audio a little-endian desde formato: " + formatSnapshot);
                     return null;
                 }
                 currentStream = AudioSystem.getAudioInputStream(littleEndian, currentStream);
