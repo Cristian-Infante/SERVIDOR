@@ -12,6 +12,8 @@ import com.arquitectura.servicios.eventos.SessionObserver;
 
 import java.util.List;
 import java.util.Objects;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.logging.Logger;
 
 public class ConexionServiceImpl implements ConexionService, SessionObserver {
@@ -21,6 +23,7 @@ public class ConexionServiceImpl implements ConexionService, SessionObserver {
     private final ConnectionGateway connectionGateway;
     private final ClienteRepository clienteRepository;
     private final SessionEventBus eventBus;
+    private final ConcurrentHashMap<Long, AtomicInteger> activeSessions = new ConcurrentHashMap<>();
 
     public ConexionServiceImpl(ConnectionGateway connectionGateway,
                                ClienteRepository clienteRepository,
@@ -92,10 +95,44 @@ public class ConexionServiceImpl implements ConexionService, SessionObserver {
 
     @Override
     public void onEvent(SessionEvent event) {
-        if (event.getType() == SessionEventType.LOGIN && event.getActorId() != null) {
-            clienteRepository.setConnected(event.getActorId(), true);
-        } else if (event.getType() == SessionEventType.LOGOUT && event.getActorId() != null) {
-            clienteRepository.setConnected(event.getActorId(), false);
+        Long actorId = event.getActorId();
+        if (actorId == null) {
+            return;
+        }
+
+        if (event.getType() == SessionEventType.LOGIN) {
+            handleLoginEvent(actorId);
+        } else if (event.getType() == SessionEventType.LOGOUT) {
+            handleLogoutEvent(actorId);
+        }
+    }
+
+    private void handleLoginEvent(Long actorId) {
+        AtomicInteger sessions = activeSessions.compute(actorId, (id, counter) -> {
+            if (counter == null) {
+                return new AtomicInteger(1);
+            }
+            counter.incrementAndGet();
+            return counter;
+        });
+
+        if (sessions != null && sessions.get() == 1) {
+            clienteRepository.setConnected(actorId, true);
+        }
+    }
+
+    private void handleLogoutEvent(Long actorId) {
+        AtomicInteger remaining = activeSessions.computeIfPresent(actorId, (id, counter) -> {
+            int value = counter.decrementAndGet();
+            if (value <= 0) {
+                return null;
+            }
+            return counter;
+        });
+
+        if (remaining == null) {
+            activeSessions.remove(actorId);
+            clienteRepository.setConnected(actorId, false);
         }
     }
 }
