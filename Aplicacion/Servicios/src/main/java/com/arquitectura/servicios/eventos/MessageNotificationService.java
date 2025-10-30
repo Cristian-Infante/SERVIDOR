@@ -60,9 +60,16 @@ public class MessageNotificationService implements SessionObserver {
 
         try {
             RealtimeMessageDto dto = construirEventoMensaje(mensaje, "NEW_MESSAGE");
-            // Enviar el mensaje al receptor específico
+
+            // Enviar el mensaje a todas las sesiones del receptor
             connectionGateway.sendToUser(mensaje.getReceptor(), dto);
             LOGGER.fine(() -> "Mensaje privado notificado al usuario " + mensaje.getReceptor());
+
+            // Entregar también a todas las sesiones del emisor (por ejemplo, cuando tiene múltiples conexiones abiertas)
+            if (mensaje.getEmisor() != null && !mensaje.getEmisor().equals(mensaje.getReceptor())) {
+                connectionGateway.sendToUser(mensaje.getEmisor(), dto);
+                LOGGER.fine(() -> "Mensaje privado replicado al emisor " + mensaje.getEmisor());
+            }
         } catch (Exception e) {
             LOGGER.warning(() -> "Error notificando mensaje privado: " + e.getMessage());
         }
@@ -108,7 +115,7 @@ public class MessageNotificationService implements SessionObserver {
                 for (var cliente : miembros) {
                     if (cliente == null || cliente.getId() == null) continue;
                     if (cliente.getId().equals(mensaje.getEmisor())) {
-                        // No reenviar al emisor
+                        // No reenviar al emisor en este ciclo; se maneja más abajo
                         continue;
                     }
                     connectionGateway.sendToUser(cliente.getId(), dto);
@@ -116,6 +123,14 @@ public class MessageNotificationService implements SessionObserver {
                     // Mostrar solo el ID del receptor
                     receptores.append(String.format("[ID:%d] ", cliente.getId()));
                 }
+
+                // Replicar también al emisor en todas sus sesiones activas
+                if (mensaje.getEmisor() != null) {
+                    connectionGateway.sendToUser(mensaje.getEmisor(), dto);
+                    enviados++;
+                    receptores.append(String.format("[ID:%d] (emisor) ", mensaje.getEmisor()));
+                }
+
                 LOGGER.info(String.format("Mensaje de canal entregado a %d receptor(es) en canal %d. Receptores: %s",
                         enviados, mensaje.getCanalId(), receptores.toString().trim()));
             } catch (Exception e) {
