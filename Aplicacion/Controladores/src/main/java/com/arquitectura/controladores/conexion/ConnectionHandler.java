@@ -205,9 +205,16 @@ public class ConnectionHandler implements Runnable {
 
     private void handleLogin(JsonNode payload) throws IOException {
         LoginRequest request = mapper.treeToValue(payload, LoginRequest.class);
-        var cliente = registroService.autenticarCliente(request.getEmail(), request.getContrasenia(), request.getIp());
-        this.clienteId = cliente.getId();
         String ip = request.getIp();
+        if ((ip == null || ip.isBlank()) && socket != null && socket.getInetAddress() != null) {
+            ip = socket.getInetAddress().getHostAddress();
+        }
+
+        var cliente = registroService.autenticarCliente(request.getEmail(), request.getContrasenia(), ip);
+        this.clienteId = cliente.getId();
+        if (ip != null) {
+            ip = ip.trim();
+        }
         if (ip == null || ip.isBlank()) {
             ip = cliente.getIp();
         }

@@ -46,7 +46,7 @@ public class RegistroServiceImpl implements RegistroService {
         cliente.setEmail(email);
         cliente.setContrasenia(passwordHasher.hash(contrasenia));
         cliente.setFoto(foto);
-        cliente.setIp(ip);
+        cliente.setIp(normalizeIp(ip));
         cliente.setEstado(Boolean.FALSE);
 
         Cliente saved = clienteRepository.save(cliente);
@@ -63,12 +63,21 @@ public class RegistroServiceImpl implements RegistroService {
             throw new IllegalArgumentException("Credenciales inválidas");
         }
 
-        if (ip != null && !ip.isBlank() && !ip.equals(cliente.getIp())) {
-            cliente.setIp(ip);
+        String sanitizedIp = normalizeIp(ip);
+        if (sanitizedIp != null && !sanitizedIp.equals(cliente.getIp())) {
+            cliente.setIp(sanitizedIp);
             clienteRepository.save(cliente);
         }
 
         LOGGER.info(() -> "Cliente autenticado: " + cliente.getId());
         return cliente;
+    }
+
+    private String normalizeIp(String ip) {
+        if (ip == null) {
+            return null;
+        }
+        String trimmed = ip.trim();
+        return trimmed.isEmpty() ? null : trimmed;
     }
 }
