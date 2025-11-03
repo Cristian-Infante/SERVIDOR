@@ -241,9 +241,16 @@ public class ConnectionRegistry implements ConnectionGateway {
             ctx.writer.write(json);
             ctx.writer.write('\n');
             ctx.writer.flush();
-            
-            System.out.println("✅ MENSAJE ENVIADO EXITOSAMENTE a sesión " + ctx.sessionId);
-            
+
+            String usuario = ctx.descriptor != null && ctx.descriptor.getUsuario() != null
+                ? ctx.descriptor.getUsuario()
+                : "(usuario no autenticado)";
+
+            System.out.println(
+                "✅ MENSAJE ENVIADO EXITOSAMENTE a sesión " + ctx.sessionId + " (usuario: " + usuario + ")"
+            );
+            System.out.println("   Contenido entregado: " + json);
+
         } catch (IOException e) {
             System.out.println("❌ ERROR IO enviando a " + ctx.sessionId + ": " + e.getMessage());
             e.printStackTrace();
