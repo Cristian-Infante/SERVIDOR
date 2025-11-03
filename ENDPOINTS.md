@@ -638,6 +638,7 @@ El servidor envía notificaciones mediante mensajes `EVENT`. El contenido varía
 **Valores observados de `payload.evento`:**
 - `NEW_MESSAGE`: Nuevo mensaje privado recibido (`payload.contenido` depende del tipo de mensaje).
 - `NEW_CHANNEL_MESSAGE`: Nuevo mensaje en canal.
+- `USER_STATUS_CHANGED`: Actualización del estado de conexión de un usuario.
 
 Otros avisos del servidor utilizan estructuras distintas:
 - `KICKED` / `SERVER_SHUTDOWN`: llegan como `ServerNotification` con campos `tipo`, `mensaje` y `razon`.
@@ -792,6 +793,24 @@ Los mensajes en tiempo real llegan como `EVENT` y se identifican por `payload.ev
 ```
 
 **Acción del cliente**: Agregar el mensaje a la interfaz en tiempo real.
+
+#### USER_STATUS_CHANGED - Cambio de estado de conexión de un usuario
+```json
+{
+  "command": "EVENT",
+  "payload": {
+    "evento": "USER_STATUS_CHANGED",
+    "usuarioId": 7,
+    "usuarioNombre": "daniela",
+    "usuarioEmail": "daniela@example.com",
+    "conectado": true,
+    "sesionesActivas": 1,
+    "timestamp": "2025-10-16T12:35:00.123"
+  }
+}
+```
+
+**Acción del cliente**: Actualizar la lista o indicadores de presencia en tiempo real para reflejar el nuevo estado del usuario.
 
 ## Eventos de Desconexión
 

@@ -1,5 +1,6 @@
 package com.arquitectura.servicios.impl;
 
+import com.arquitectura.dto.ConnectionStatusUpdateDto;
 import com.arquitectura.dto.ServerNotification;
 import com.arquitectura.repositorios.ClienteRepository;
 import com.arquitectura.servicios.ConexionService;
@@ -10,6 +11,7 @@ import com.arquitectura.servicios.eventos.SessionEventBus;
 import com.arquitectura.servicios.eventos.SessionEventType;
 import com.arquitectura.servicios.eventos.SessionObserver;
 
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Objects;
 import java.util.concurrent.ConcurrentHashMap;
@@ -100,14 +102,22 @@ public class ConexionServiceImpl implements ConexionService, SessionObserver {
             return;
         }
 
+        boolean statusChanged = false;
+
         if (event.getType() == SessionEventType.LOGIN) {
-            handleLoginEvent(actorId);
+            statusChanged = handleLoginEvent(actorId);
+            if (statusChanged) {
+                notifyStatusChange(actorId, true);
+            }
         } else if (event.getType() == SessionEventType.LOGOUT) {
-            handleLogoutEvent(actorId);
+            statusChanged = handleLogoutEvent(actorId);
+            if (statusChanged) {
+                notifyStatusChange(actorId, false);
+            }
         }
     }
 
-    private void handleLoginEvent(Long actorId) {
+    private boolean handleLoginEvent(Long actorId) {
         AtomicInteger sessions = activeSessions.compute(actorId, (id, counter) -> {
             if (counter == null) {
                 return new AtomicInteger(1);
@@ -118,10 +128,12 @@ public class ConexionServiceImpl implements ConexionService, SessionObserver {
 
         if (sessions != null && sessions.get() == 1) {
             clienteRepository.setConnected(actorId, true);
+            return true;
         }
+        return false;
     }
 
-    private void handleLogoutEvent(Long actorId) {
+    private boolean handleLogoutEvent(Long actorId) {
         AtomicInteger remaining = activeSessions.computeIfPresent(actorId, (id, counter) -> {
             int value = counter.decrementAndGet();
             if (value <= 0) {
@@ -133,6 +145,38 @@ public class ConexionServiceImpl implements ConexionService, SessionObserver {
         if (remaining == null) {
             activeSessions.remove(actorId);
             clienteRepository.setConnected(actorId, false);
+            return true;
         }
+        return false;
+    }
+
+    private void notifyStatusChange(Long actorId, boolean connected) {
+        var clienteOpt = clienteRepository.findById(actorId);
+        if (clienteOpt.isEmpty()) {
+            LOGGER.warning(() -> "No se encontró información del usuario " + actorId + " para notificar su estado");
+            return;
+        }
+
+        int sesiones = (int) connectionGateway.activeSessions().stream()
+            .filter(descriptor -> descriptor.getClienteId() != null && descriptor.getClienteId().equals(actorId))
+            .count();
+
+        ConnectionStatusUpdateDto dto = new ConnectionStatusUpdateDto();
+        dto.setEvento("USER_STATUS_CHANGED");
+        dto.setUsuarioId(actorId);
+        dto.setUsuarioNombre(clienteOpt.get().getNombreDeUsuario());
+        dto.setUsuarioEmail(clienteOpt.get().getEmail());
+        dto.setConectado(connected);
+        dto.setSesionesActivas(sesiones);
+        dto.setTimestamp(LocalDateTime.now());
+
+        LOGGER.info(() -> String.format(
+            "Notificando cambio de estado para usuario %d (%s): %s",
+            actorId,
+            dto.getUsuarioNombre(),
+            connected ? "conectado" : "desconectado"
+        ));
+
+        connectionGateway.broadcast(dto);
     }
 }
