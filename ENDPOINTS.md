@@ -224,6 +224,12 @@ Los mensajes de audio dentro de `mensajes` incluyen el campo `audioBase64` dentr
 
 > **Importante:** El evento en tiempo real **no** incluye el `audioBase64`. Ese campo llega únicamente en `MESSAGE_SYNC` al iniciar sesión.
 
+**Sincronización en tiempo real para el emisor:**
+
+- Después de persistir el mensaje, el servidor emite el mismo evento `NEW_MESSAGE` de vuelta al emisor.
+- La entrega al propio emisor se realiza mediante `sendToUser`, que reenvía el payload a **todas** las conexiones activas asociadas a su ID.
+- En consecuencia, si el usuario tiene múltiples sesiones abiertas (por ejemplo, web y móvil), todas quedan sincronizadas inmediatamente con el mensaje que acaba de enviar.
+
 ### `SEND_CHANNEL`
 **Descripción:** Envía un mensaje a un canal. Para mensajes de audio, primero usa `UPLOAD_AUDIO`.
 
