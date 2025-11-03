@@ -1,9 +1,12 @@
 package com.arquitectura.servicios.eventos;
 
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Objects;
 import java.util.logging.Logger;
 
 import com.arquitectura.dto.RealtimeMessageDto;
+import com.arquitectura.dto.UserSummary;
 import com.arquitectura.entidades.ArchivoMensaje;
 import com.arquitectura.entidades.AudioMensaje;
 import com.arquitectura.entidades.Mensaje;
@@ -160,6 +163,7 @@ public class MessageNotificationService implements SessionObserver {
         dto.setCanalId(mensaje.getCanalId());
         if (mensaje.getCanalId() != null) {
             dto.setCanalNombre(obtenerNombreCanal(mensaje.getCanalId()));
+            dto.setCanalMiembros(obtenerMiembrosCanal(mensaje.getCanalId()));
         }
         dto.setTipoConversacion(determinarTipoConversacion(mensaje));
         dto.setContenido(construirContenido(mensaje));
@@ -192,6 +196,25 @@ public class MessageNotificationService implements SessionObserver {
         return canalRepository.findById(canalId)
                 .map(com.arquitectura.entidades.Canal::getNombre)
                 .orElse("Canal " + canalId);
+    }
+
+    private List<UserSummary> obtenerMiembrosCanal(Long canalId) {
+        if (canalId == null) {
+            return new ArrayList<>();
+        }
+        var miembros = canalRepository.findUsers(canalId);
+        List<UserSummary> summaries = new ArrayList<>();
+        for (var cliente : miembros) {
+            if (cliente == null) {
+                continue;
+            }
+            summaries.add(new UserSummary(
+                    cliente.getId(),
+                    cliente.getNombreDeUsuario(),
+                    cliente.getEmail(),
+                    Boolean.TRUE.equals(cliente.getEstado())));
+        }
+        return summaries;
     }
 
     private java.util.Map<String, Object> construirContenido(Mensaje mensaje) {

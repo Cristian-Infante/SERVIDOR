@@ -1,6 +1,8 @@
 package com.arquitectura.dto;
 
 import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Map;
 
 /**
@@ -11,6 +13,7 @@ import java.util.Map;
  */
 public class RealtimeMessageDto {
 
+    private List<UserSummary> canalMiembros = new ArrayList<>();
     private String evento;
     private Long id;
     private String tipoMensaje;
@@ -30,6 +33,14 @@ public class RealtimeMessageDto {
 
     public void setEvento(String evento) {
         this.evento = evento;
+    }
+
+    public List<UserSummary> getCanalMiembros() {
+        return canalMiembros;
+    }
+
+    public void setCanalMiembros(List<UserSummary> canalMiembros) {
+        this.canalMiembros = canalMiembros == null ? new ArrayList<>() : new ArrayList<>(canalMiembros);
     }
 
     public Long getId() {

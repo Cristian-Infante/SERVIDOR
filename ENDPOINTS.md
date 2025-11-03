@@ -268,6 +268,20 @@ Los mensajes de audio dentro de `mensajes` incluyen el campo `audioBase64` dentr
     "receptorNombre": null,
     "canalId": 99,
     "canalNombre": "desarrollo",
+    "canalMiembros": [
+      {
+        "id": 3,
+        "usuario": "carla",
+        "email": "carla@example.com",
+        "conectado": true
+      },
+      {
+        "id": 8,
+        "usuario": "diego",
+        "email": "diego@example.com",
+        "conectado": false
+      }
+    ],
     "contenido": {
       "contenido": "Hola a todos"
     }
@@ -278,6 +292,7 @@ Los mensajes de audio dentro de `mensajes` incluyen el campo `audioBase64` dentr
 **Notas:**
 - Mismo flujo que `SEND_USER` para mensajes de audio.
 - Todos los miembros del canal reciben el mensaje con la transcripción en tiempo real (cuando aplica).
+- Desde esta versión los eventos incluyen `canalMiembros` con los usuarios actuales del canal para facilitar la actualización del cliente.
 - El contenido codificado en Base64 para audios se entrega únicamente durante la sincronización (`MESSAGE_SYNC`).
 
 ### `CREATE_CHANNEL`
@@ -752,6 +767,14 @@ Los mensajes en tiempo real llegan como `EVENT` y se identifican por `payload.ev
     "receptorNombre": null,
     "canalId": 5,
     "canalNombre": "marketing",
+    "canalMiembros": [
+      {
+        "id": 3,
+        "usuario": "carla",
+        "email": "carla@example.com",
+        "conectado": true
+      }
+    ],
     "contenido": {
       "rutaArchivo": "media/audio/usuarios/3/rec_456.wav",
       "mime": "audio/wav",
