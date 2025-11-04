@@ -15,6 +15,9 @@ public interface ServidorView {
     JTextField getTxtDireccionIp();
     JButton getBtnEnviarRegistro();
     JList<String> getLstConexiones();
+    JTextField getTxtPeerEndpoint();
+    JButton getBtnConectarServidor();
+    JList<String> getLstServidores();
     JButton getBtnCerrarConexion();
     JButton getBtnGenerarUsuarios();
     JButton getBtnGenerarCanales();

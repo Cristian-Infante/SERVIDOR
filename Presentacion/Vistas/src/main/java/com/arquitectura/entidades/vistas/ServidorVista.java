@@ -48,7 +48,9 @@ public class ServidorVista extends JFrame {
 
     // Conexiones activas
     private final JList<String> lstConexiones;
+    private final JList<String> lstServidores;
     private final JButton btnCerrarConexion;
+    private final JButton btnConectarServidor;
 
     // Reportes
     private final JButton btnGenerarUsuarios;
@@ -58,9 +60,10 @@ public class ServidorVista extends JFrame {
     
     // Control del servidor
     private final JButton btnApagarServidor;
-    
+
     // Configuración del servidor
     private final int maxConnections;
+    private final JTextField txtPeerEndpoint;
 
     public ServidorVista() {
         this(5); // Valor por defecto para compatibilidad
@@ -83,6 +86,19 @@ public class ServidorVista extends JFrame {
         btnSeleccionarFoto = new JButton("Seleccionar");
         txtDireccionIp = new JTextField();
         btnEnviarRegistro = new JButton("Enviar");
+        txtPeerEndpoint = new JTextField();
+        txtPeerEndpoint.setName("txtPeerEndpoint");
+        txtPeerEndpoint.setBackground(BG_CARD);
+        txtPeerEndpoint.setForeground(TEXT_PRIMARY);
+        txtPeerEndpoint.setCaretColor(TEXT_PRIMARY);
+        txtPeerEndpoint.setBorder(BorderFactory.createCompoundBorder(
+                BorderFactory.createLineBorder(BORDER_COLOR, 1),
+                BorderFactory.createEmptyBorder(10, 12, 10, 12)
+        ));
+
+        btnConectarServidor = new JButton("Conectar");
+        btnConectarServidor.setName("btnConectarServidor");
+        styleModernButton(btnConectarServidor, ACCENT_BLUE, ACCENT_BLUE_HOVER);
 
         lstConexiones = new JList<>(new DefaultListModel<>());
         lstConexiones.setBackground(BG_CARD);
@@ -91,6 +107,15 @@ public class ServidorVista extends JFrame {
         lstConexiones.setSelectionForeground(Color.WHITE);
         lstConexiones.setFont(new Font("Segoe UI", Font.PLAIN, 13));
         lstConexiones.setBorder(BorderFactory.createEmptyBorder(8, 8, 8, 8));
+
+        lstServidores = new JList<>(new DefaultListModel<>());
+        lstServidores.setName("lstServidores");
+        lstServidores.setBackground(BG_CARD);
+        lstServidores.setForeground(TEXT_PRIMARY);
+        lstServidores.setSelectionBackground(ACCENT_BLUE);
+        lstServidores.setSelectionForeground(Color.WHITE);
+        lstServidores.setFont(new Font("Segoe UI", Font.PLAIN, 13));
+        lstServidores.setBorder(BorderFactory.createEmptyBorder(8, 8, 8, 8));
 
         btnCerrarConexion = new JButton("Cerrar Conexión");
         styleModernButton(btnCerrarConexion, ACCENT_BLUE, ACCENT_BLUE_HOVER);
@@ -131,6 +156,8 @@ public class ServidorVista extends JFrame {
         JPanel rightPanel = new JPanel();
         rightPanel.setLayout(new BoxLayout(rightPanel, BoxLayout.Y_AXIS));
         rightPanel.setBackground(BG_PRIMARY);
+        rightPanel.add(buildPeersCard());
+        rightPanel.add(Box.createVerticalStrut(20));
         rightPanel.add(buildReportesCard());
         rightPanel.add(Box.createVerticalStrut(20));
         rightPanel.add(buildControlCard());
@@ -290,6 +317,69 @@ public class ServidorVista extends JFrame {
         return card;
     }
 
+    private JPanel buildPeersCard() {
+        JPanel card = createCard();
+        card.setLayout(new BorderLayout(0, 16));
+
+        JLabel sectionTitle = new JLabel("Red de Servidores");
+        sectionTitle.setFont(new Font("Segoe UI", Font.BOLD, 18));
+        sectionTitle.setForeground(TEXT_PRIMARY);
+
+        JLabel sectionSubtitle = new JLabel("Conecta este nodo con otros servidores");
+        sectionSubtitle.setFont(new Font("Segoe UI", Font.PLAIN, 12));
+        sectionSubtitle.setForeground(TEXT_SECONDARY);
+
+        JPanel header = new JPanel();
+        header.setLayout(new BoxLayout(header, BoxLayout.Y_AXIS));
+        header.setBackground(BG_SECONDARY);
+        header.add(sectionTitle);
+        header.add(Box.createVerticalStrut(4));
+        header.add(sectionSubtitle);
+        card.add(header, BorderLayout.NORTH);
+
+        JPanel connectPanel = new JPanel(new BorderLayout(12, 0));
+        connectPanel.setBackground(BG_SECONDARY);
+
+        JPanel inputWrapper = new JPanel();
+        inputWrapper.setBackground(BG_SECONDARY);
+        inputWrapper.setLayout(new BoxLayout(inputWrapper, BoxLayout.Y_AXIS));
+
+        JLabel inputLabel = new JLabel("Servidor (IP:Puerto)");
+        inputLabel.setFont(new Font("Segoe UI", Font.PLAIN, 12));
+        inputLabel.setForeground(TEXT_SECONDARY);
+        inputLabel.setAlignmentX(Component.LEFT_ALIGNMENT);
+
+        txtPeerEndpoint.setAlignmentX(Component.LEFT_ALIGNMENT);
+        txtPeerEndpoint.setMaximumSize(new Dimension(Integer.MAX_VALUE, 40));
+
+        inputWrapper.add(inputLabel);
+        inputWrapper.add(Box.createVerticalStrut(6));
+        inputWrapper.add(txtPeerEndpoint);
+
+        connectPanel.add(inputWrapper, BorderLayout.CENTER);
+        connectPanel.add(btnConectarServidor, BorderLayout.EAST);
+        card.add(connectPanel, BorderLayout.CENTER);
+
+        lstServidores.setName("lstServidores");
+        JScrollPane scroll = new JScrollPane(lstServidores);
+        scroll.setBackground(BG_CARD);
+        scroll.setBorder(BorderFactory.createLineBorder(BORDER_COLOR, 1));
+        scroll.setPreferredSize(new Dimension(420, 180));
+
+        JPanel listWrapper = new JPanel(new BorderLayout());
+        listWrapper.setBackground(BG_SECONDARY);
+        listWrapper.add(scroll, BorderLayout.CENTER);
+
+        JLabel listLabel = new JLabel("Servidores conectados");
+        listLabel.setFont(new Font("Segoe UI", Font.PLAIN, 12));
+        listLabel.setForeground(TEXT_SECONDARY);
+        listLabel.setBorder(BorderFactory.createEmptyBorder(12, 0, 8, 0));
+        listWrapper.add(listLabel, BorderLayout.NORTH);
+
+        card.add(listWrapper, BorderLayout.SOUTH);
+        return card;
+    }
+
     private JPanel createReportRow(String title, String description) {
         JPanel row = new JPanel();
         row.setLayout(new BoxLayout(row, BoxLayout.Y_AXIS));
@@ -361,6 +451,9 @@ public class ServidorVista extends JFrame {
     public JTextField getTxtDireccionIp() { return txtDireccionIp; }
     public JButton getBtnEnviarRegistro() { return btnEnviarRegistro; }
     public JList<String> getLstConexiones() { return lstConexiones; }
+    public JTextField getTxtPeerEndpoint() { return txtPeerEndpoint; }
+    public JButton getBtnConectarServidor() { return btnConectarServidor; }
+    public JList<String> getLstServidores() { return lstServidores; }
     public JButton getBtnCerrarConexion() { return btnCerrarConexion; }
     public JButton getBtnGenerarUsuarios() { return btnGenerarUsuarios; }
     public JButton getBtnGenerarCanales() { return btnGenerarCanales; }
