@@ -17,7 +17,6 @@ import java.net.ServerSocket;
 import java.net.Socket;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -303,9 +302,8 @@ public class ServerPeerManager {
         if (connection.getRemoteServerId() == null) {
             return;
         }
-        List<RemoteSessionSnapshot> sessions = registry.snapshotLocalSessions();
         SyncStatePayload payload = new SyncStatePayload();
-        payload.setSessions(sessions);
+        payload.setServers(registry.snapshotSessionsByServer());
         connection.send(new PeerEnvelope(PeerMessageType.SYNC_STATE, serverId, mapper.valueToTree(payload)));
     }
 
@@ -321,10 +319,10 @@ public class ServerPeerManager {
                     HelloPayload payload = mapper.treeToValue(envelope.getPayload(), HelloPayload.class);
                     onHello(connection, payload, envelope.getOrigin());
                 }
-                case SYNC_STATE -> handleSyncState(connection, envelope.getPayload());
-                case CLIENT_CONNECTED -> handleClientConnected(connection, envelope.getPayload());
-                case CLIENT_DISCONNECTED -> handleClientDisconnected(connection, envelope.getPayload());
-                case CHANNEL_MEMBERSHIP -> handleChannelMembership(connection, envelope.getPayload());
+                case SYNC_STATE -> handleSyncState(connection, envelope);
+                case CLIENT_CONNECTED -> handleClientConnected(connection, envelope);
+                case CLIENT_DISCONNECTED -> handleClientDisconnected(connection, envelope);
+                case CHANNEL_MEMBERSHIP -> handleChannelMembership(connection, envelope);
                 case DIRECT_MESSAGE -> handleDirectMessage(envelope.getPayload());
                 case CHANNEL_MESSAGE -> handleChannelMessage(envelope.getPayload());
                 case SESSION_MESSAGE -> handleSessionMessage(envelope.getPayload());
@@ -336,44 +334,55 @@ public class ServerPeerManager {
         }
     }
 
-    private void handleSyncState(PeerConnection connection, JsonNode payload) throws IOException {
-        String remoteId = connection.getRemoteServerId();
-        if (remoteId == null) {
+    private void handleSyncState(PeerConnection connection, PeerEnvelope envelope) throws IOException {
+        SyncStatePayload sync = mapper.treeToValue(envelope.getPayload(), SyncStatePayload.class);
+        if (sync == null || sync.getServers().isEmpty()) {
             return;
         }
-        SyncStatePayload sync = mapper.treeToValue(payload, SyncStatePayload.class);
-        registry.registerRemoteSessions(remoteId, sync != null ? sync.getSessions() : Collections.emptyList());
-    }
-
-    private void handleClientConnected(PeerConnection connection, JsonNode payload) throws IOException {
-        String remoteId = connection.getRemoteServerId();
-        if (remoteId == null) {
-            return;
+        boolean updated = false;
+        for (Map.Entry<String, List<RemoteSessionSnapshot>> entry : sync.getServers().entrySet()) {
+            String targetServer = entry.getKey();
+            if (targetServer == null || targetServer.equals(serverId)) {
+                continue;
+            }
+            updated |= registry.registerRemoteSessions(targetServer, entry.getValue());
         }
-        RemoteSessionSnapshot snapshot = mapper.treeToValue(payload, RemoteSessionSnapshot.class);
-        registry.registerRemoteSession(remoteId, snapshot);
-    }
-
-    private void handleClientDisconnected(PeerConnection connection, JsonNode payload) throws IOException {
-        String remoteId = connection.getRemoteServerId();
-        if (remoteId == null) {
-            return;
-        }
-        ClientDisconnectionPayload data = mapper.treeToValue(payload, ClientDisconnectionPayload.class);
-        if (data != null) {
-            registry.removeRemoteSession(remoteId, data.getSessionId(), data.getClienteId());
+        if (updated) {
+            relayStateUpdate(connection, PeerMessageType.SYNC_STATE, envelope.getPayload(), envelope.getOrigin());
         }
     }
 
-    private void handleChannelMembership(PeerConnection connection, JsonNode payload) throws IOException {
-        String remoteId = connection.getRemoteServerId();
-        if (remoteId == null) {
+    private void handleClientConnected(PeerConnection connection, PeerEnvelope envelope) throws IOException {
+        RemoteSessionSnapshot snapshot = mapper.treeToValue(envelope.getPayload(), RemoteSessionSnapshot.class);
+        String fallbackId = envelope.getOrigin() != null ? envelope.getOrigin() : connection.getRemoteServerId();
+        boolean updated = registry.registerRemoteSession(fallbackId, snapshot);
+        if (updated) {
+            relayStateUpdate(connection, PeerMessageType.CLIENT_CONNECTED, envelope.getPayload(), envelope.getOrigin());
+        }
+    }
+
+    private void handleClientDisconnected(PeerConnection connection, PeerEnvelope envelope) throws IOException {
+        ClientDisconnectionPayload data = mapper.treeToValue(envelope.getPayload(), ClientDisconnectionPayload.class);
+        if (data == null) {
             return;
         }
-        ChannelUpdatePayload update = mapper.treeToValue(payload, ChannelUpdatePayload.class);
-        if (update != null && update.getCanalId() != null) {
-            boolean joined = "JOIN".equalsIgnoreCase(update.getAction());
-            registry.updateRemoteChannel(remoteId, update.getSessionId(), update.getCanalId(), joined);
+        String fallbackId = envelope.getOrigin() != null ? envelope.getOrigin() : connection.getRemoteServerId();
+        boolean removed = registry.removeRemoteSession(fallbackId, data.getSessionId(), data.getClienteId());
+        if (removed) {
+            relayStateUpdate(connection, PeerMessageType.CLIENT_DISCONNECTED, envelope.getPayload(), envelope.getOrigin());
+        }
+    }
+
+    private void handleChannelMembership(PeerConnection connection, PeerEnvelope envelope) throws IOException {
+        ChannelUpdatePayload update = mapper.treeToValue(envelope.getPayload(), ChannelUpdatePayload.class);
+        if (update == null || update.getCanalId() == null) {
+            return;
+        }
+        String fallbackId = envelope.getOrigin() != null ? envelope.getOrigin() : connection.getRemoteServerId();
+        boolean changed = registry.updateRemoteChannel(fallbackId, update.getSessionId(), update.getCanalId(),
+            "JOIN".equalsIgnoreCase(update.getAction()));
+        if (changed) {
+            relayStateUpdate(connection, PeerMessageType.CHANNEL_MEMBERSHIP, envelope.getPayload(), envelope.getOrigin());
         }
     }
 
@@ -402,6 +411,24 @@ public class ServerPeerManager {
         BroadcastPayload message = mapper.treeToValue(payload, BroadcastPayload.class);
         if (message != null && message.getMessage() != null) {
             registry.broadcastLocal(message.getMessage());
+        }
+    }
+
+    private void relayStateUpdate(PeerConnection source, PeerMessageType type, JsonNode payload, String origin) {
+        if (payload == null) {
+            return;
+        }
+        String effectiveOrigin = origin != null ? origin : serverId;
+        JsonNode copy = payload.deepCopy();
+        PeerEnvelope envelope = new PeerEnvelope(type, effectiveOrigin, copy);
+        for (PeerConnection peer : peers.values()) {
+            if (peer == source) {
+                continue;
+            }
+            if (effectiveOrigin != null && peer.matchesIdentity(effectiveOrigin)) {
+                continue;
+            }
+            peer.send(envelope);
         }
     }
 
@@ -611,6 +638,13 @@ public class ServerPeerManager {
             String sanitizedBase = (base != null && !base.isBlank()) ? base : "peer";
             return sanitizedBase + "@" + host;
         }
+
+        private boolean matchesIdentity(String candidate) {
+            if (candidate == null) {
+                return false;
+            }
+            return candidate.equals(remoteServerId) || candidate.equals(announcedServerId);
+        }
     }
 
     private enum PeerMessageType {
@@ -684,14 +718,14 @@ public class ServerPeerManager {
     }
 
     private static final class SyncStatePayload {
-        private List<RemoteSessionSnapshot> sessions = new ArrayList<>();
+        private Map<String, List<RemoteSessionSnapshot>> servers = new ConcurrentHashMap<>();
 
-        public List<RemoteSessionSnapshot> getSessions() {
-            return sessions;
+        public Map<String, List<RemoteSessionSnapshot>> getServers() {
+            return servers;
         }
 
-        public void setSessions(List<RemoteSessionSnapshot> sessions) {
-            this.sessions = sessions != null ? sessions : new ArrayList<>();
+        public void setServers(Map<String, List<RemoteSessionSnapshot>> servers) {
+            this.servers = servers != null ? new ConcurrentHashMap<>(servers) : new ConcurrentHashMap<>();
         }
     }
 
