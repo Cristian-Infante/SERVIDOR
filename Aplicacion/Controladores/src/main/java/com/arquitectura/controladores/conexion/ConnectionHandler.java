@@ -363,20 +363,23 @@ public class ConnectionHandler implements Runnable {
     }
 
     private String sanitizePayload(String command, JsonNode payload) {
+        if (payload == null) {
+            return "null";
+        }
         try {
+            JsonNode copy = payload.deepCopy();
+
             // Para LOGIN y REGISTER, ocultar la contraseña
             if ("LOGIN".equalsIgnoreCase(command) || "REGISTER".equalsIgnoreCase(command)) {
-                JsonNode copy = payload.deepCopy();
-                if (copy instanceof com.fasterxml.jackson.databind.node.ObjectNode) {
-                    com.fasterxml.jackson.databind.node.ObjectNode objectNode = 
-                        (com.fasterxml.jackson.databind.node.ObjectNode) copy;
+                if (copy instanceof com.fasterxml.jackson.databind.node.ObjectNode objectNode) {
                     if (objectNode.has("contrasenia")) {
                         objectNode.put("contrasenia", "*******");
                     }
-                    return objectNode.toPrettyString();
                 }
             }
-            return payload.toPrettyString();
+
+            JsonNode sanitized = sanitizeBase64ForLogging(copy);
+            return sanitized != null ? sanitized.toPrettyString() : "null";
         } catch (Exception e) {
             return payload.toString();
         }
