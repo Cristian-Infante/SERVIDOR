@@ -67,11 +67,6 @@ public class ServidorVista extends JFrame {
     private final int maxConnections;
     private final JTextField txtPeerEndpoint;
 
-    private final JPanel content;
-    private final JPanel conexionesCard;
-    private final JPanel rightPanel;
-    private boolean stackedLayout = false;
-
     public ServidorVista() {
         this(5); // Valor por defecto para compatibilidad
     }
@@ -422,7 +417,7 @@ public class ServidorVista extends JFrame {
         JScrollPane scroll = new JScrollPane(lstServidores);
         scroll.setBackground(BG_CARD);
         scroll.setBorder(BorderFactory.createLineBorder(BORDER_COLOR, 1));
-        scroll.setPreferredSize(new Dimension(0, 200));
+        scroll.setPreferredSize(new Dimension(420, 180));
 
         JPanel listWrapper = new JPanel(new BorderLayout());
         listWrapper.setBackground(BG_SECONDARY);
