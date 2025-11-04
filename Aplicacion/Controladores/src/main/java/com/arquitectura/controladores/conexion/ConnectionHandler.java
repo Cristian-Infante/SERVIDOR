@@ -219,9 +219,8 @@ public class ConnectionHandler implements Runnable {
             ip = cliente.getIp();
         }
         registry.updateCliente(sessionId, cliente.getId(), cliente.getNombreDeUsuario(), ip);
-        eventBus.publish(new SessionEvent(SessionEventType.LOGIN, sessionId, cliente.getId(), null));
-        
-        // Enviar respuesta de login exitoso
+
+        // Enviar respuesta de login exitoso lo antes posible para evitar timeouts en el cliente
         String fotoBase64 = null;
         byte[] foto = cliente.getFoto();
         if (foto != null && foto.length > 0) {
@@ -229,6 +228,12 @@ public class ConnectionHandler implements Runnable {
         }
 
         send("LOGIN", new LoginResponse(true, "Login exitoso", fotoBase64));
+
+        try {
+            eventBus.publish(new SessionEvent(SessionEventType.LOGIN, sessionId, cliente.getId(), null));
+        } catch (Exception e) {
+            LOGGER.log(Level.WARNING, "Error al notificar evento de login", e);
+        }
         
         // Sincronizar mensajes del usuario
         try {
