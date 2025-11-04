@@ -445,11 +445,7 @@ public class ServidorController implements SessionObserver, ServerPeerManager.Pe
         if (serverId == null) {
             return;
         }
-        SwingUtilities.invokeLater(() -> {
-            if (!containsServidor(serverId)) {
-                servidoresModel.addElement(serverId);
-            }
-        });
+        refreshServidores();
     }
 
     @Override
@@ -457,24 +453,6 @@ public class ServidorController implements SessionObserver, ServerPeerManager.Pe
         if (serverId == null) {
             return;
         }
-        SwingUtilities.invokeLater(() -> removeServidor(serverId));
-    }
-
-    private boolean containsServidor(String serverId) {
-        for (int i = 0; i < servidoresModel.size(); i++) {
-            if (servidoresModel.get(i).equals(serverId)) {
-                return true;
-            }
-        }
-        return false;
-    }
-
-    private void removeServidor(String serverId) {
-        for (int i = 0; i < servidoresModel.size(); i++) {
-            if (servidoresModel.get(i).equals(serverId)) {
-                servidoresModel.remove(i);
-                break;
-            }
-        }
+        refreshServidores();
     }
 }
