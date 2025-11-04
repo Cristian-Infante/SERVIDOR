@@ -21,6 +21,7 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CopyOnWriteArrayList;
@@ -245,11 +246,12 @@ public class ServerPeerManager {
     }
 
     private void onHello(PeerConnection connection, HelloPayload payload, String origin) {
-        String remoteId = payload != null && payload.getServerId() != null ? payload.getServerId() : origin;
-        if (remoteId == null || remoteId.equals(serverId)) {
+        String announcedId = payload != null && payload.getServerId() != null ? payload.getServerId() : origin;
+        String resolvedId = resolveRemoteId(connection, announcedId);
+        if (resolvedId == null) {
             return;
         }
-        connection.markHelloReceived(remoteId);
+        connection.markHelloReceived(announcedId, resolvedId);
     }
 
     private void onHandshakeComplete(PeerConnection connection) {
@@ -261,9 +263,40 @@ public class ServerPeerManager {
         if (previous != null && previous != connection) {
             previous.closeSilently();
         }
+        LOGGER.info(() -> String.format(
+            "Conexión P2P establecida con servidor %s (%s, %s desde %s)",
+            remoteId,
+            connection.describeAnnouncedId(),
+            connection.isInitiator() ? "iniciada" : "entrante",
+            connection.remoteSummary()
+        ));
         LOGGER.info(() -> "Sincronizando con servidor " + remoteId);
         sendSyncState(connection);
         notifyPeerConnected(remoteId);
+    }
+
+    private String resolveRemoteId(PeerConnection connection, String announcedId) {
+        String trimmed = announcedId != null ? announcedId.trim() : null;
+        if (trimmed == null || trimmed.isEmpty()) {
+            String fallback = connection.fallbackIdentifier("peer");
+            LOGGER.warning(() -> String.format(
+                "Servidor remoto %s no envió un identificador válido. Se usará identificador alterno %s.",
+                connection.remoteSummary(),
+                fallback
+            ));
+            return fallback;
+        }
+        if (trimmed.equals(serverId)) {
+            String fallback = connection.fallbackIdentifier(trimmed);
+            LOGGER.warning(() -> String.format(
+                "Servidor remoto %s anunció el mismo ID (%s) que este servidor. Se utilizará identificador alterno %s.",
+                connection.remoteSummary(),
+                serverId,
+                fallback
+            ));
+            return fallback;
+        }
+        return trimmed;
     }
 
     private void sendSyncState(PeerConnection connection) {
@@ -448,6 +481,7 @@ public class ServerPeerManager {
         private BufferedReader reader;
         private BufferedWriter writer;
         private volatile String remoteServerId;
+        private volatile String announcedServerId;
         private volatile boolean helloSent;
         private volatile boolean helloReceived;
 
@@ -510,9 +544,12 @@ public class ServerPeerManager {
             }
         }
 
-        private void markHelloReceived(String remoteId) {
+        private void markHelloReceived(String announcedId, String resolvedId) {
+            if (announcedServerId == null) {
+                announcedServerId = announcedId;
+            }
             if (remoteServerId == null) {
-                remoteServerId = remoteId;
+                remoteServerId = resolvedId;
             }
             helloReceived = true;
             if (!helloSent) {
@@ -543,6 +580,36 @@ public class ServerPeerManager {
 
         private String getRemoteServerId() {
             return remoteServerId;
+        }
+
+        private boolean isInitiator() {
+            return initiator;
+        }
+
+        private String describeAnnouncedId() {
+            if (announcedServerId == null || announcedServerId.equals(remoteServerId)) {
+                return remoteServerId != null ? "ID confirmado" : "sin ID";
+            }
+            return "anunció '" + announcedServerId + "'";
+        }
+
+        private String remoteSummary() {
+            String address = Optional.ofNullable(socket.getRemoteSocketAddress())
+                .map(Object::toString)
+                .orElse("dirección desconocida");
+            if (address.startsWith("/")) {
+                address = address.substring(1);
+            }
+            return address;
+        }
+
+        private String fallbackIdentifier(String base) {
+            String host = Optional.ofNullable(socket.getInetAddress())
+                .map(inet -> inet.getHostAddress() != null ? inet.getHostAddress() : inet.getHostName())
+                .filter(addr -> !addr.isBlank())
+                .orElse(remoteSummary());
+            String sanitizedBase = (base != null && !base.isBlank()) ? base : "peer";
+            return sanitizedBase + "@" + host;
         }
     }
 
