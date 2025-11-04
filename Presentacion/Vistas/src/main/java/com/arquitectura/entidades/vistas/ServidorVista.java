@@ -8,8 +8,10 @@ import java.awt.FlowLayout;
 import java.awt.Font;
 import java.awt.GridBagConstraints;
 import java.awt.GridBagLayout;
-import java.awt.GridLayout;
 import java.awt.Insets;
+
+import java.awt.event.ComponentAdapter;
+import java.awt.event.ComponentEvent;
 
 import javax.swing.BorderFactory;
 import javax.swing.Box;
@@ -57,13 +59,18 @@ public class ServidorVista extends JFrame {
     private final JButton btnGenerarCanales;
     private final JButton btnGenerarConectados;
     private final JButton btnGenerarLogs;
-    
+
     // Control del servidor
     private final JButton btnApagarServidor;
 
     // Configuración del servidor
     private final int maxConnections;
     private final JTextField txtPeerEndpoint;
+
+    private final JPanel content;
+    private final JPanel conexionesCard;
+    private final JPanel rightPanel;
+    private boolean stackedLayout = false;
 
     public ServidorVista() {
         this(5); // Valor por defecto para compatibilidad
@@ -73,7 +80,7 @@ public class ServidorVista extends JFrame {
         super("Panel de Control del Servidor");
         this.maxConnections = maxConnections;
         setDefaultCloseOperation(JFrame.DISPOSE_ON_CLOSE);
-        setMinimumSize(new Dimension(900, 650));
+        setMinimumSize(new Dimension(640, 600));
         setSize(1000, 700);
         setLocationRelativeTo(null);
 
@@ -144,16 +151,16 @@ public class ServidorVista extends JFrame {
         JPanel header = createHeader();
         mainPanel.add(header, BorderLayout.NORTH);
 
-        // Contenido principal en grid responsivo
-        JPanel content = new JPanel(new GridLayout(1, 2, 20, 0));
+        // Contenido principal responsivo
+        content = new JPanel(new GridBagLayout());
         content.setBackground(BG_PRIMARY);
         content.setBorder(BorderFactory.createEmptyBorder(20, 0, 0, 0));
 
         // Panel izquierdo: Conexiones
-        content.add(buildConexionesCard());
+        conexionesCard = buildConexionesCard();
 
         // Panel derecho: Reportes + Control
-        JPanel rightPanel = new JPanel();
+        rightPanel = new JPanel();
         rightPanel.setLayout(new BoxLayout(rightPanel, BoxLayout.Y_AXIS));
         rightPanel.setBackground(BG_PRIMARY);
         rightPanel.add(buildPeersCard());
@@ -161,10 +168,61 @@ public class ServidorVista extends JFrame {
         rightPanel.add(buildReportesCard());
         rightPanel.add(Box.createVerticalStrut(20));
         rightPanel.add(buildControlCard());
-        content.add(rightPanel);
+
+        configureContentLayout(false);
 
         mainPanel.add(content, BorderLayout.CENTER);
         setContentPane(mainPanel);
+
+        addComponentListener(new ComponentAdapter() {
+            @Override
+            public void componentResized(ComponentEvent e) {
+                updateResponsiveLayout();
+            }
+        });
+    }
+
+    private void updateResponsiveLayout() {
+        int width = getWidth();
+        boolean shouldStack = width < 960;
+        if (shouldStack != stackedLayout) {
+            configureContentLayout(shouldStack);
+        }
+    }
+
+    private void configureContentLayout(boolean stackVertically) {
+        content.removeAll();
+
+        GridBagConstraints gbc = new GridBagConstraints();
+        gbc.fill = GridBagConstraints.BOTH;
+        gbc.weighty = 1.0;
+
+        if (stackVertically) {
+            gbc.gridx = 0;
+            gbc.gridy = 0;
+            gbc.weightx = 1.0;
+            gbc.insets = new Insets(0, 0, 20, 0);
+            content.add(conexionesCard, gbc);
+
+            gbc.gridy = 1;
+            gbc.insets = new Insets(0, 0, 0, 0);
+            content.add(rightPanel, gbc);
+        } else {
+            gbc.gridx = 0;
+            gbc.gridy = 0;
+            gbc.weightx = 0.5;
+            gbc.insets = new Insets(0, 0, 0, 10);
+            content.add(conexionesCard, gbc);
+
+            gbc.gridx = 1;
+            gbc.weightx = 0.5;
+            gbc.insets = new Insets(0, 10, 0, 0);
+            content.add(rightPanel, gbc);
+        }
+
+        stackedLayout = stackVertically;
+        content.revalidate();
+        content.repaint();
     }
 
     private JPanel createHeader() {
@@ -216,7 +274,7 @@ public class ServidorVista extends JFrame {
         JScrollPane scrollPane = new JScrollPane(lstConexiones);
         scrollPane.setBackground(BG_CARD);
         scrollPane.setBorder(BorderFactory.createLineBorder(BORDER_COLOR, 1));
-        scrollPane.setPreferredSize(new Dimension(420, 400));
+        scrollPane.setPreferredSize(new Dimension(0, 320));
         card.add(scrollPane, BorderLayout.CENTER);
 
         // Botón de acción
@@ -364,7 +422,7 @@ public class ServidorVista extends JFrame {
         JScrollPane scroll = new JScrollPane(lstServidores);
         scroll.setBackground(BG_CARD);
         scroll.setBorder(BorderFactory.createLineBorder(BORDER_COLOR, 1));
-        scroll.setPreferredSize(new Dimension(420, 180));
+        scroll.setPreferredSize(new Dimension(0, 200));
 
         JPanel listWrapper = new JPanel(new BorderLayout());
         listWrapper.setBackground(BG_SECONDARY);
