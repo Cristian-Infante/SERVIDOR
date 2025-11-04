@@ -3,6 +3,7 @@ package com.arquitectura.controladores;
 import com.arquitectura.dto.ChannelSummary;
 import com.arquitectura.dto.LogEntryDto;
 import com.arquitectura.dto.UserSummary;
+import com.arquitectura.controladores.p2p.ServerPeerManager;
 import com.arquitectura.servicios.ConexionService;
 import com.arquitectura.servicios.RegistroService;
 import com.arquitectura.servicios.ReporteService;
@@ -31,7 +32,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
-public class ServidorController implements SessionObserver {
+public class ServidorController implements SessionObserver, ServerPeerManager.PeerStatusListener {
 
     private final ServidorView vista;
     private final RegistroService registroService;
@@ -39,22 +40,29 @@ public class ServidorController implements SessionObserver {
     private final ConexionService conexionService;
     private final SessionEventBus eventBus;
     private final DefaultListModel<String> conexionesModel;
+    private final DefaultListModel<String> servidoresModel;
+    private final ServerPeerManager peerManager;
     private final Map<String, String> mapping = new HashMap<>();
 
     public ServidorController(ServidorView vista,
                               RegistroService registroService,
                               ReporteService reporteService,
                               ConexionService conexionService,
-                              SessionEventBus eventBus) {
+                              SessionEventBus eventBus,
+                              ServerPeerManager peerManager) {
         this.vista = vista;
         this.registroService = registroService;
         this.reporteService = reporteService;
         this.conexionService = conexionService;
         this.eventBus = eventBus;
+        this.peerManager = peerManager;
         this.conexionesModel = (DefaultListModel<String>) vista.getLstConexiones().getModel();
+        this.servidoresModel = (DefaultListModel<String>) vista.getLstServidores().getModel();
         wire();
         this.eventBus.subscribe(this);
+        this.peerManager.addPeerStatusListener(this);
         refreshConexiones();
+        refreshServidores();
     }
 
     private void wire() {
@@ -66,6 +74,7 @@ public class ServidorController implements SessionObserver {
         vista.getBtnEnviarRegistro().addActionListener(this::registrarCliente);
         vista.getBtnSeleccionarFoto().addActionListener(this::seleccionarFoto);
         vista.getBtnApagarServidor().addActionListener(this::apagarServidor);
+        vista.getBtnConectarServidor().addActionListener(this::conectarServidor);
     }
 
     private void mostrarUsuarios(ActionEvent e) {
@@ -297,6 +306,86 @@ public class ServidorController implements SessionObserver {
         });
     }
 
+    private void refreshServidores() {
+        SwingUtilities.invokeLater(() -> {
+            servidoresModel.clear();
+            for (String serverId : peerManager.connectedPeerIds()) {
+                servidoresModel.addElement(serverId);
+            }
+        });
+    }
+
+    private void conectarServidor(ActionEvent e) {
+        String endpoint = vista.getTxtPeerEndpoint().getText().trim();
+        if (endpoint.isBlank()) {
+            JOptionPane.showMessageDialog(
+                    vista.asComponent(),
+                    "Ingresa la dirección del servidor en formato IP:PUERTO",
+                    "Información",
+                    JOptionPane.INFORMATION_MESSAGE
+            );
+            return;
+        }
+
+        int idx = endpoint.lastIndexOf(':');
+        if (idx <= 0 || idx == endpoint.length() - 1) {
+            JOptionPane.showMessageDialog(
+                    vista.asComponent(),
+                    "Formato inválido. Utiliza IP:PUERTO",
+                    "Error",
+                    JOptionPane.ERROR_MESSAGE
+            );
+            return;
+        }
+
+        String host = endpoint.substring(0, idx);
+        int port;
+        try {
+            port = Integer.parseInt(endpoint.substring(idx + 1));
+        } catch (NumberFormatException ex) {
+            JOptionPane.showMessageDialog(
+                    vista.asComponent(),
+                    "El puerto debe ser un número válido",
+                    "Error",
+                    JOptionPane.ERROR_MESSAGE
+            );
+            return;
+        }
+
+        vista.getBtnConectarServidor().setEnabled(false);
+        new Thread(() -> {
+            try {
+                peerManager.connectToPeer(host, port);
+                SwingUtilities.invokeLater(() -> {
+                    JOptionPane.showMessageDialog(
+                            vista.asComponent(),
+                            "Conexión establecida correctamente",
+                            "Servidores",
+                            JOptionPane.INFORMATION_MESSAGE
+                    );
+                    vista.getTxtPeerEndpoint().setText("");
+                    refreshServidores();
+                });
+            } catch (IllegalArgumentException | IllegalStateException ex) {
+                SwingUtilities.invokeLater(() -> JOptionPane.showMessageDialog(
+                        vista.asComponent(),
+                        ex.getMessage(),
+                        "Error",
+                        JOptionPane.ERROR_MESSAGE
+                ));
+            } catch (Exception ex) {
+                SwingUtilities.invokeLater(() -> JOptionPane.showMessageDialog(
+                        vista.asComponent(),
+                        "No se pudo conectar con el servidor: " + ex.getMessage(),
+                        "Error",
+                        JOptionPane.ERROR_MESSAGE
+                ));
+            } finally {
+                SwingUtilities.invokeLater(() -> vista.getBtnConectarServidor().setEnabled(true));
+            }
+        }, "PeerConnector-UI").start();
+    }
+
     private void apagarServidor(ActionEvent e) {
         int confirm = JOptionPane.showConfirmDialog(
                 vista.asComponent(),
@@ -343,11 +432,49 @@ public class ServidorController implements SessionObserver {
         // - Se cierra una conexión TCP
         // - Un usuario hace LOGIN
         // - Un usuario hace LOGOUT
-        if (event.getType() == SessionEventType.LOGIN || 
+        if (event.getType() == SessionEventType.LOGIN ||
             event.getType() == SessionEventType.LOGOUT ||
             event.getType() == SessionEventType.TCP_CONNECTED ||
             event.getType() == SessionEventType.TCP_DISCONNECTED) {
             refreshConexiones();
+        }
+    }
+
+    @Override
+    public void onPeerConnected(String serverId) {
+        if (serverId == null) {
+            return;
+        }
+        SwingUtilities.invokeLater(() -> {
+            if (!containsServidor(serverId)) {
+                servidoresModel.addElement(serverId);
+            }
+        });
+    }
+
+    @Override
+    public void onPeerDisconnected(String serverId) {
+        if (serverId == null) {
+            return;
+        }
+        SwingUtilities.invokeLater(() -> removeServidor(serverId));
+    }
+
+    private boolean containsServidor(String serverId) {
+        for (int i = 0; i < servidoresModel.size(); i++) {
+            if (servidoresModel.get(i).equals(serverId)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private void removeServidor(String serverId) {
+        for (int i = 0; i < servidoresModel.size(); i++) {
+            if (servidoresModel.get(i).equals(serverId)) {
+                servidoresModel.remove(i);
+                break;
+            }
         }
     }
 }
