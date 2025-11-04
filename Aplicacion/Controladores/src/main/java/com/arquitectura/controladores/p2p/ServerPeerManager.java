@@ -186,7 +186,12 @@ public class ServerPeerManager {
     }
 
     private void broadcast(PeerMessageType type, Object payload) {
-        JsonNode node = payload instanceof JsonNode ? (JsonNode) payload : mapper.valueToTree(payload);
+        JsonNode node;
+        if (type == PeerMessageType.BROADCAST) {
+            node = wrapBroadcastPayload(payload);
+        } else {
+            node = payload instanceof JsonNode ? (JsonNode) payload : mapper.valueToTree(payload);
+        }
         PeerEnvelope envelope = new PeerEnvelope(type, serverId, node);
         for (PeerConnection connection : peers.values()) {
             connection.send(envelope);
@@ -429,11 +434,38 @@ public class ServerPeerManager {
         }
     }
 
-    private void handleBroadcast(JsonNode payload) throws IOException {
-        BroadcastPayload message = mapper.treeToValue(payload, BroadcastPayload.class);
-        if (message != null && message.getMessage() != null) {
-            registry.broadcastLocal(message.getMessage());
+    private void handleBroadcast(JsonNode payload) {
+        JsonNode messageNode = extractBroadcastMessage(payload);
+        if (messageNode != null) {
+            registry.broadcastLocal(messageNode);
         }
+    }
+
+    private JsonNode wrapBroadcastPayload(Object payload) {
+        if (payload instanceof JsonNode jsonNode) {
+            if (jsonNode.hasNonNull("message") && jsonNode.size() == 1) {
+                return jsonNode;
+            }
+            BroadcastPayload wrapper = new BroadcastPayload();
+            wrapper.setMessage(jsonNode);
+            return mapper.valueToTree(wrapper);
+        }
+        if (payload instanceof BroadcastPayload broadcastPayload && broadcastPayload.getMessage() != null) {
+            return mapper.valueToTree(broadcastPayload);
+        }
+        BroadcastPayload wrapper = new BroadcastPayload();
+        wrapper.setMessage(mapper.valueToTree(payload));
+        return mapper.valueToTree(wrapper);
+    }
+
+    private JsonNode extractBroadcastMessage(JsonNode payload) {
+        if (payload == null || payload.isNull()) {
+            return null;
+        }
+        if (payload.hasNonNull("message")) {
+            return payload.get("message");
+        }
+        return payload;
     }
 
     private void relayStateUpdate(PeerConnection source, PeerMessageType type, JsonNode payload, String origin) {
