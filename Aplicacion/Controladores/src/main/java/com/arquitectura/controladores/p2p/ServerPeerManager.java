@@ -33,6 +33,10 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.RejectedExecutionException;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 import java.util.regex.Matcher;
@@ -758,14 +762,22 @@ public class ServerPeerManager {
         private final boolean initiator;
         private BufferedReader reader;
         private BufferedWriter writer;
+        private final ExecutorService outboundExecutor;
         private volatile String remoteServerId;
         private volatile String announcedServerId;
         private volatile boolean helloSent;
         private volatile boolean helloReceived;
+        private final AtomicBoolean closed = new AtomicBoolean();
 
         private PeerConnection(Socket socket, boolean initiator) {
             this.socket = socket;
             this.initiator = initiator;
+            this.outboundExecutor = Executors.newSingleThreadExecutor(r -> {
+                Thread thread = new Thread(r,
+                    "PeerConnection-Writer-" + socket.getRemoteSocketAddress());
+                thread.setDaemon(true);
+                return thread;
+            });
         }
 
         private void start() {
@@ -785,8 +797,7 @@ public class ServerPeerManager {
                         LOGGER.log(Level.FINE, "Conexión P2P cerrada: " + e.getMessage(), e);
                     }
                 } finally {
-                    closeSilently();
-                    onConnectionClosed(this);
+                    closeWithNotification();
                 }
             }, "PeerConnection-" + socket.getRemoteSocketAddress());
             thread.setDaemon(true);
@@ -794,6 +805,17 @@ public class ServerPeerManager {
         }
 
         private void send(PeerEnvelope envelope) {
+            if (envelope == null) {
+                return;
+            }
+            try {
+                outboundExecutor.execute(() -> doSend(envelope));
+            } catch (RejectedExecutionException ex) {
+                LOGGER.log(Level.FINE, "No se pudo encolar mensaje para peer (conexión cerrada)", ex);
+            }
+        }
+
+        private void doSend(PeerEnvelope envelope) {
             try {
                 if (writer == null) {
                     return;
@@ -807,8 +829,7 @@ public class ServerPeerManager {
                 }
             } catch (IOException e) {
                 LOGGER.log(Level.WARNING, "Error enviando mensaje P2P", e);
-                closeSilently();
-                onConnectionClosed(this);
+                closeWithNotification();
             }
         }
 
@@ -840,6 +861,7 @@ public class ServerPeerManager {
         }
 
         private void closeSilently() {
+            outboundExecutor.shutdownNow();
             try {
                 if (writer != null) {
                     writer.close();
@@ -856,6 +878,14 @@ public class ServerPeerManager {
                 socket.close();
             } catch (IOException ignored) {
             }
+        }
+
+        private void closeWithNotification() {
+            if (!closed.compareAndSet(false, true)) {
+                return;
+            }
+            closeSilently();
+            onConnectionClosed(this);
         }
 
         private String getRemoteServerId() {
