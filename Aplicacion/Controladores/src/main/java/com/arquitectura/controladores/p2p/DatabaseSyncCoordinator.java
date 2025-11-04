@@ -13,6 +13,7 @@ import com.arquitectura.repositorios.MensajeRepository;
 import javax.sql.DataSource;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
+import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Timestamp;
 import java.sql.Types;
@@ -98,7 +99,7 @@ public class DatabaseSyncCoordinator {
         snapshot.setCanalMiembros(memberships);
 
         List<DatabaseSnapshot.MensajeRecord> mensajes = new ArrayList<>();
-        for (Mensaje mensaje : mensajeRepository.findAllOrdered()) {
+        for (Mensaje mensaje : loadOrderedMessages()) {
             if (mensaje == null || mensaje.getId() == null) {
                 continue;
             }
@@ -126,6 +127,92 @@ public class DatabaseSyncCoordinator {
         snapshot.setMensajes(mensajes);
 
         return snapshot;
+    }
+
+    private List<Mensaje> loadOrderedMessages() {
+        List<Mensaje> mensajes = tryRepositoryOrderedFetch();
+        if (mensajes != null) {
+            return mensajes;
+        }
+        return queryMessagesFromDatabase();
+    }
+
+    private List<Mensaje> tryRepositoryOrderedFetch() {
+        try {
+            var method = mensajeRepository.getClass().getMethod("findAllOrdered");
+            Object result = method.invoke(mensajeRepository);
+            if (result instanceof List<?> raw) {
+                List<Mensaje> mensajes = new ArrayList<>(raw.size());
+                for (Object item : raw) {
+                    if (item instanceof Mensaje mensaje) {
+                        mensajes.add(mensaje);
+                    } else {
+                        return null;
+                    }
+                }
+                return mensajes;
+            }
+        } catch (NoSuchMethodException e) {
+            LOGGER.log(Level.FINE, "Repositorio de mensajes no soporta findAllOrdered(), usando consulta directa");
+        } catch (ReflectiveOperationException e) {
+            LOGGER.log(Level.WARNING, "Error invocando MensajeRepository.findAllOrdered() via reflexión", e);
+        }
+        return null;
+    }
+
+    private List<Mensaje> queryMessagesFromDatabase() {
+        String sql = "SELECT id, timestamp, tipo, emisor_id, receptor_id, canal_id, contenido, ruta_archivo, mime, duracion_seg, transcripcion " +
+            "FROM mensajes ORDER BY id";
+        List<Mensaje> mensajes = new ArrayList<>();
+        try (Connection connection = dataSource.getConnection();
+             PreparedStatement ps = connection.prepareStatement(sql);
+             ResultSet rs = ps.executeQuery()) {
+            while (rs.next()) {
+                mensajes.add(mapMensaje(rs));
+            }
+        } catch (SQLException e) {
+            throw new IllegalStateException("Error consultando mensajes para snapshot", e);
+        }
+        return mensajes;
+    }
+
+    private Mensaje mapMensaje(ResultSet rs) throws SQLException {
+        String tipo = rs.getString("tipo");
+        Mensaje mensaje;
+        switch (tipo) {
+            case "AUDIO" -> {
+                AudioMensaje audio = new AudioMensaje();
+                audio.setRutaArchivo(rs.getString("ruta_archivo"));
+                audio.setMime(rs.getString("mime"));
+                audio.setDuracionSeg(rs.getInt("duracion_seg"));
+                audio.setTranscripcion(rs.getString("transcripcion"));
+                mensaje = audio;
+            }
+            case "ARCHIVO" -> {
+                ArchivoMensaje archivo = new ArchivoMensaje();
+                archivo.setRutaArchivo(rs.getString("ruta_archivo"));
+                archivo.setMime(rs.getString("mime"));
+                mensaje = archivo;
+            }
+            default -> {
+                TextoMensaje texto = new TextoMensaje();
+                texto.setContenido(rs.getString("contenido"));
+                mensaje = texto;
+            }
+        }
+        mensaje.setId(rs.getLong("id"));
+        Timestamp ts = rs.getTimestamp("timestamp");
+        mensaje.setTimeStamp(ts != null ? ts.toLocalDateTime() : null);
+        mensaje.setTipo(tipo);
+        mensaje.setEmisor(rs.getLong("emisor_id"));
+        mensaje.setReceptor(getNullableLong(rs, "receptor_id"));
+        mensaje.setCanalId(getNullableLong(rs, "canal_id"));
+        return mensaje;
+    }
+
+    private Long getNullableLong(ResultSet rs, String column) throws SQLException {
+        long value = rs.getLong(column);
+        return rs.wasNull() ? null : value;
     }
 
     /**
