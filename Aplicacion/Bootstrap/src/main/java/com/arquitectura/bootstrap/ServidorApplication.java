@@ -89,7 +89,8 @@ public final class ServidorApplication {
             serverConfig.getPeerPort(),
             serverConfig.getPeerEndpoints(),
             connectionRegistry,
-            databaseSyncCoordinator
+            databaseSyncCoordinator,
+            clienteRepository
         );
         connectionRegistry.setPeerManager(peerManager);
         new com.arquitectura.servicios.eventos.LogSubscriber(logRepository, clienteRepository, canalRepository, eventBus);

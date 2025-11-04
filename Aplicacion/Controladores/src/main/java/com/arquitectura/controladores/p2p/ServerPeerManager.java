@@ -2,6 +2,8 @@ package com.arquitectura.controladores.p2p;
 
 import com.arquitectura.controladores.conexion.ConnectionRegistry;
 import com.arquitectura.controladores.conexion.RemoteSessionSnapshot;
+import com.arquitectura.dto.ConnectionStatusUpdateDto;
+import com.arquitectura.repositorios.ClienteRepository;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
@@ -51,6 +53,7 @@ public class ServerPeerManager {
     private final int peerPort;
     private final List<PeerAddress> bootstrapPeers;
     private final DatabaseSyncCoordinator databaseSync;
+    private final ClienteRepository clienteRepository;
 
     private volatile boolean running;
     private ServerSocket serverSocket;
@@ -59,12 +62,14 @@ public class ServerPeerManager {
                              int peerPort,
                              List<String> configuredPeers,
                              ConnectionRegistry registry,
-                             DatabaseSyncCoordinator databaseSync) {
+                             DatabaseSyncCoordinator databaseSync,
+                             ClienteRepository clienteRepository) {
         this.registry = Objects.requireNonNull(registry, "registry");
         this.serverId = Objects.requireNonNull(serverId, "serverId");
         this.peerPort = peerPort;
         this.bootstrapPeers = parsePeers(configuredPeers);
         this.databaseSync = databaseSync;
+        this.clienteRepository = Objects.requireNonNull(clienteRepository, "clienteRepository");
         this.mapper = new ObjectMapper();
         this.mapper.registerModule(new JavaTimeModule());
         this.mapper.disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS);
@@ -602,6 +607,34 @@ public class ServerPeerManager {
         JsonNode messageNode = extractBroadcastMessage(payload);
         if (messageNode != null) {
             registry.broadcastLocal(messageNode);
+            applyClusterSideEffects(messageNode);
+        }
+    }
+
+    private void applyClusterSideEffects(JsonNode messageNode) {
+        if (messageNode == null || !messageNode.isObject()) {
+            return;
+        }
+        JsonNode eventNode = messageNode.get("evento");
+        if (eventNode == null) {
+            return;
+        }
+        String eventType = eventNode.asText(null);
+        if (eventType == null || !"USER_STATUS_CHANGED".equalsIgnoreCase(eventType)) {
+            return;
+        }
+        try {
+            ConnectionStatusUpdateDto update = mapper.treeToValue(messageNode, ConnectionStatusUpdateDto.class);
+            if (update.getUsuarioId() == null) {
+                return;
+            }
+            clienteRepository.setConnected(update.getUsuarioId(), update.isConectado());
+            LOGGER.fine(() -> String.format(
+                "Estado de usuario %d actualizado por broadcast remoto (%s)",
+                update.getUsuarioId(),
+                update.isConectado() ? "conectado" : "desconectado"));
+        } catch (Exception e) {
+            LOGGER.log(Level.WARNING, "No se pudo aplicar actualización de estado recibida del clúster", e);
         }
     }
 
