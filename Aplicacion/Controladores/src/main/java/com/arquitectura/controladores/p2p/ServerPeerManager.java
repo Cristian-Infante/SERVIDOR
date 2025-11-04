@@ -307,6 +307,27 @@ public class ServerPeerManager {
         connection.send(new PeerEnvelope(PeerMessageType.SYNC_STATE, serverId, mapper.valueToTree(payload)));
     }
 
+    private boolean shouldLogPayload(PeerMessageType type) {
+        return type != null && type != PeerMessageType.HELLO;
+    }
+
+    private void logIncomingPayload(PeerConnection connection, PeerEnvelope envelope, String rawJson) {
+        if (!shouldLogPayload(envelope.getType())) {
+            return;
+        }
+        String origin = envelope.getOrigin();
+        if (origin == null || origin.isBlank()) {
+            origin = Optional.ofNullable(connection.getRemoteServerId())
+                .orElse(connection.remoteSummary());
+        }
+        String finalOrigin = origin;
+        String message = rawJson != null ? rawJson : envelope.toString();
+        LOGGER.info(() -> String.format("Recibido %s desde %s: %s",
+            envelope.getType(),
+            finalOrigin,
+            message));
+    }
+
     private void handleIncoming(PeerConnection connection, String json) {
         try {
             PeerEnvelope envelope = mapper.readValue(json, PeerEnvelope.class);
@@ -314,6 +335,7 @@ public class ServerPeerManager {
             if (type == null) {
                 return;
             }
+            logIncomingPayload(connection, envelope, json);
             switch (type) {
                 case HELLO -> {
                     HelloPayload payload = mapper.treeToValue(envelope.getPayload(), HelloPayload.class);
@@ -547,8 +569,10 @@ public class ServerPeerManager {
                 if (writer == null) {
                     return;
                 }
+                String serialized = mapper.writeValueAsString(envelope);
+                logOutgoingPayload(envelope, serialized);
                 synchronized (writer) {
-                    writer.write(mapper.writeValueAsString(envelope));
+                    writer.write(serialized);
                     writer.write('\n');
                     writer.flush();
                 }
@@ -618,6 +642,19 @@ public class ServerPeerManager {
                 return remoteServerId != null ? "ID confirmado" : "sin ID";
             }
             return "anunció '" + announcedServerId + "'";
+        }
+
+        private void logOutgoingPayload(PeerEnvelope envelope, String serialized) {
+            if (!shouldLogPayload(envelope.getType())) {
+                return;
+            }
+            String target = remoteServerId != null ? remoteServerId
+                : announcedServerId != null ? announcedServerId : remoteSummary();
+            String finalTarget = target;
+            LOGGER.info(() -> String.format("Enviando %s a %s: %s",
+                envelope.getType(),
+                finalTarget,
+                serialized));
         }
 
         private String remoteSummary() {
