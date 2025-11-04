@@ -7,6 +7,9 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 
+import com.arquitectura.controladores.p2p.DatabaseSnapshot;
+import com.arquitectura.controladores.p2p.DatabaseSyncCoordinator;
+
 import java.io.BufferedReader;
 import java.io.BufferedWriter;
 import java.io.IOException;
@@ -39,6 +42,7 @@ public class ServerPeerManager {
     private final String serverId;
     private final int peerPort;
     private final List<PeerAddress> bootstrapPeers;
+    private final DatabaseSyncCoordinator databaseSync;
 
     private volatile boolean running;
     private ServerSocket serverSocket;
@@ -46,11 +50,13 @@ public class ServerPeerManager {
     public ServerPeerManager(String serverId,
                              int peerPort,
                              List<String> configuredPeers,
-                             ConnectionRegistry registry) {
+                             ConnectionRegistry registry,
+                             DatabaseSyncCoordinator databaseSync) {
         this.registry = Objects.requireNonNull(registry, "registry");
         this.serverId = Objects.requireNonNull(serverId, "serverId");
         this.peerPort = peerPort;
         this.bootstrapPeers = parsePeers(configuredPeers);
+        this.databaseSync = databaseSync;
         this.mapper = new ObjectMapper();
         this.mapper.registerModule(new JavaTimeModule());
         this.mapper.disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS);
@@ -309,6 +315,13 @@ public class ServerPeerManager {
         }
         SyncStatePayload payload = new SyncStatePayload();
         payload.setServers(registry.snapshotSessionsByServer());
+        if (databaseSync != null) {
+            try {
+                payload.setDatabase(databaseSync.captureSnapshot());
+            } catch (Exception e) {
+                LOGGER.log(Level.WARNING, "Error capturando snapshot de base de datos para sincronización", e);
+            }
+        }
         connection.send(new PeerEnvelope(PeerMessageType.SYNC_STATE, serverId, mapper.valueToTree(payload)));
     }
 
@@ -413,6 +426,17 @@ public class ServerPeerManager {
         }
         if (updated) {
             relayStateUpdate(connection, PeerMessageType.SYNC_STATE, envelope.getPayload(), envelope.getOrigin());
+        }
+        if (databaseSync != null && sync.getDatabase() != null && !sync.getDatabase().isEmpty()) {
+            try {
+                boolean dbChanged = databaseSync.applySnapshot(sync.getDatabase());
+                if (dbChanged) {
+                    LOGGER.info(() -> "Base de datos sincronizada con estado recibido de " +
+                        Optional.ofNullable(connection.getRemoteServerId()).orElse("peer desconocido"));
+                }
+            } catch (Exception e) {
+                LOGGER.log(Level.WARNING, "Error aplicando snapshot de base de datos recibido del clúster", e);
+            }
         }
     }
 
@@ -831,6 +855,7 @@ public class ServerPeerManager {
 
     private static final class SyncStatePayload {
         private Map<String, List<RemoteSessionSnapshot>> servers = new ConcurrentHashMap<>();
+        private DatabaseSnapshot database;
 
         public Map<String, List<RemoteSessionSnapshot>> getServers() {
             return servers;
@@ -838,6 +863,14 @@ public class ServerPeerManager {
 
         public void setServers(Map<String, List<RemoteSessionSnapshot>> servers) {
             this.servers = servers != null ? new ConcurrentHashMap<>(servers) : new ConcurrentHashMap<>();
+        }
+
+        public DatabaseSnapshot getDatabase() {
+            return database;
+        }
+
+        public void setDatabase(DatabaseSnapshot database) {
+            this.database = database;
         }
     }
 
