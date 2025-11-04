@@ -1,5 +1,7 @@
 package com.arquitectura.controladores.p2p;
 
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
+
 import java.util.ArrayList;
 import java.util.List;
 
@@ -8,6 +10,7 @@ import java.util.List;
  * que se intercambia entre servidores pares para mantener sus estados
  * sincronizados.
  */
+@JsonIgnoreProperties(ignoreUnknown = true)
 public class DatabaseSnapshot {
 
     private List<ClienteRecord> clientes = new ArrayList<>();

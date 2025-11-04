@@ -5,6 +5,9 @@ import com.arquitectura.controladores.conexion.RemoteSessionSnapshot;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
+import com.fasterxml.jackson.databind.node.ArrayNode;
+import com.fasterxml.jackson.databind.node.ObjectNode;
+import com.fasterxml.jackson.databind.node.TextNode;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 
 import com.arquitectura.controladores.p2p.DatabaseSnapshot;
@@ -21,6 +24,7 @@ import java.net.Socket;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
@@ -29,10 +33,14 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.logging.Level;
 import java.util.logging.Logger;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 public class ServerPeerManager {
 
     private static final Logger LOGGER = Logger.getLogger(ServerPeerManager.class.getName());
+    private static final Pattern BASE64_PATTERN = Pattern.compile("^[A-Za-z0-9+/=_-]+$");
+    private static final Pattern BASE64_FALLBACK_PATTERN = Pattern.compile("([A-Za-z0-9+/=_-]{20,})");
 
     private final ConnectionRegistry registry;
     private final ObjectMapper mapper;
@@ -374,11 +382,100 @@ public class ServerPeerManager {
                 .orElse(connection.remoteSummary());
         }
         String finalOrigin = origin;
-        String message = rawJson != null ? rawJson : envelope.toString();
+        String message = rawJson != null ? sanitizePayloadForLogging(rawJson)
+            : sanitizePayloadForLogging(envelope.toString());
         LOGGER.info(() -> String.format("Recibido %s desde %s: %s",
             envelope.getType(),
             finalOrigin,
             message));
+    }
+
+    private String sanitizePayloadForLogging(String json) {
+        if (json == null || json.isBlank()) {
+            return json;
+        }
+        try {
+            JsonNode node = mapper.readTree(json);
+            JsonNode sanitized = sanitizeNode(node, null);
+            return mapper.writeValueAsString(sanitized);
+        } catch (Exception e) {
+            return sanitizeBase64InRawString(json);
+        }
+    }
+
+    private JsonNode sanitizeNode(JsonNode node, String fieldName) {
+        if (node == null) {
+            return null;
+        }
+        if (node.isObject()) {
+            ObjectNode objectNode = (ObjectNode) node;
+            List<String> names = new ArrayList<>();
+            objectNode.fieldNames().forEachRemaining(names::add);
+            for (String name : names) {
+                JsonNode child = objectNode.get(name);
+                JsonNode sanitizedChild = sanitizeNode(child, name);
+                if (sanitizedChild != child) {
+                    objectNode.set(name, sanitizedChild);
+                }
+            }
+            return objectNode;
+        }
+        if (node.isArray()) {
+            ArrayNode arrayNode = (ArrayNode) node;
+            for (int i = 0; i < arrayNode.size(); i++) {
+                JsonNode child = arrayNode.get(i);
+                JsonNode sanitizedChild = sanitizeNode(child, fieldName);
+                if (sanitizedChild != child) {
+                    arrayNode.set(i, sanitizedChild);
+                }
+            }
+            return arrayNode;
+        }
+        if (node.isTextual() && shouldTruncateBase64(fieldName, node.textValue())) {
+            return TextNode.valueOf(truncateBase64(node.textValue()));
+        }
+        return node;
+    }
+
+    private boolean shouldTruncateBase64(String fieldName, String value) {
+        if (value == null) {
+            return false;
+        }
+        String trimmed = value.trim();
+        if (trimmed.length() <= 10) {
+            return false;
+        }
+        boolean looksLikeBase64 = BASE64_PATTERN.matcher(trimmed).matches();
+        if (!looksLikeBase64) {
+            return false;
+        }
+        if (fieldName != null) {
+            String normalized = fieldName.toLowerCase(Locale.ROOT);
+            if (normalized.contains("base64") || normalized.contains("audio")
+                || normalized.contains("contenido") || normalized.contains("archivo")) {
+                return true;
+            }
+        }
+        return trimmed.length() > 64;
+    }
+
+    private String truncateBase64(String value) {
+        if (value == null || value.length() <= 10) {
+            return value;
+        }
+        return value.substring(0, 10) + "...";
+    }
+
+    private String sanitizeBase64InRawString(String raw) {
+        Matcher matcher = BASE64_FALLBACK_PATTERN.matcher(raw);
+        StringBuffer buffer = new StringBuffer();
+        while (matcher.find()) {
+            String group = matcher.group(1);
+            String replacement = truncateBase64(group);
+            matcher.appendReplacement(buffer, Matcher.quoteReplacement(replacement));
+        }
+        matcher.appendTail(buffer);
+        return buffer.toString();
     }
 
     private void handleIncoming(PeerConnection connection, String json) {
@@ -750,10 +847,11 @@ public class ServerPeerManager {
             String target = remoteServerId != null ? remoteServerId
                 : announcedServerId != null ? announcedServerId : remoteSummary();
             String finalTarget = target;
+            String sanitized = sanitizePayloadForLogging(serialized);
             LOGGER.info(() -> String.format("Enviando %s a %s: %s",
                 envelope.getType(),
                 finalTarget,
-                serialized));
+                sanitized));
         }
 
         private String remoteSummary() {
