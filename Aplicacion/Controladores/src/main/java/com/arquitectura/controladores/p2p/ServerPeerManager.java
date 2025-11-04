@@ -312,6 +312,41 @@ public class ServerPeerManager {
         connection.send(new PeerEnvelope(PeerMessageType.SYNC_STATE, serverId, mapper.valueToTree(payload)));
     }
 
+    private String resolveRemoteServerAlias(PeerConnection connection, String declaredServerId) {
+        if (declaredServerId == null || connection == null) {
+            return declaredServerId;
+        }
+        if (!declaredServerId.equals(serverId)) {
+            return declaredServerId;
+        }
+        String remoteAlias = connection.getRemoteServerId();
+        if (remoteAlias != null && !remoteAlias.equals(serverId)) {
+            return remoteAlias;
+        }
+        return declaredServerId;
+    }
+
+    private List<RemoteSessionSnapshot> remapSnapshotsForServer(List<RemoteSessionSnapshot> snapshots, String serverId) {
+        if (snapshots == null || serverId == null) {
+            return snapshots;
+        }
+        List<RemoteSessionSnapshot> remapped = new ArrayList<>(snapshots.size());
+        for (RemoteSessionSnapshot snapshot : snapshots) {
+            if (snapshot == null) {
+                continue;
+            }
+            remapped.add(new RemoteSessionSnapshot(
+                serverId,
+                snapshot.getSessionId(),
+                snapshot.getClienteId(),
+                snapshot.getUsuario(),
+                snapshot.getIp(),
+                snapshot.getCanales()
+            ));
+        }
+        return remapped;
+    }
+
     private boolean shouldLogPayload(PeerMessageType type) {
         return type != null && type != PeerMessageType.HELLO;
     }
@@ -368,11 +403,13 @@ public class ServerPeerManager {
         }
         boolean updated = false;
         for (Map.Entry<String, List<RemoteSessionSnapshot>> entry : sync.getServers().entrySet()) {
-            String targetServer = entry.getKey();
-            if (targetServer == null || targetServer.equals(serverId)) {
+            String declaredServerId = entry.getKey();
+            String effectiveServerId = resolveRemoteServerAlias(connection, declaredServerId);
+            if (effectiveServerId == null || effectiveServerId.equals(serverId)) {
                 continue;
             }
-            updated |= registry.registerRemoteSessions(targetServer, entry.getValue());
+            List<RemoteSessionSnapshot> remapped = remapSnapshotsForServer(entry.getValue(), effectiveServerId);
+            updated |= registry.registerRemoteSessions(effectiveServerId, remapped);
         }
         if (updated) {
             relayStateUpdate(connection, PeerMessageType.SYNC_STATE, envelope.getPayload(), envelope.getOrigin());
@@ -381,7 +418,11 @@ public class ServerPeerManager {
 
     private void handleClientConnected(PeerConnection connection, PeerEnvelope envelope) throws IOException {
         RemoteSessionSnapshot snapshot = mapper.treeToValue(envelope.getPayload(), RemoteSessionSnapshot.class);
-        String fallbackId = envelope.getOrigin() != null ? envelope.getOrigin() : connection.getRemoteServerId();
+        String fallbackId = resolveRemoteServerAlias(connection,
+            envelope.getOrigin() != null ? envelope.getOrigin() : connection.getRemoteServerId());
+        if (snapshot != null) {
+            snapshot.setServerId(resolveRemoteServerAlias(connection, snapshot.getServerId()));
+        }
         boolean updated = registry.registerRemoteSession(fallbackId, snapshot);
         if (updated) {
             relayStateUpdate(connection, PeerMessageType.CLIENT_CONNECTED, envelope.getPayload(), envelope.getOrigin());
@@ -393,7 +434,8 @@ public class ServerPeerManager {
         if (data == null) {
             return;
         }
-        String fallbackId = envelope.getOrigin() != null ? envelope.getOrigin() : connection.getRemoteServerId();
+        String fallbackId = resolveRemoteServerAlias(connection,
+            envelope.getOrigin() != null ? envelope.getOrigin() : connection.getRemoteServerId());
         boolean removed = registry.removeRemoteSession(fallbackId, data.getSessionId(), data.getClienteId());
         if (removed) {
             relayStateUpdate(connection, PeerMessageType.CLIENT_DISCONNECTED, envelope.getPayload(), envelope.getOrigin());
@@ -405,7 +447,8 @@ public class ServerPeerManager {
         if (update == null || update.getCanalId() == null) {
             return;
         }
-        String fallbackId = envelope.getOrigin() != null ? envelope.getOrigin() : connection.getRemoteServerId();
+        String fallbackId = resolveRemoteServerAlias(connection,
+            envelope.getOrigin() != null ? envelope.getOrigin() : connection.getRemoteServerId());
         boolean changed = registry.updateRemoteChannel(fallbackId, update.getSessionId(), update.getCanalId(),
             "JOIN".equalsIgnoreCase(update.getAction()));
         if (changed) {
