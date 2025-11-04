@@ -6,6 +6,7 @@ import com.arquitectura.servicios.impl.AudioStorageServiceImpl;
 import com.arquitectura.servicios.impl.MessageSyncServiceImpl;
 import com.arquitectura.servicios.impl.VoskTranscriptionService;
 
+import com.arquitectura.bootstrap.config.ServerConfig;
 import com.arquitectura.configdb.DBConfig;
 import com.arquitectura.controladores.LogSubscriber;
 import com.arquitectura.controladores.ServidorController;
@@ -136,5 +137,9 @@ public final class ServidorApplication {
 
     public ConexionService getConexionService() {
         return conexionService;
+    }
+    
+    public int getMaxConnections() {
+        return ServerConfig.getInstance().getMaxConnections();
     }
 }

@@ -58,9 +58,17 @@ public class ServidorVista extends JFrame {
     
     // Control del servidor
     private final JButton btnApagarServidor;
+    
+    // Configuración del servidor
+    private final int maxConnections;
 
     public ServidorVista() {
+        this(5); // Valor por defecto para compatibilidad
+    }
+    
+    public ServidorVista(int maxConnections) {
         super("Panel de Control del Servidor");
+        this.maxConnections = maxConnections;
         setDefaultCloseOperation(JFrame.DISPOSE_ON_CLOSE);
         setMinimumSize(new Dimension(900, 650));
         setSize(1000, 700);
@@ -165,7 +173,7 @@ public class ServidorVista extends JFrame {
         sectionTitle.setFont(new Font("Segoe UI", Font.BOLD, 18));
         sectionTitle.setForeground(TEXT_PRIMARY);
 
-        JLabel maxLabel = new JLabel("Máximo: 5 conexiones");
+        JLabel maxLabel = new JLabel("Máximo: " + maxConnections + " conexiones");
         maxLabel.setFont(new Font("Segoe UI", Font.PLAIN, 12));
         maxLabel.setForeground(TEXT_SECONDARY);
 
