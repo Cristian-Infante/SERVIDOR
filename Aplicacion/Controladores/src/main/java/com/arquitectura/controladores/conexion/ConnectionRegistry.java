@@ -16,6 +16,7 @@ import java.io.OutputStreamWriter;
 import java.net.Socket;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
@@ -24,6 +25,7 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.logging.Logger;
 import java.util.stream.Collectors;
+import java.util.Objects;
 
 public class ConnectionRegistry implements ConnectionGateway {
 
@@ -352,61 +354,93 @@ public class ConnectionRegistry implements ConnectionGateway {
         return snapshots;
     }
 
-    public void registerRemoteSessions(String serverId, List<RemoteSessionSnapshot> snapshots) {
-        if (serverId == null) {
-            return;
+    public Map<String, List<RemoteSessionSnapshot>> snapshotSessionsByServer() {
+        Map<String, List<RemoteSessionSnapshot>> snapshot = new HashMap<>();
+        snapshot.put(localServerId, snapshotLocalSessions());
+        remoteSessions.values().forEach(remote -> {
+            if (remote == null || remote.getServerId() == null) {
+                return;
+            }
+            snapshot.computeIfAbsent(remote.getServerId(), key -> new ArrayList<>())
+                .add(copySnapshot(remote));
+        });
+        return snapshot;
+    }
+
+    public boolean registerRemoteSessions(String serverId, List<RemoteSessionSnapshot> snapshots) {
+        if (serverId == null || serverId.equals(localServerId)) {
+            return false;
         }
-        clearRemoteSessions(serverId);
+        boolean changed = clearRemoteSessions(serverId);
         if (snapshots == null) {
-            return;
+            return changed;
         }
         for (RemoteSessionSnapshot snapshot : snapshots) {
-            registerRemoteSession(serverId, snapshot);
+            changed |= registerRemoteSession(serverId, snapshot);
         }
+        return changed;
     }
 
-    public void registerRemoteSession(String serverId, RemoteSessionSnapshot snapshot) {
-        if (serverId == null || snapshot == null || snapshot.getSessionId() == null) {
-            return;
+    public boolean registerRemoteSession(String fallbackServerId, RemoteSessionSnapshot snapshot) {
+        if (snapshot == null || snapshot.getSessionId() == null) {
+            return false;
         }
+        String effectiveServerId = snapshot.getServerId();
+        if (effectiveServerId == null || effectiveServerId.isBlank()) {
+            effectiveServerId = fallbackServerId;
+        }
+        if (effectiveServerId == null || effectiveServerId.equals(localServerId)) {
+            return false;
+        }
+
         RemoteSessionSnapshot copy = copySnapshot(snapshot);
-        copy.setServerId(serverId);
-        remoteSessions.put(remoteKey(serverId, snapshot.getSessionId()), copy);
+        copy.setServerId(effectiveServerId);
+
+        String key = remoteKey(effectiveServerId, copy.getSessionId());
+        RemoteSessionSnapshot current = remoteSessions.get(key);
+        if (snapshotsEquivalent(current, copy)) {
+            return false;
+        }
+        remoteSessions.put(key, copy);
+        return true;
     }
 
-    public void removeRemoteSession(String serverId, String sessionId, Long clienteId) {
+    public boolean removeRemoteSession(String serverId, String sessionId, Long clienteId) {
+        boolean removed = false;
         if (serverId != null && sessionId != null) {
-            remoteSessions.remove(remoteKey(serverId, sessionId));
-            return;
+            removed = remoteSessions.remove(remoteKey(serverId, sessionId)) != null;
+            if (removed) {
+                return true;
+            }
         }
         if (serverId != null && clienteId != null) {
-            remoteSessions.entrySet().removeIf(entry -> {
+            removed = remoteSessions.entrySet().removeIf(entry -> {
                 RemoteSessionSnapshot snapshot = entry.getValue();
                 return serverId.equals(snapshot.getServerId()) && clienteId.equals(snapshot.getClienteId());
             });
         }
+        return removed;
     }
 
-    public void updateRemoteChannel(String serverId, String sessionId, Long canalId, boolean joined) {
+    public boolean updateRemoteChannel(String serverId, String sessionId, Long canalId, boolean joined) {
         if (serverId == null || sessionId == null || canalId == null) {
-            return;
+            return false;
         }
         RemoteSessionSnapshot snapshot = remoteSessions.get(remoteKey(serverId, sessionId));
         if (snapshot == null) {
-            return;
+            return false;
         }
         if (joined) {
-            snapshot.getCanales().add(canalId);
-        } else {
-            snapshot.getCanales().remove(canalId);
+            return snapshot.getCanales().add(canalId);
         }
+        return snapshot.getCanales().remove(canalId);
     }
 
-    public void clearRemoteSessions(String serverId) {
+    public boolean clearRemoteSessions(String serverId) {
         if (serverId == null) {
-            return;
+            return false;
         }
-        remoteSessions.entrySet().removeIf(entry -> serverId.equals(entry.getValue().getServerId()));
+        return remoteSessions.entrySet().removeIf(entry -> serverId.equals(entry.getValue().getServerId()));
     }
 
     private RemoteSessionSnapshot copySnapshot(RemoteSessionSnapshot snapshot) {
@@ -418,6 +452,21 @@ public class ConnectionRegistry implements ConnectionGateway {
             snapshot.getIp(),
             snapshot.getCanales()
         );
+    }
+
+    private boolean snapshotsEquivalent(RemoteSessionSnapshot a, RemoteSessionSnapshot b) {
+        if (a == b) {
+            return true;
+        }
+        if (a == null || b == null) {
+            return false;
+        }
+        return Objects.equals(a.getServerId(), b.getServerId())
+            && Objects.equals(a.getSessionId(), b.getSessionId())
+            && Objects.equals(a.getClienteId(), b.getClienteId())
+            && Objects.equals(a.getUsuario(), b.getUsuario())
+            && Objects.equals(a.getIp(), b.getIp())
+            && Objects.equals(new HashSet<>(a.getCanales()), new HashSet<>(b.getCanales()));
     }
 
     private RemoteSessionSnapshot toSnapshot(SessionDescriptor descriptor) {
