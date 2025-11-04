@@ -1,5 +1,6 @@
 package com.arquitectura.controladores.conexion;
 
+import com.arquitectura.controladores.p2p.ServerPeerManager;
 import com.arquitectura.dto.CommandEnvelope;
 import com.arquitectura.servicios.conexion.ConnectionGateway;
 import com.arquitectura.servicios.conexion.SessionDescriptor;
@@ -15,42 +16,58 @@ import java.io.OutputStreamWriter;
 import java.net.Socket;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicLong;
-import java.util.logging.Level;
 import java.util.logging.Logger;
+import java.util.stream.Collectors;
 
 public class ConnectionRegistry implements ConnectionGateway {
 
     private static final Logger LOGGER = Logger.getLogger(ConnectionRegistry.class.getName());
+    private static final String DEFAULT_SERVER_ID = "local-server";
 
     private final Map<String, ConnectionContext> contexts = new ConcurrentHashMap<>();
+    private final Map<String, RemoteSessionSnapshot> remoteSessions = new ConcurrentHashMap<>();
     private final AtomicLong sequence = new AtomicLong();
     private final ObjectMapper mapper;
     private final SessionEventBus eventBus;
-    
+    private final String localServerId;
+
+    private volatile ServerPeerManager peerManager;
+
     public ConnectionRegistry(SessionEventBus eventBus) {
+        this(eventBus, DEFAULT_SERVER_ID);
+    }
+
+    public ConnectionRegistry(SessionEventBus eventBus, String localServerId) {
         this.eventBus = eventBus;
-        // Configurar Jackson para manejar LocalDateTime
+        this.localServerId = localServerId != null ? localServerId : DEFAULT_SERVER_ID;
         this.mapper = new ObjectMapper();
         this.mapper.registerModule(new JavaTimeModule());
         this.mapper.disable(com.fasterxml.jackson.databind.SerializationFeature.WRITE_DATES_AS_TIMESTAMPS);
+    }
+
+    public void setPeerManager(ServerPeerManager peerManager) {
+        this.peerManager = peerManager;
+    }
+
+    public String getLocalServerId() {
+        return localServerId;
     }
 
     public String register(Socket socket) throws IOException {
         String sessionId = "session-" + sequence.incrementAndGet();
         String clientIp = socket.getRemoteSocketAddress().toString();
         ConnectionContext context = new ConnectionContext(sessionId, socket);
-        // Crear descriptor inicial sin usuario (anónimo)
-        context.descriptor = new SessionDescriptor(sessionId, null, "Anónimo", clientIp);
+        context.descriptor = new SessionDescriptor(sessionId, null, "Anónimo", clientIp, localServerId, true);
         contexts.put(sessionId, context);
         LOGGER.info(() -> "Nueva conexión TCP registrada " + sessionId + " desde " + clientIp);
-        
-        // Publicar evento de conexión TCP
+
         eventBus.publish(new SessionEvent(SessionEventType.TCP_CONNECTED, sessionId, null, context.descriptor));
-        
         return sessionId;
     }
 
@@ -58,27 +75,38 @@ public class ConnectionRegistry implements ConnectionGateway {
         ConnectionContext context = contexts.remove(sessionId);
         if (context != null) {
             SessionDescriptor descriptor = context.descriptor;
+            if (descriptor != null && descriptor.getClienteId() != null && peerManager != null) {
+                peerManager.notifyClientLogout(toSnapshot(descriptor));
+            }
             context.close();
             LOGGER.info(() -> "Sesión removida " + sessionId);
-            
-            // Publicar evento de desconexión TCP
-            eventBus.publish(new SessionEvent(SessionEventType.TCP_DISCONNECTED, sessionId, 
+
+            eventBus.publish(new SessionEvent(SessionEventType.TCP_DISCONNECTED, sessionId,
                 descriptor != null ? descriptor.getClienteId() : null, descriptor));
         }
     }
 
     public void updateCliente(String sessionId, Long clienteId, String usuario, String ip) {
         ConnectionContext context = contexts.get(sessionId);
-        if (context != null) {
-            if (clienteId == null && usuario == null) {
-                // Logout: volver a estado anónimo
-                String clientIp = context.socket.getRemoteSocketAddress().toString();
-                context.descriptor = new SessionDescriptor(sessionId, null, "Anónimo", clientIp);
-                LOGGER.info(() -> "Sesión " + sessionId + " cambió a estado anónimo");
-            } else {
-                // Login: actualizar con datos del usuario
-                context.descriptor = new SessionDescriptor(sessionId, clienteId, usuario, ip);
-                LOGGER.info(() -> "Sesión " + sessionId + " autenticada como " + usuario);
+        if (context == null) {
+            LOGGER.warning(() -> "No se encontró la sesión " + sessionId + " para actualizar cliente");
+            return;
+        }
+
+        SessionDescriptor previous = context.descriptor;
+        if (clienteId == null && usuario == null) {
+            if (previous != null && previous.getClienteId() != null && peerManager != null) {
+                peerManager.notifyClientLogout(toSnapshot(previous));
+            }
+            String clientIp = context.socket.getRemoteSocketAddress().toString();
+            context.descriptor = new SessionDescriptor(sessionId, null, "Anónimo", clientIp, localServerId, true);
+            LOGGER.info(() -> "Sesión " + sessionId + " cambió a estado anónimo");
+        } else {
+            Set<Long> canales = previous != null ? new HashSet<>(previous.getCanales()) : Set.of();
+            context.descriptor = new SessionDescriptor(sessionId, clienteId, usuario, ip, localServerId, true, canales);
+            LOGGER.info(() -> "Sesión " + sessionId + " autenticada como " + usuario);
+            if (peerManager != null) {
+                peerManager.notifyClientLogin(toSnapshot(context.descriptor));
             }
         }
     }
@@ -90,22 +118,37 @@ public class ConnectionRegistry implements ConnectionGateway {
 
     public SessionDescriptor descriptorOf(String sessionId) {
         ConnectionContext context = contexts.get(sessionId);
-        return context != null ? context.descriptor : null;
+        if (context != null) {
+            return context.descriptor;
+        }
+        return null;
     }
 
     @Override
     public SessionDescriptor descriptor(String sessionId) {
-        return descriptorOf(sessionId);
+        SessionDescriptor descriptor = descriptorOf(sessionId);
+        if (descriptor != null) {
+            return descriptor;
+        }
+        RemoteSessionSnapshot remote = findRemoteSessionByCompositeId(sessionId);
+        if (remote != null) {
+            return new SessionDescriptor(composeRemoteSessionId(remote), remote.getClienteId(),
+                remote.getUsuario(), remote.getIp(), remote.getServerId(), false, remote.getCanales());
+        }
+        return null;
     }
 
     public void joinChannel(String sessionId, Long canalId) {
         ConnectionContext context = contexts.get(sessionId);
         if (context != null && context.descriptor != null) {
             context.descriptor.joinChannel(canalId);
-            LOGGER.info(() -> String.format("👥 Usuario %s (%s) se unió al canal %d", 
+            LOGGER.info(() -> String.format("👥 Usuario %s (%s) se unió al canal %d",
                 context.descriptor.getUsuario(),
                 context.descriptor.getSessionId(),
                 canalId));
+            if (peerManager != null && context.descriptor.getClienteId() != null) {
+                peerManager.notifyChannelJoin(toSnapshot(context.descriptor), canalId);
+            }
         } else {
             LOGGER.warning("⚠️ No se pudo unir al canal " + canalId + " - sesión " + sessionId + " no encontrada");
         }
@@ -118,116 +161,307 @@ public class ConnectionRegistry implements ConnectionGateway {
 
     @Override
     public void broadcast(Object payload) {
+        broadcastInternal(payload, true);
+    }
+
+    public void broadcastLocal(Object payload) {
+        broadcastInternal(payload, false);
+    }
+
+    private void broadcastInternal(Object payload, boolean includeRemote) {
         contexts.values().forEach(ctx -> send(ctx, payload));
+        if (includeRemote && peerManager != null) {
+            peerManager.broadcast(payload);
+        }
     }
 
     @Override
     public void sendToChannel(Long canalId, Object payload) {
+        sendToChannelInternal(canalId, payload, true);
+    }
+
+    public void deliverToChannelLocally(Long canalId, Object payload) {
+        sendToChannelInternal(canalId, payload, false);
+    }
+
+    private void sendToChannelInternal(Long canalId, Object payload, boolean includeRemote) {
         System.out.println("📡 ENVIANDO MENSAJE A CANAL " + canalId);
-        
-        // Obtener todos los contextos que pertenecen al canal
+
         var miembrosCanal = contexts.values().stream()
-                .map(ctx -> ctx.descriptor)
-                .filter(desc -> desc != null && desc.getCanales().contains(canalId))
-                .toList();
-        
+            .map(ctx -> ctx.descriptor)
+            .filter(desc -> desc != null && desc.getCanales().contains(canalId))
+            .toList();
+
         System.out.println("   👥 Miembros del canal encontrados: " + miembrosCanal.size());
-        
+
         if (miembrosCanal.isEmpty()) {
             System.out.println("⚠️ NO SE ENCONTRARON MIEMBROS PARA EL CANAL " + canalId);
             System.out.println("📋 ESTADO ACTUAL DE CONEXIONES:");
             for (ConnectionContext ctx : contexts.values()) {
                 if (ctx.descriptor != null) {
-                    System.out.println("   - " + ctx.descriptor.getSessionId() + 
-                                     " | Usuario: " + ctx.descriptor.getUsuario() + 
-                                     " | Canales: " + ctx.descriptor.getCanales());
+                    System.out.println("   - " + ctx.descriptor.getSessionId()
+                        + " | Usuario: " + ctx.descriptor.getUsuario()
+                        + " | Canales: " + ctx.descriptor.getCanales());
                 }
             }
         } else {
-            // Si el payload es un Mensaje, evitar reenviar al emisor
-            Long emisorId = null;
-            try {
-                if (payload instanceof com.arquitectura.entidades.Mensaje m && m.getEmisor() != null) {
-                    emisorId = m.getEmisor();
-                }
-            } catch (Throwable ignored) { }
-
+            Long emisorId = extractEmisorId(payload);
             for (var descriptor : miembrosCanal) {
                 if (emisorId != null && emisorId.equals(descriptor.getClienteId())) {
                     continue;
                 }
-                System.out.println(String.format("   → ENVIANDO A: %s (ID:%s, Usuario:%s)", 
-                    descriptor.getSessionId(), 
-                    descriptor.getClienteId(), 
+                System.out.println(String.format("   → ENVIANDO A: %s (ID:%s, Usuario:%s)",
+                    descriptor.getSessionId(),
+                    descriptor.getClienteId(),
                     descriptor.getUsuario()));
-                
+
                 ConnectionContext ctx = contexts.get(descriptor.getSessionId());
                 send(ctx, payload);
             }
         }
-        
+
+        if (includeRemote && peerManager != null) {
+            Set<String> targetServers = remoteSessions.values().stream()
+                .filter(snapshot -> snapshot.getCanales().contains(canalId))
+                .map(RemoteSessionSnapshot::getServerId)
+                .collect(Collectors.toSet());
+            for (String serverId : targetServers) {
+                peerManager.forwardToChannel(serverId, canalId, payload);
+            }
+        }
+
         System.out.println("✅ PROCESO DE ENVÍO A CANAL " + canalId + " COMPLETADO");
     }
 
     @Override
     public void sendToSession(String sessionId, Object payload) {
         ConnectionContext ctx = contexts.get(sessionId);
+        if (ctx != null) {
+            send(ctx, payload);
+            return;
+        }
+        if (peerManager != null) {
+            RemoteSessionSnapshot remote = findRemoteSessionByCompositeId(sessionId);
+            if (remote != null) {
+                peerManager.forwardToSession(remote.getServerId(), remote.getSessionId(), payload);
+            } else {
+                LOGGER.warning(() -> "No se encontró la sesión " + sessionId + " para envío directo");
+            }
+        }
+    }
+
+    public void deliverToSessionLocal(String sessionId, Object payload) {
+        ConnectionContext ctx = contexts.get(sessionId);
         send(ctx, payload);
     }
 
     @Override
     public void sendToUser(Long userId, Object payload) {
+        sendToUserInternal(userId, payload, true);
+    }
+
+    public void deliverToUserLocally(Long userId, Object payload) {
+        sendToUserInternal(userId, payload, false);
+    }
+
+    private void sendToUserInternal(Long userId, Object payload, boolean includeRemote) {
         contexts.values().stream()
-                .filter(ctx -> ctx.descriptor != null && userId.equals(ctx.descriptor.getClienteId()))
-                .forEach(ctx -> send(ctx, payload));
+            .filter(ctx -> ctx.descriptor != null && userId.equals(ctx.descriptor.getClienteId()))
+            .forEach(ctx -> send(ctx, payload));
+
+        if (includeRemote && peerManager != null) {
+            Set<String> servers = remoteSessions.values().stream()
+                .filter(snapshot -> snapshot.getClienteId() != null && snapshot.getClienteId().equals(userId))
+                .map(RemoteSessionSnapshot::getServerId)
+                .collect(Collectors.toSet());
+            for (String serverId : servers) {
+                peerManager.forwardToUser(serverId, userId, payload);
+            }
+        }
     }
 
     @Override
     public List<SessionDescriptor> activeSessions() {
         List<SessionDescriptor> descriptors = new ArrayList<>();
         for (ConnectionContext context : contexts.values()) {
-            // Devolver todas las conexiones (incluidas las anónimas)
             if (context.descriptor != null) {
                 descriptors.add(context.descriptor);
             }
         }
+        for (RemoteSessionSnapshot snapshot : remoteSessions.values()) {
+            descriptors.add(new SessionDescriptor(
+                composeRemoteSessionId(snapshot),
+                snapshot.getClienteId(),
+                snapshot.getUsuario(),
+                snapshot.getIp(),
+                snapshot.getServerId(),
+                false,
+                snapshot.getCanales()
+            ));
+        }
         return descriptors;
     }
-    
-    /**
-     * Retorna el número total de conexiones activas (autenticadas y no autenticadas)
-     */
+
     public int getTotalConnections() {
         return contexts.size();
     }
-    
-    /**
-     * Retorna el número de conexiones autenticadas (con usuario)
-     */
+
     public int getAuthenticatedConnections() {
         return (int) contexts.values().stream()
-                .filter(ctx -> ctx.descriptor != null && ctx.descriptor.getClienteId() != null)
-                .count();
+            .filter(ctx -> ctx.descriptor != null && ctx.descriptor.getClienteId() != null)
+            .count();
     }
-    
-    /**
-     * Lista todos los miembros de canales para debugging
-     */
+
     public void logChannelMemberships() {
         LOGGER.info("📋 Estado actual de membresías de canales:");
-        
+
         for (ConnectionContext context : contexts.values()) {
             if (context.descriptor != null && context.descriptor.getClienteId() != null) {
-                String canales = context.descriptor.getCanales().isEmpty() 
-                    ? "ninguno" 
+                String canales = context.descriptor.getCanales().isEmpty()
+                    ? "ninguno"
                     : context.descriptor.getCanales().toString();
-                    
-                LOGGER.info(() -> String.format("   %s (%s) - Canales: %s", 
+
+                LOGGER.info(() -> String.format("   %s (%s) - Canales: %s",
                     context.descriptor.getUsuario(),
                     context.descriptor.getSessionId(),
                     canales));
             }
         }
+
+        for (RemoteSessionSnapshot snapshot : remoteSessions.values()) {
+            if (snapshot.getClienteId() != null) {
+                String canales = snapshot.getCanales().isEmpty()
+                    ? "ninguno"
+                    : snapshot.getCanales().toString();
+                LOGGER.info(() -> String.format("   %s (%s@%s) - Canales: %s",
+                    snapshot.getUsuario(),
+                    snapshot.getSessionId(),
+                    snapshot.getServerId(),
+                    canales));
+            }
+        }
+    }
+
+    public List<RemoteSessionSnapshot> snapshotLocalSessions() {
+        List<RemoteSessionSnapshot> snapshots = new ArrayList<>();
+        for (ConnectionContext context : contexts.values()) {
+            if (context.descriptor != null && context.descriptor.getClienteId() != null) {
+                snapshots.add(toSnapshot(context.descriptor));
+            }
+        }
+        return snapshots;
+    }
+
+    public void registerRemoteSessions(String serverId, List<RemoteSessionSnapshot> snapshots) {
+        if (serverId == null) {
+            return;
+        }
+        clearRemoteSessions(serverId);
+        if (snapshots == null) {
+            return;
+        }
+        for (RemoteSessionSnapshot snapshot : snapshots) {
+            registerRemoteSession(serverId, snapshot);
+        }
+    }
+
+    public void registerRemoteSession(String serverId, RemoteSessionSnapshot snapshot) {
+        if (serverId == null || snapshot == null || snapshot.getSessionId() == null) {
+            return;
+        }
+        RemoteSessionSnapshot copy = copySnapshot(snapshot);
+        copy.setServerId(serverId);
+        remoteSessions.put(remoteKey(serverId, snapshot.getSessionId()), copy);
+    }
+
+    public void removeRemoteSession(String serverId, String sessionId, Long clienteId) {
+        if (serverId != null && sessionId != null) {
+            remoteSessions.remove(remoteKey(serverId, sessionId));
+            return;
+        }
+        if (serverId != null && clienteId != null) {
+            remoteSessions.entrySet().removeIf(entry -> {
+                RemoteSessionSnapshot snapshot = entry.getValue();
+                return serverId.equals(snapshot.getServerId()) && clienteId.equals(snapshot.getClienteId());
+            });
+        }
+    }
+
+    public void updateRemoteChannel(String serverId, String sessionId, Long canalId, boolean joined) {
+        if (serverId == null || sessionId == null || canalId == null) {
+            return;
+        }
+        RemoteSessionSnapshot snapshot = remoteSessions.get(remoteKey(serverId, sessionId));
+        if (snapshot == null) {
+            return;
+        }
+        if (joined) {
+            snapshot.getCanales().add(canalId);
+        } else {
+            snapshot.getCanales().remove(canalId);
+        }
+    }
+
+    public void clearRemoteSessions(String serverId) {
+        if (serverId == null) {
+            return;
+        }
+        remoteSessions.entrySet().removeIf(entry -> serverId.equals(entry.getValue().getServerId()));
+    }
+
+    private RemoteSessionSnapshot copySnapshot(RemoteSessionSnapshot snapshot) {
+        return new RemoteSessionSnapshot(
+            snapshot.getServerId(),
+            snapshot.getSessionId(),
+            snapshot.getClienteId(),
+            snapshot.getUsuario(),
+            snapshot.getIp(),
+            snapshot.getCanales()
+        );
+    }
+
+    private RemoteSessionSnapshot toSnapshot(SessionDescriptor descriptor) {
+        Set<Long> canales = descriptor != null ? new HashSet<>(descriptor.getCanales()) : Set.of();
+        return new RemoteSessionSnapshot(localServerId,
+            descriptor.getSessionId(),
+            descriptor.getClienteId(),
+            descriptor.getUsuario(),
+            descriptor.getIp(),
+            canales);
+    }
+
+    private RemoteSessionSnapshot findRemoteSessionByCompositeId(String sessionId) {
+        if (sessionId == null) {
+            return null;
+        }
+        int separator = sessionId.indexOf(':');
+        if (separator > 0) {
+            String serverId = sessionId.substring(0, separator);
+            String remoteId = sessionId.substring(separator + 1);
+            return remoteSessions.get(remoteKey(serverId, remoteId));
+        }
+        return remoteSessions.values().stream()
+            .filter(snapshot -> sessionId.equals(snapshot.getSessionId()))
+            .findFirst()
+            .orElse(null);
+    }
+
+    private String composeRemoteSessionId(RemoteSessionSnapshot snapshot) {
+        return snapshot.getServerId() + ":" + snapshot.getSessionId();
+    }
+
+    private String remoteKey(String serverId, String sessionId) {
+        return serverId + ":" + sessionId;
+    }
+
+    private Long extractEmisorId(Object payload) {
+        try {
+            if (payload instanceof com.arquitectura.entidades.Mensaje m && m.getEmisor() != null) {
+                return m.getEmisor();
+            }
+        } catch (Throwable ignored) {
+        }
+        return null;
     }
 
     private void send(ConnectionContext ctx, Object payload) {

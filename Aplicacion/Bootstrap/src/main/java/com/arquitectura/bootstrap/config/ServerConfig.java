@@ -2,10 +2,13 @@ package com.arquitectura.bootstrap.config;
 
 import java.io.IOException;
 import java.io.InputStream;
+import java.util.Arrays;
+import java.util.List;
 import java.util.Objects;
 import java.util.Properties;
 import java.util.logging.Level;
 import java.util.logging.Logger;
+import java.util.stream.Collectors;
 
 /**
  * Centralised configuration helper that reads the <code>properties/server.properties</code> file
@@ -65,6 +68,25 @@ public final class ServerConfig {
 
     public int getMaxConnections() {
         return getIntProperty("server.maxConnections", 5);
+    }
+
+    public int getPeerPort() {
+        return getIntProperty("server.peerPort", getServerPort() + 1000);
+    }
+
+    public String getServerId() {
+        return getProperty("server.id", "server-" + getServerPort());
+    }
+
+    public List<String> getPeerEndpoints() {
+        String raw = getProperty("server.peers", "");
+        if (raw == null || raw.isBlank()) {
+            return List.of();
+        }
+        return Arrays.stream(raw.split(","))
+            .map(String::trim)
+            .filter(s -> !s.isEmpty())
+            .collect(Collectors.toList());
     }
 
     public String getAudioDirectory() {

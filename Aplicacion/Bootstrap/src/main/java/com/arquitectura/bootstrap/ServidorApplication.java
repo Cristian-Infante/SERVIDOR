@@ -12,6 +12,7 @@ import com.arquitectura.controladores.LogSubscriber;
 import com.arquitectura.controladores.ServidorController;
 import com.arquitectura.controladores.ServidorView;
 import com.arquitectura.controladores.conexion.ConnectionRegistry;
+import com.arquitectura.controladores.p2p.ServerPeerManager;
 import com.arquitectura.repositorios.CanalRepository;
 import com.arquitectura.repositorios.ClienteRepository;
 import com.arquitectura.repositorios.InvitacionRepository;
@@ -52,6 +53,7 @@ public final class ServidorApplication {
     private final ReporteService reporteService;
     private final ConexionService conexionService;
     private final ConnectionRegistry connectionRegistry;
+    private final ServerPeerManager peerManager;
     private final CanalService canalService;
     private final MensajeriaService mensajeriaService;
     private final AudioStorageService audioStorageService;
@@ -59,6 +61,7 @@ public final class ServidorApplication {
     private final TCPServer tcpServer;
 
     public ServidorApplication() {
+        ServerConfig serverConfig = ServerConfig.getInstance();
         DBConfig config = DBConfig.getInstance();
         DataSource dataSource = config.getMySqlDataSource();
         DatabaseInitializer.ensureSchema(dataSource);
@@ -73,7 +76,14 @@ public final class ServidorApplication {
         clienteRepository.disconnectAll();
 
         this.eventBus = new SessionEventBus();
-        this.connectionRegistry = new ConnectionRegistry(eventBus);
+        this.connectionRegistry = new ConnectionRegistry(eventBus, serverConfig.getServerId());
+        this.peerManager = new ServerPeerManager(
+            serverConfig.getServerId(),
+            serverConfig.getPeerPort(),
+            serverConfig.getPeerEndpoints(),
+            connectionRegistry
+        );
+        connectionRegistry.setPeerManager(peerManager);
         new com.arquitectura.servicios.eventos.LogSubscriber(logRepository, clienteRepository, canalRepository, eventBus);
         eventBus.subscribe(new LogSubscriber());
         
@@ -100,11 +110,12 @@ public final class ServidorApplication {
 
         // Iniciar servidor TCP
         this.tcpServer = new TCPServer(registroService, canalService, mensajeriaService, reporteService, conexionService, audioStorageService, messageSyncService, eventBus, connectionRegistry);
+        this.peerManager.start();
         this.tcpServer.start();
     }
 
     public ServidorController createServidorController(ServidorView view) {
-        return new ServidorController(view, registroService, reporteService, conexionService, eventBus);
+        return new ServidorController(view, registroService, reporteService, conexionService, eventBus, peerManager);
     }
 
     public ConnectionRegistry getConnectionRegistry() {
@@ -138,8 +149,12 @@ public final class ServidorApplication {
     public ConexionService getConexionService() {
         return conexionService;
     }
-    
+
     public int getMaxConnections() {
         return ServerConfig.getInstance().getMaxConnections();
+    }
+
+    public ServerPeerManager getPeerManager() {
+        return peerManager;
     }
 }
