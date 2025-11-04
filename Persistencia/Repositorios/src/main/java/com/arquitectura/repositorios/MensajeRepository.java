@@ -19,4 +19,9 @@ public interface MensajeRepository {
      * @return Lista de mensajes ordenados por timestamp
      */
     List<Mensaje> findAllByUser(Long usuarioId);
+
+    /**
+     * Obtiene todos los mensajes registrados en la base de datos ordenados por identificador.
+     */
+    List<Mensaje> findAllOrdered();
 }

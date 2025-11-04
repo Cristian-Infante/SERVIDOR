@@ -171,6 +171,11 @@ class DirectMessageDeliveryIntegrationTest {
         public List<Mensaje> findAllByUser(Long usuarioId) {
             return Collections.emptyList();
         }
+
+        @Override
+        public List<Mensaje> findAllOrdered() {
+            return new ArrayList<>(storage.values());
+        }
     }
 
     private static class InMemoryLogRepository implements LogRepository {

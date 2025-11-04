@@ -132,6 +132,12 @@ public class JdbcMensajeRepository extends JdbcSupport implements MensajeReposit
         return queryMessages(sql, usuarioId, usuarioId, usuarioId);
     }
 
+    @Override
+    public List<Mensaje> findAllOrdered() {
+        String sql = "SELECT * FROM mensajes ORDER BY id";
+        return queryMessages(sql);
+    }
+
     private List<Mensaje> queryMessages(String sql, Object... params) {
         List<Mensaje> result = new ArrayList<>();
         try (Connection conn = getConnection();

@@ -12,6 +12,7 @@ import com.arquitectura.controladores.LogSubscriber;
 import com.arquitectura.controladores.ServidorController;
 import com.arquitectura.controladores.ServidorView;
 import com.arquitectura.controladores.conexion.ConnectionRegistry;
+import com.arquitectura.controladores.p2p.DatabaseSyncCoordinator;
 import com.arquitectura.controladores.p2p.ServerPeerManager;
 import com.arquitectura.repositorios.CanalRepository;
 import com.arquitectura.repositorios.ClienteRepository;
@@ -77,11 +78,18 @@ public final class ServidorApplication {
 
         this.eventBus = new SessionEventBus();
         this.connectionRegistry = new ConnectionRegistry(eventBus, serverConfig.getServerId());
+        DatabaseSyncCoordinator databaseSyncCoordinator = new DatabaseSyncCoordinator(
+            clienteRepository,
+            canalRepository,
+            mensajeRepository,
+            dataSource
+        );
         this.peerManager = new ServerPeerManager(
             serverConfig.getServerId(),
             serverConfig.getPeerPort(),
             serverConfig.getPeerEndpoints(),
-            connectionRegistry
+            connectionRegistry,
+            databaseSyncCoordinator
         );
         connectionRegistry.setPeerManager(peerManager);
         new com.arquitectura.servicios.eventos.LogSubscriber(logRepository, clienteRepository, canalRepository, eventBus);
