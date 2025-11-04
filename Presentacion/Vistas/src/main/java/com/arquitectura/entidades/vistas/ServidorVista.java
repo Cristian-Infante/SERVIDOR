@@ -9,7 +9,6 @@ import java.awt.Font;
 import java.awt.GridBagConstraints;
 import java.awt.GridBagLayout;
 import java.awt.Insets;
-
 import java.awt.event.ComponentAdapter;
 import java.awt.event.ComponentEvent;
 
@@ -67,6 +66,11 @@ public class ServidorVista extends JFrame {
     private final int maxConnections;
     private final JTextField txtPeerEndpoint;
 
+    private final JPanel content;
+    private final JPanel conexionesCard;
+    private final JPanel rightPanel;
+    private boolean stackedLayout = false;
+
     public ServidorVista() {
         this(5); // Valor por defecto para compatibilidad
     }
@@ -75,7 +79,7 @@ public class ServidorVista extends JFrame {
         super("Panel de Control del Servidor");
         this.maxConnections = maxConnections;
         setDefaultCloseOperation(JFrame.DISPOSE_ON_CLOSE);
-        setMinimumSize(new Dimension(640, 600));
+        setMinimumSize(new Dimension(750, 650)); // Aumentado para asegurar visibilidad
         setSize(1000, 700);
         setLocationRelativeTo(null);
 
@@ -151,15 +155,19 @@ public class ServidorVista extends JFrame {
         content.setBackground(BG_PRIMARY);
         content.setBorder(BorderFactory.createEmptyBorder(20, 0, 0, 0));
 
-        // Panel izquierdo: Conexiones
-        conexionesCard = buildConexionesCard();
+        // Panel izquierdo: Conexiones + Red de Servidores
+        JPanel leftPanel = new JPanel();
+        leftPanel.setLayout(new BoxLayout(leftPanel, BoxLayout.Y_AXIS));
+        leftPanel.setBackground(BG_PRIMARY);
+        leftPanel.add(buildConexionesCard());
+        leftPanel.add(Box.createVerticalStrut(20));
+        leftPanel.add(buildPeersCard());
+        conexionesCard = leftPanel;
 
         // Panel derecho: Reportes + Control
         rightPanel = new JPanel();
         rightPanel.setLayout(new BoxLayout(rightPanel, BoxLayout.Y_AXIS));
         rightPanel.setBackground(BG_PRIMARY);
-        rightPanel.add(buildPeersCard());
-        rightPanel.add(Box.createVerticalStrut(20));
         rightPanel.add(buildReportesCard());
         rightPanel.add(Box.createVerticalStrut(20));
         rightPanel.add(buildControlCard());
@@ -179,7 +187,7 @@ public class ServidorVista extends JFrame {
 
     private void updateResponsiveLayout() {
         int width = getWidth();
-        boolean shouldStack = width < 960;
+        boolean shouldStack = width < 800; // Reducido el breakpoint para activar antes
         if (shouldStack != stackedLayout) {
             configureContentLayout(shouldStack);
         }
@@ -193,19 +201,24 @@ public class ServidorVista extends JFrame {
         gbc.weighty = 1.0;
 
         if (stackVertically) {
+            // En modo apilado, cada panel ocupa toda la fila
             gbc.gridx = 0;
             gbc.gridy = 0;
             gbc.weightx = 1.0;
-            gbc.insets = new Insets(0, 0, 20, 0);
+            gbc.weighty = 0.6; // Más espacio para conexiones/servidores
+            gbc.insets = new Insets(0, 0, 15, 0);
             content.add(conexionesCard, gbc);
 
             gbc.gridy = 1;
+            gbc.weighty = 0.4; // Menos espacio para reportes/control
             gbc.insets = new Insets(0, 0, 0, 0);
             content.add(rightPanel, gbc);
         } else {
+            // En modo columnas, distribución 50/50
             gbc.gridx = 0;
             gbc.gridy = 0;
             gbc.weightx = 0.5;
+            gbc.weighty = 1.0;
             gbc.insets = new Insets(0, 0, 0, 10);
             content.add(conexionesCard, gbc);
 
@@ -269,7 +282,7 @@ public class ServidorVista extends JFrame {
         JScrollPane scrollPane = new JScrollPane(lstConexiones);
         scrollPane.setBackground(BG_CARD);
         scrollPane.setBorder(BorderFactory.createLineBorder(BORDER_COLOR, 1));
-        scrollPane.setPreferredSize(new Dimension(0, 320));
+        scrollPane.setPreferredSize(new Dimension(0, 180));
         card.add(scrollPane, BorderLayout.CENTER);
 
         // Botón de acción
@@ -292,39 +305,39 @@ public class ServidorVista extends JFrame {
         sectionTitle.setForeground(TEXT_PRIMARY);
         card.add(sectionTitle, BorderLayout.NORTH);
 
-        // Grid de reportes
+        // Grid de reportes más compacto
         JPanel grid = new JPanel(new GridBagLayout());
         grid.setBackground(BG_SECONDARY);
         GridBagConstraints gbc = new GridBagConstraints();
         gbc.fill = GridBagConstraints.HORIZONTAL;
         gbc.weightx = 1.0;
-        gbc.insets = new Insets(8, 0, 8, 0);
+        gbc.insets = new Insets(6, 0, 6, 0); // Reducido el espaciado vertical
 
         // Usuarios registrados
         gbc.gridx = 0; gbc.gridy = 0;
         grid.add(createReportRow("Usuarios Registrados", "Total de usuarios en el sistema"), gbc);
-        gbc.gridx = 1; gbc.weightx = 0; gbc.insets = new Insets(8, 12, 8, 0);
+        gbc.gridx = 1; gbc.weightx = 0; gbc.insets = new Insets(6, 12, 6, 0);
         btnGenerarUsuarios.setName("btnGenerarUsuarios");
         grid.add(btnGenerarUsuarios, gbc);
 
         // Canales
-        gbc.gridx = 0; gbc.gridy = 1; gbc.weightx = 1.0; gbc.insets = new Insets(8, 0, 8, 0);
+        gbc.gridx = 0; gbc.gridy = 1; gbc.weightx = 1.0; gbc.insets = new Insets(6, 0, 6, 0);
         grid.add(createReportRow("Canales", "Canales con usuarios vinculados"), gbc);
-        gbc.gridx = 1; gbc.weightx = 0; gbc.insets = new Insets(8, 12, 8, 0);
+        gbc.gridx = 1; gbc.weightx = 0; gbc.insets = new Insets(6, 12, 6, 0);
         btnGenerarCanales.setName("btnGenerarCanales");
         grid.add(btnGenerarCanales, gbc);
 
         // Conectados
-        gbc.gridx = 0; gbc.gridy = 2; gbc.weightx = 1.0; gbc.insets = new Insets(8, 0, 8, 0);
+        gbc.gridx = 0; gbc.gridy = 2; gbc.weightx = 1.0; gbc.insets = new Insets(6, 0, 6, 0);
         grid.add(createReportRow("Usuarios Conectados", "Conexiones activas en tiempo real"), gbc);
-        gbc.gridx = 1; gbc.weightx = 0; gbc.insets = new Insets(8, 12, 8, 0);
+        gbc.gridx = 1; gbc.weightx = 0; gbc.insets = new Insets(6, 12, 6, 0);
         btnGenerarConectados.setName("btnGenerarConectados");
         grid.add(btnGenerarConectados, gbc);
 
         // Logs
-        gbc.gridx = 0; gbc.gridy = 3; gbc.weightx = 1.0; gbc.insets = new Insets(8, 0, 8, 0);
+        gbc.gridx = 0; gbc.gridy = 3; gbc.weightx = 1.0; gbc.insets = new Insets(6, 0, 6, 0);
         grid.add(createReportRow("Logs del Sistema", "Registro de eventos y actividades"), gbc);
-        gbc.gridx = 1; gbc.weightx = 0; gbc.insets = new Insets(8, 12, 8, 0);
+        gbc.gridx = 1; gbc.weightx = 0; gbc.insets = new Insets(6, 12, 6, 0);
         btnGenerarLogs.setName("btnGenerarLogs");
         grid.add(btnGenerarLogs, gbc);
 
@@ -372,8 +385,9 @@ public class ServidorVista extends JFrame {
 
     private JPanel buildPeersCard() {
         JPanel card = createCard();
-        card.setLayout(new BorderLayout(0, 16));
+        card.setLayout(new BorderLayout(0, 12));
 
+        // Header con título y subtítulo
         JLabel sectionTitle = new JLabel("Red de Servidores");
         sectionTitle.setFont(new Font("Segoe UI", Font.BOLD, 18));
         sectionTitle.setForeground(TEXT_PRIMARY);
@@ -388,48 +402,70 @@ public class ServidorVista extends JFrame {
         header.add(sectionTitle);
         header.add(Box.createVerticalStrut(4));
         header.add(sectionSubtitle);
+
         card.add(header, BorderLayout.NORTH);
 
-        JPanel connectPanel = new JPanel(new BorderLayout(12, 0));
-        connectPanel.setBackground(BG_SECONDARY);
+        // Panel central con todo el contenido
+        JPanel centerPanel = new JPanel();
+        centerPanel.setLayout(new BoxLayout(centerPanel, BoxLayout.Y_AXIS));
+        centerPanel.setBackground(BG_SECONDARY);
 
-        JPanel inputWrapper = new JPanel();
-        inputWrapper.setBackground(BG_SECONDARY);
-        inputWrapper.setLayout(new BoxLayout(inputWrapper, BoxLayout.Y_AXIS));
+        // Panel de conexión más compacto
+        JPanel connectSection = new JPanel(new GridBagLayout());
+        connectSection.setBackground(BG_SECONDARY);
+        connectSection.setBorder(BorderFactory.createEmptyBorder(0, 0, 12, 0));
 
-        JLabel inputLabel = new JLabel("Servidor (IP:Puerto)");
+        GridBagConstraints gbc = new GridBagConstraints();
+
+        // Label para el input
+        JLabel inputLabel = new JLabel("Servidor (IP:Puerto):");
         inputLabel.setFont(new Font("Segoe UI", Font.PLAIN, 12));
         inputLabel.setForeground(TEXT_SECONDARY);
-        inputLabel.setAlignmentX(Component.LEFT_ALIGNMENT);
+        gbc.gridx = 0; gbc.gridy = 0;
+        gbc.anchor = GridBagConstraints.WEST;
+        gbc.insets = new Insets(0, 0, 6, 0);
+        connectSection.add(inputLabel, gbc);
 
-        txtPeerEndpoint.setAlignmentX(Component.LEFT_ALIGNMENT);
-        txtPeerEndpoint.setMaximumSize(new Dimension(Integer.MAX_VALUE, 40));
+        // Panel horizontal para input + botón
+        JPanel inputRow = new JPanel(new BorderLayout(8, 0));
+        inputRow.setBackground(BG_SECONDARY);
+        
+        txtPeerEndpoint.setPreferredSize(new Dimension(160, 32));
+        txtPeerEndpoint.setMinimumSize(new Dimension(150, 32));
+        btnConectarServidor.setPreferredSize(new Dimension(120, 32));
+        
+        inputRow.add(txtPeerEndpoint, BorderLayout.CENTER);
+        inputRow.add(btnConectarServidor, BorderLayout.EAST);
 
-        inputWrapper.add(inputLabel);
-        inputWrapper.add(Box.createVerticalStrut(6));
-        inputWrapper.add(txtPeerEndpoint);
+        gbc.gridx = 0; gbc.gridy = 1;
+        gbc.fill = GridBagConstraints.HORIZONTAL;
+        gbc.weightx = 1.0;
+        gbc.insets = new Insets(0, 0, 0, 0);
+        connectSection.add(inputRow, gbc);
 
-        connectPanel.add(inputWrapper, BorderLayout.CENTER);
-        connectPanel.add(btnConectarServidor, BorderLayout.EAST);
-        card.add(connectPanel, BorderLayout.CENTER);
+        centerPanel.add(connectSection);
+
+        // Panel para la lista que use todo el ancho
+        JPanel listSection = new JPanel(new BorderLayout(0, 6));
+        listSection.setBackground(BG_SECONDARY);
+
+        // Lista de servidores conectados
+        JLabel listLabel = new JLabel("Servidores conectados:");
+        listLabel.setFont(new Font("Segoe UI", Font.PLAIN, 12));
+        listLabel.setForeground(TEXT_SECONDARY);
+        listSection.add(listLabel, BorderLayout.NORTH);
 
         lstServidores.setName("lstServidores");
         JScrollPane scroll = new JScrollPane(lstServidores);
         scroll.setBackground(BG_CARD);
         scroll.setBorder(BorderFactory.createLineBorder(BORDER_COLOR, 1));
-        scroll.setPreferredSize(new Dimension(420, 180));
+        scroll.setPreferredSize(new Dimension(0, 120));
+        scroll.setMinimumSize(new Dimension(0, 100));
+        listSection.add(scroll, BorderLayout.CENTER);
 
-        JPanel listWrapper = new JPanel(new BorderLayout());
-        listWrapper.setBackground(BG_SECONDARY);
-        listWrapper.add(scroll, BorderLayout.CENTER);
+        centerPanel.add(listSection);
 
-        JLabel listLabel = new JLabel("Servidores conectados");
-        listLabel.setFont(new Font("Segoe UI", Font.PLAIN, 12));
-        listLabel.setForeground(TEXT_SECONDARY);
-        listLabel.setBorder(BorderFactory.createEmptyBorder(12, 0, 8, 0));
-        listWrapper.add(listLabel, BorderLayout.NORTH);
-
-        card.add(listWrapper, BorderLayout.SOUTH);
+        card.add(centerPanel, BorderLayout.CENTER);
         return card;
     }
 
