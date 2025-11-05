@@ -3,6 +3,7 @@ package com.arquitectura.servicios.eventos;
 public enum SessionEventType {
     LOGIN,
     LOGOUT,
+    USER_REGISTERED,
     TCP_CONNECTED,      // Nueva conexión TCP establecida
     TCP_DISCONNECTED,   // Conexión TCP cerrada
     MESSAGE_SENT,

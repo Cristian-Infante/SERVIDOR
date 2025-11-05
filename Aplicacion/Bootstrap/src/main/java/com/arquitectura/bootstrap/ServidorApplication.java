@@ -12,6 +12,7 @@ import com.arquitectura.controladores.LogSubscriber;
 import com.arquitectura.controladores.ServidorController;
 import com.arquitectura.controladores.ServidorView;
 import com.arquitectura.controladores.conexion.ConnectionRegistry;
+import com.arquitectura.controladores.p2p.ClusterUserRegistrationListener;
 import com.arquitectura.controladores.p2p.DatabaseSyncCoordinator;
 import com.arquitectura.controladores.p2p.ServerPeerManager;
 import com.arquitectura.repositorios.CanalRepository;
@@ -93,6 +94,7 @@ public final class ServidorApplication {
             clienteRepository
         );
         connectionRegistry.setPeerManager(peerManager);
+        new ClusterUserRegistrationListener(peerManager, eventBus);
         new com.arquitectura.servicios.eventos.LogSubscriber(logRepository, clienteRepository, canalRepository, eventBus);
         eventBus.subscribe(new LogSubscriber());
         
@@ -100,7 +102,7 @@ public final class ServidorApplication {
         new MessageNotificationService(connectionRegistry, canalRepository, clienteRepository, eventBus);
 
         PasswordHasher passwordHasher = new Sha256PasswordHasher(config);
-        RegistroServiceImpl registroServiceImpl = new RegistroServiceImpl(clienteRepository, passwordHasher);
+        RegistroServiceImpl registroServiceImpl = new RegistroServiceImpl(clienteRepository, passwordHasher, eventBus);
         this.registroService = registroServiceImpl;
         this.reporteService = new ReporteServiceImpl(clienteRepository, canalRepository, mensajeRepository, logRepository);
         this.conexionService = new ConexionServiceImpl(connectionRegistry, clienteRepository, eventBus);

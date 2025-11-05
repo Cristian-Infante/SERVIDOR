@@ -174,6 +174,18 @@ public class ServerPeerManager {
         broadcast(PeerMessageType.CHANNEL_MEMBERSHIP, payload);
     }
 
+    public void broadcastDatabaseUpdate(DatabaseSnapshot snapshot) {
+        if (!running || snapshot == null || snapshot.isEmpty()) {
+            return;
+        }
+        SyncStatePayload payload = new SyncStatePayload();
+        payload.setDatabase(snapshot);
+        PeerEnvelope envelope = new PeerEnvelope(PeerMessageType.SYNC_STATE, serverId, mapper.valueToTree(payload));
+        for (PeerConnection connection : peers.values()) {
+            connection.send(envelope);
+        }
+    }
+
     public void broadcast(Object payload) {
         broadcast(PeerMessageType.BROADCAST, payload);
     }
@@ -517,25 +529,31 @@ public class ServerPeerManager {
 
     private void handleSyncState(PeerConnection connection, PeerEnvelope envelope) throws IOException {
         SyncStatePayload sync = mapper.treeToValue(envelope.getPayload(), SyncStatePayload.class);
-        if (sync == null || sync.getServers().isEmpty()) {
+        if (sync == null) {
             return;
         }
+        boolean hasServers = sync.getServers() != null && !sync.getServers().isEmpty();
+        boolean hasDatabase = sync.getDatabase() != null && !sync.getDatabase().isEmpty();
+        if (!hasServers && !hasDatabase) {
+            return;
+        }
+
         boolean updated = false;
-        for (Map.Entry<String, List<RemoteSessionSnapshot>> entry : sync.getServers().entrySet()) {
-            String declaredServerId = entry.getKey();
-            String effectiveServerId = resolveRemoteServerAlias(connection, declaredServerId);
-            if (effectiveServerId == null || effectiveServerId.equals(serverId)) {
-                continue;
+        boolean dbChanged = false;
+        if (hasServers) {
+            for (Map.Entry<String, List<RemoteSessionSnapshot>> entry : sync.getServers().entrySet()) {
+                String declaredServerId = entry.getKey();
+                String effectiveServerId = resolveRemoteServerAlias(connection, declaredServerId);
+                if (effectiveServerId == null || effectiveServerId.equals(serverId)) {
+                    continue;
+                }
+                List<RemoteSessionSnapshot> remapped = remapSnapshotsForServer(entry.getValue(), effectiveServerId);
+                updated |= registry.registerRemoteSessions(effectiveServerId, remapped);
             }
-            List<RemoteSessionSnapshot> remapped = remapSnapshotsForServer(entry.getValue(), effectiveServerId);
-            updated |= registry.registerRemoteSessions(effectiveServerId, remapped);
         }
-        if (updated) {
-            relayStateUpdate(connection, PeerMessageType.SYNC_STATE, envelope.getPayload(), envelope.getOrigin());
-        }
-        if (databaseSync != null && sync.getDatabase() != null && !sync.getDatabase().isEmpty()) {
+        if (hasDatabase && databaseSync != null) {
             try {
-                boolean dbChanged = databaseSync.applySnapshot(sync.getDatabase());
+                dbChanged = databaseSync.applySnapshot(sync.getDatabase());
                 if (dbChanged) {
                     LOGGER.info(() -> "Base de datos sincronizada con estado recibido de " +
                         Optional.ofNullable(connection.getRemoteServerId()).orElse("peer desconocido"));
@@ -543,6 +561,9 @@ public class ServerPeerManager {
             } catch (Exception e) {
                 LOGGER.log(Level.WARNING, "Error aplicando snapshot de base de datos recibido del clúster", e);
             }
+        }
+        if (updated || dbChanged) {
+            relayStateUpdate(connection, PeerMessageType.SYNC_STATE, envelope.getPayload(), envelope.getOrigin());
         }
     }
 

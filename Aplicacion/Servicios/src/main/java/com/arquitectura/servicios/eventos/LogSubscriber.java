@@ -7,6 +7,7 @@ import java.util.logging.Logger;
 import com.arquitectura.entidades.ArchivoMensaje;
 import com.arquitectura.entidades.AudioMensaje;
 import com.arquitectura.entidades.Canal;
+import com.arquitectura.entidades.Cliente;
 import com.arquitectura.entidades.Log;
 import com.arquitectura.entidades.Mensaje;
 import com.arquitectura.entidades.TextoMensaje;
@@ -53,6 +54,7 @@ public class LogSubscriber implements SessionObserver {
             case INVITE_ACCEPTED -> describirInvitacionAceptada(event);
             case INVITE_REJECTED -> describirInvitacionRechazada(event);
             case AUDIO_SENT -> describirAudio(event);
+            case USER_REGISTERED -> describirRegistro(event);
         };
     }
     
@@ -141,12 +143,20 @@ public class LogSubscriber implements SessionObserver {
         if (event.getActorId() == null) {
             return "Logout de sesión " + event.getSessionId();
         }
-        
+
         return clienteRepository.findById(event.getActorId())
             .map(cliente -> String.format("Usuario '%s' (%s) cerró sesión",
                     cliente.getNombreDeUsuario(),
                     cliente.getEmail()))
             .orElse("Logout de usuario ID " + event.getActorId() + " (no encontrado)");
+    }
+
+    private String describirRegistro(SessionEvent event) {
+        if (!(event.getPayload() instanceof Cliente cliente)) {
+            return "Nuevo usuario registrado";
+        }
+        return String.format("Usuario '%s' (%s) registrado",
+            cliente.getNombreDeUsuario(), cliente.getEmail());
     }
 
     private String describirMensaje(SessionEvent event) {
