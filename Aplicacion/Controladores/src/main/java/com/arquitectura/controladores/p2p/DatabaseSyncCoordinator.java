@@ -230,10 +230,11 @@ public class DatabaseSyncCoordinator {
             connection = dataSource.getConnection();
             connection.setAutoCommit(false);
 
-            changed |= syncClientes(connection, snapshot.getClientes());
+            ClientSyncResult clientResult = syncClientes(connection, snapshot.getClientes());
+            changed |= clientResult.changed();
             changed |= syncCanales(connection, snapshot.getCanales());
-            changed |= syncMemberships(connection, snapshot.getCanalMiembros());
-            changed |= syncMensajes(connection, snapshot.getMensajes());
+            changed |= syncMemberships(connection, snapshot.getCanalMiembros(), clientResult.idMapping());
+            changed |= syncMensajes(connection, snapshot.getMensajes(), clientResult.idMapping());
 
             connection.commit();
             return changed;
@@ -257,11 +258,12 @@ public class DatabaseSyncCoordinator {
         }
     }
 
-    private boolean syncClientes(Connection connection, List<DatabaseSnapshot.ClienteRecord> clientes) throws SQLException {
+    private ClientSyncResult syncClientes(Connection connection, List<DatabaseSnapshot.ClienteRecord> clientes) throws SQLException {
         if (clientes == null || clientes.isEmpty()) {
-            return false;
+            return ClientSyncResult.empty();
         }
         boolean changed = false;
+        java.util.Map<Long, Long> idMapping = new java.util.HashMap<>();
         String sql = "INSERT INTO clientes(id, usuario, email, contrasenia, foto, ip, estado) " +
             "VALUES(?,?,?,?,?,?,?) ON DUPLICATE KEY UPDATE " +
             "usuario=VALUES(usuario), email=VALUES(email), contrasenia=VALUES(contrasenia), " +
@@ -271,7 +273,11 @@ public class DatabaseSyncCoordinator {
                 if (record.getId() == null) {
                     continue;
                 }
-                ps.setLong(1, record.getId());
+                Long resolvedId = resolveExistingClientId(connection, record);
+                long targetId = resolvedId != null ? resolvedId : record.getId();
+                idMapping.put(record.getId(), targetId);
+
+                ps.setLong(1, targetId);
                 ps.setString(2, record.getUsuario());
                 ps.setString(3, record.getEmail());
                 ps.setString(4, record.getContrasenia());
@@ -293,7 +299,30 @@ public class DatabaseSyncCoordinator {
                 changed |= ps.executeUpdate() > 0;
             }
         }
-        return changed;
+        return new ClientSyncResult(changed, idMapping);
+    }
+
+    private Long resolveExistingClientId(Connection connection, DatabaseSnapshot.ClienteRecord record) throws SQLException {
+        Long id = null;
+        if (record.getUsuario() != null && !record.getUsuario().isBlank()) {
+            id = querySingleLong(connection, "SELECT id FROM clientes WHERE usuario=?", record.getUsuario());
+        }
+        if (id == null && record.getEmail() != null && !record.getEmail().isBlank()) {
+            id = querySingleLong(connection, "SELECT id FROM clientes WHERE email=?", record.getEmail());
+        }
+        return id;
+    }
+
+    private Long querySingleLong(Connection connection, String sql, String value) throws SQLException {
+        try (PreparedStatement ps = connection.prepareStatement(sql)) {
+            ps.setString(1, value);
+            try (ResultSet rs = ps.executeQuery()) {
+                if (rs.next()) {
+                    return rs.getLong(1);
+                }
+            }
+        }
+        return null;
     }
 
     private boolean syncCanales(Connection connection, List<DatabaseSnapshot.CanalRecord> canales) throws SQLException {
@@ -321,8 +350,9 @@ public class DatabaseSyncCoordinator {
         return changed;
     }
 
-    private boolean syncMemberships(Connection connection, List<DatabaseSnapshot.ChannelMembershipRecord> memberships)
-        throws SQLException {
+    private boolean syncMemberships(Connection connection,
+                                    List<DatabaseSnapshot.ChannelMembershipRecord> memberships,
+                                    java.util.Map<Long, Long> clientIdMap) throws SQLException {
         if (memberships == null || memberships.isEmpty()) {
             return false;
         }
@@ -335,14 +365,16 @@ public class DatabaseSyncCoordinator {
                     continue;
                 }
                 ps.setLong(1, record.getCanalId());
-                ps.setLong(2, record.getClienteId());
+                ps.setLong(2, resolveClientId(record.getClienteId(), clientIdMap));
                 changed |= ps.executeUpdate() > 0;
             }
         }
         return changed;
     }
 
-    private boolean syncMensajes(Connection connection, List<DatabaseSnapshot.MensajeRecord> mensajes) throws SQLException {
+    private boolean syncMensajes(Connection connection,
+                                 List<DatabaseSnapshot.MensajeRecord> mensajes,
+                                 java.util.Map<Long, Long> clientIdMap) throws SQLException {
         if (mensajes == null || mensajes.isEmpty()) {
             return false;
         }
@@ -365,12 +397,12 @@ public class DatabaseSyncCoordinator {
                 }
                 ps.setString(3, record.getTipo());
                 if (record.getEmisorId() != null) {
-                    ps.setLong(4, record.getEmisorId());
+                    ps.setLong(4, resolveClientId(record.getEmisorId(), clientIdMap));
                 } else {
                     ps.setNull(4, Types.BIGINT);
                 }
                 if (record.getReceptorId() != null) {
-                    ps.setLong(5, record.getReceptorId());
+                    ps.setLong(5, resolveClientId(record.getReceptorId(), clientIdMap));
                 } else {
                     ps.setNull(5, Types.BIGINT);
                 }
@@ -392,6 +424,18 @@ public class DatabaseSyncCoordinator {
             }
         }
         return changed;
+    }
+
+    private long resolveClientId(Long originalId, java.util.Map<Long, Long> clientIdMap) {
+        return clientIdMap != null && clientIdMap.containsKey(originalId)
+            ? clientIdMap.get(originalId)
+            : originalId;
+    }
+
+    private record ClientSyncResult(boolean changed, java.util.Map<Long, Long> idMapping) {
+        static ClientSyncResult empty() {
+            return new ClientSyncResult(false, java.util.Collections.emptyMap());
+        }
     }
 }
 
