@@ -5,6 +5,9 @@ import com.arquitectura.repositorios.ClienteRepository;
 import com.arquitectura.servicios.ConexionService;
 import com.arquitectura.servicios.RegistroService;
 import com.arquitectura.servicios.security.PasswordHasher;
+import com.arquitectura.servicios.eventos.SessionEvent;
+import com.arquitectura.servicios.eventos.SessionEventBus;
+import com.arquitectura.servicios.eventos.SessionEventType;
 
 import java.util.Objects;
 import java.util.logging.Logger;
@@ -15,11 +18,15 @@ public class RegistroServiceImpl implements RegistroService {
 
     private final ClienteRepository clienteRepository;
     private final PasswordHasher passwordHasher;
+    private final SessionEventBus eventBus;
     private ConexionService conexionService; // Inyección circular - se establece después
 
-    public RegistroServiceImpl(ClienteRepository clienteRepository, PasswordHasher passwordHasher) {
+    public RegistroServiceImpl(ClienteRepository clienteRepository,
+                               PasswordHasher passwordHasher,
+                               SessionEventBus eventBus) {
         this.clienteRepository = Objects.requireNonNull(clienteRepository, "clienteRepository");
         this.passwordHasher = Objects.requireNonNull(passwordHasher, "passwordHasher");
+        this.eventBus = Objects.requireNonNull(eventBus, "eventBus");
     }
     
     /**
@@ -51,6 +58,7 @@ public class RegistroServiceImpl implements RegistroService {
 
         Cliente saved = clienteRepository.save(cliente);
         LOGGER.info(() -> "Cliente registrado: " + saved.getId());
+        eventBus.publish(new SessionEvent(SessionEventType.USER_REGISTERED, null, saved.getId(), saved));
         return saved;
     }
 
