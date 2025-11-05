@@ -15,6 +15,7 @@ import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.sql.Statement;
 import java.sql.Timestamp;
 import java.sql.Types;
 import java.time.LocalDateTime;
@@ -264,42 +265,114 @@ public class DatabaseSyncCoordinator {
         }
         boolean changed = false;
         java.util.Map<Long, Long> idMapping = new java.util.HashMap<>();
-        String sql = "INSERT INTO clientes(id, usuario, email, contrasenia, foto, ip, estado) " +
+        String upsertSql = "INSERT INTO clientes(id, usuario, email, contrasenia, foto, ip, estado) " +
             "VALUES(?,?,?,?,?,?,?) ON DUPLICATE KEY UPDATE " +
             "usuario=VALUES(usuario), email=VALUES(email), contrasenia=VALUES(contrasenia), " +
             "foto=VALUES(foto), ip=VALUES(ip), estado=VALUES(estado)";
-        try (PreparedStatement ps = connection.prepareStatement(sql)) {
+        String insertSql = "INSERT INTO clientes(usuario, email, contrasenia, foto, ip, estado) VALUES(?,?,?,?,?,?)";
+        try (PreparedStatement upsert = connection.prepareStatement(upsertSql);
+             PreparedStatement insert = connection.prepareStatement(insertSql, Statement.RETURN_GENERATED_KEYS)) {
             for (DatabaseSnapshot.ClienteRecord record : clientes) {
                 if (record.getId() == null) {
                     continue;
                 }
                 Long resolvedId = resolveExistingClientId(connection, record);
-                long targetId = resolvedId != null ? resolvedId : record.getId();
-                idMapping.put(record.getId(), targetId);
+                if (resolvedId != null) {
+                    changed |= executeClienteUpsert(upsert, resolvedId, record);
+                    idMapping.put(record.getId(), resolvedId);
+                    continue;
+                }
 
-                ps.setLong(1, targetId);
-                ps.setString(2, record.getUsuario());
-                ps.setString(3, record.getEmail());
-                ps.setString(4, record.getContrasenia());
-                if (record.getFotoBase64() != null && !record.getFotoBase64().isBlank()) {
-                    ps.setBytes(5, Base64.getDecoder().decode(record.getFotoBase64()));
-                } else {
-                    ps.setNull(5, Types.BLOB);
+                if (hasConflictingIdentity(connection, record)) {
+                    long generatedId = insertClienteWithoutId(connection, insert, record);
+                    idMapping.put(record.getId(), generatedId);
+                    changed = true;
+                    continue;
                 }
-                if (record.getIp() != null && !record.getIp().isBlank()) {
-                    ps.setString(6, record.getIp());
-                } else {
-                    ps.setNull(6, Types.VARCHAR);
-                }
-                if (record.getEstado() != null) {
-                    ps.setBoolean(7, record.getEstado());
-                } else {
-                    ps.setNull(7, Types.TINYINT);
-                }
-                changed |= ps.executeUpdate() > 0;
+
+                long targetId = record.getId();
+                changed |= executeClienteUpsert(upsert, targetId, record);
+                idMapping.put(record.getId(), targetId);
             }
         }
         return new ClientSyncResult(changed, idMapping);
+    }
+
+    private boolean hasConflictingIdentity(Connection connection, DatabaseSnapshot.ClienteRecord record) throws SQLException {
+        if (record.getId() == null) {
+            return false;
+        }
+        String sql = "SELECT usuario, email FROM clientes WHERE id=?";
+        try (PreparedStatement ps = connection.prepareStatement(sql)) {
+            ps.setLong(1, record.getId());
+            try (ResultSet rs = ps.executeQuery()) {
+                if (rs.next()) {
+                    String currentUsuario = rs.getString("usuario");
+                    String currentEmail = rs.getString("email");
+                    boolean sameUsuario = Objects.equals(currentUsuario, record.getUsuario());
+                    boolean sameEmail = Objects.equals(currentEmail, record.getEmail());
+                    return !(sameUsuario || sameEmail);
+                }
+            }
+        }
+        return false;
+    }
+
+    private boolean executeClienteUpsert(PreparedStatement ps, long targetId, DatabaseSnapshot.ClienteRecord record) throws SQLException {
+        ps.setLong(1, targetId);
+        ps.setString(2, record.getUsuario());
+        ps.setString(3, record.getEmail());
+        ps.setString(4, record.getContrasenia());
+        if (record.getFotoBase64() != null && !record.getFotoBase64().isBlank()) {
+            ps.setBytes(5, Base64.getDecoder().decode(record.getFotoBase64()));
+        } else {
+            ps.setNull(5, Types.BLOB);
+        }
+        if (record.getIp() != null && !record.getIp().isBlank()) {
+            ps.setString(6, record.getIp());
+        } else {
+            ps.setNull(6, Types.VARCHAR);
+        }
+        if (record.getEstado() != null) {
+            ps.setBoolean(7, record.getEstado());
+        } else {
+            ps.setNull(7, Types.TINYINT);
+        }
+        return ps.executeUpdate() > 0;
+    }
+
+    private long insertClienteWithoutId(Connection connection,
+                                        PreparedStatement ps,
+                                        DatabaseSnapshot.ClienteRecord record) throws SQLException {
+        ps.setString(1, record.getUsuario());
+        ps.setString(2, record.getEmail());
+        ps.setString(3, record.getContrasenia());
+        if (record.getFotoBase64() != null && !record.getFotoBase64().isBlank()) {
+            ps.setBytes(4, Base64.getDecoder().decode(record.getFotoBase64()));
+        } else {
+            ps.setNull(4, Types.BLOB);
+        }
+        if (record.getIp() != null && !record.getIp().isBlank()) {
+            ps.setString(5, record.getIp());
+        } else {
+            ps.setNull(5, Types.VARCHAR);
+        }
+        if (record.getEstado() != null) {
+            ps.setBoolean(6, record.getEstado());
+        } else {
+            ps.setNull(6, Types.TINYINT);
+        }
+        ps.executeUpdate();
+        try (ResultSet keys = ps.getGeneratedKeys()) {
+            if (keys.next()) {
+                return keys.getLong(1);
+            }
+        }
+        Long fallback = resolveExistingClientId(connection, record);
+        if (fallback != null) {
+            return fallback;
+        }
+        throw new SQLException("No se pudo obtener el ID generado para el cliente " + record.getUsuario());
     }
 
     private Long resolveExistingClientId(Connection connection, DatabaseSnapshot.ClienteRecord record) throws SQLException {
