@@ -9,6 +9,7 @@ import com.arquitectura.entidades.TextoMensaje;
 import com.arquitectura.repositorios.CanalRepository;
 import com.arquitectura.repositorios.ClienteRepository;
 import com.arquitectura.repositorios.MensajeRepository;
+import com.mysql.cj.jdbc.exceptions.PacketTooBigException;
 
 import javax.sql.DataSource;
 import java.sql.Connection;
@@ -319,11 +320,48 @@ public class DatabaseSyncCoordinator {
     }
 
     private boolean executeClienteUpsert(PreparedStatement ps, long targetId, DatabaseSnapshot.ClienteRecord record) throws SQLException {
+        try {
+            bindClienteUpsert(ps, targetId, record, true);
+            return ps.executeUpdate() > 0;
+        } catch (PacketTooBigException ex) {
+            logPacketTooBig(record, ex);
+            bindClienteUpsert(ps, targetId, record, false);
+            return ps.executeUpdate() > 0;
+        }
+    }
+
+    private long insertClienteWithoutId(Connection connection,
+                                        PreparedStatement ps,
+                                        DatabaseSnapshot.ClienteRecord record) throws SQLException {
+        try {
+            bindClienteInsert(ps, record, true);
+            ps.executeUpdate();
+        } catch (PacketTooBigException ex) {
+            logPacketTooBig(record, ex);
+            bindClienteInsert(ps, record, false);
+            ps.executeUpdate();
+        }
+        try (ResultSet keys = ps.getGeneratedKeys()) {
+            if (keys.next()) {
+                return keys.getLong(1);
+            }
+        }
+        Long fallback = resolveExistingClientId(connection, record);
+        if (fallback != null) {
+            return fallback;
+        }
+        throw new SQLException("No se pudo obtener el ID generado para el cliente " + record.getUsuario());
+    }
+
+    private void bindClienteUpsert(PreparedStatement ps,
+                                   long targetId,
+                                   DatabaseSnapshot.ClienteRecord record,
+                                   boolean includePhoto) throws SQLException {
         ps.setLong(1, targetId);
         ps.setString(2, record.getUsuario());
         ps.setString(3, record.getEmail());
         ps.setString(4, record.getContrasenia());
-        if (record.getFotoBase64() != null && !record.getFotoBase64().isBlank()) {
+        if (includePhoto && record.getFotoBase64() != null && !record.getFotoBase64().isBlank()) {
             ps.setBytes(5, Base64.getDecoder().decode(record.getFotoBase64()));
         } else {
             ps.setNull(5, Types.BLOB);
@@ -338,16 +376,15 @@ public class DatabaseSyncCoordinator {
         } else {
             ps.setNull(7, Types.TINYINT);
         }
-        return ps.executeUpdate() > 0;
     }
 
-    private long insertClienteWithoutId(Connection connection,
-                                        PreparedStatement ps,
-                                        DatabaseSnapshot.ClienteRecord record) throws SQLException {
+    private void bindClienteInsert(PreparedStatement ps,
+                                   DatabaseSnapshot.ClienteRecord record,
+                                   boolean includePhoto) throws SQLException {
         ps.setString(1, record.getUsuario());
         ps.setString(2, record.getEmail());
         ps.setString(3, record.getContrasenia());
-        if (record.getFotoBase64() != null && !record.getFotoBase64().isBlank()) {
+        if (includePhoto && record.getFotoBase64() != null && !record.getFotoBase64().isBlank()) {
             ps.setBytes(4, Base64.getDecoder().decode(record.getFotoBase64()));
         } else {
             ps.setNull(4, Types.BLOB);
@@ -362,17 +399,17 @@ public class DatabaseSyncCoordinator {
         } else {
             ps.setNull(6, Types.TINYINT);
         }
-        ps.executeUpdate();
-        try (ResultSet keys = ps.getGeneratedKeys()) {
-            if (keys.next()) {
-                return keys.getLong(1);
-            }
+    }
+
+    private void logPacketTooBig(DatabaseSnapshot.ClienteRecord record, PacketTooBigException ex) {
+        String identificador = record.getUsuario();
+        if (identificador == null || identificador.isBlank()) {
+            identificador = record.getEmail() != null ? record.getEmail() : String.valueOf(record.getId());
         }
-        Long fallback = resolveExistingClientId(connection, record);
-        if (fallback != null) {
-            return fallback;
-        }
-        throw new SQLException("No se pudo obtener el ID generado para el cliente " + record.getUsuario());
+        LOGGER.log(Level.WARNING,
+            "Foto de perfil de " + identificador +
+                " excede el tamaño permitido por el servidor. Se omitirá durante la sincronización.",
+            ex);
     }
 
     private Long resolveExistingClientId(Connection connection, DatabaseSnapshot.ClienteRecord record) throws SQLException {
