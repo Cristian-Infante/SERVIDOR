@@ -612,6 +612,11 @@ public class ServerPeerManager {
             if (type == null) {
                 return;
             }
+            String declaredOrigin = envelope.getOrigin();
+            String effectiveOrigin = resolveRemoteServerAlias(connection, declaredOrigin);
+            if (effectiveOrigin != null && !Objects.equals(effectiveOrigin, declaredOrigin)) {
+                envelope.setOrigin(effectiveOrigin);
+            }
             if (envelope.getOrigin() != null) {
                 registerRoute(envelope.getOrigin(), connection);
             }
