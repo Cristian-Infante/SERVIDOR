@@ -436,11 +436,24 @@ public class ConnectionRegistry implements ConnectionGateway {
         return snapshot.getCanales().remove(canalId);
     }
 
-    public boolean clearRemoteSessions(String serverId) {
+    public List<RemoteSessionSnapshot> drainRemoteSessions(String serverId) {
         if (serverId == null) {
-            return false;
+            return List.of();
         }
-        return remoteSessions.entrySet().removeIf(entry -> serverId.equals(entry.getValue().getServerId()));
+        List<RemoteSessionSnapshot> removed = new ArrayList<>();
+        remoteSessions.entrySet().removeIf(entry -> {
+            RemoteSessionSnapshot snapshot = entry.getValue();
+            if (serverId.equals(snapshot.getServerId())) {
+                removed.add(copySnapshot(snapshot));
+                return true;
+            }
+            return false;
+        });
+        return removed;
+    }
+
+    public boolean clearRemoteSessions(String serverId) {
+        return !drainRemoteSessions(serverId).isEmpty();
     }
 
     private RemoteSessionSnapshot copySnapshot(RemoteSessionSnapshot snapshot) {

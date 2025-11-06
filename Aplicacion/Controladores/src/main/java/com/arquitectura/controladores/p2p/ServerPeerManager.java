@@ -519,7 +519,7 @@ public class ServerPeerManager {
                 case DIRECT_MESSAGE -> handleDirectMessage(envelope.getPayload());
                 case CHANNEL_MESSAGE -> handleChannelMessage(envelope.getPayload());
                 case SESSION_MESSAGE -> handleSessionMessage(envelope.getPayload());
-                case BROADCAST -> handleBroadcast(envelope.getPayload());
+                case BROADCAST -> handleBroadcast(connection, envelope);
                 default -> LOGGER.fine(() -> "Mensaje P2P no soportado: " + type);
             }
         } catch (Exception e) {
@@ -628,12 +628,17 @@ public class ServerPeerManager {
         }
     }
 
-    private void handleBroadcast(JsonNode payload) {
+    private void handleBroadcast(PeerConnection connection, PeerEnvelope envelope) {
+        if (envelope == null) {
+            return;
+        }
+        JsonNode payload = envelope.getPayload();
         JsonNode messageNode = extractBroadcastMessage(payload);
         if (messageNode != null) {
             registry.broadcastLocal(messageNode);
             applyClusterSideEffects(messageNode);
         }
+        relayStateUpdate(connection, PeerMessageType.BROADCAST, payload, envelope.getOrigin());
     }
 
     private void applyClusterSideEffects(JsonNode messageNode) {
@@ -713,7 +718,16 @@ public class ServerPeerManager {
         String remoteId = connection.getRemoteServerId();
         if (remoteId != null) {
             boolean removed = peers.remove(remoteId, connection);
-            registry.clearRemoteSessions(remoteId);
+            List<RemoteSessionSnapshot> drained = registry.drainRemoteSessions(remoteId);
+            if (!drained.isEmpty()) {
+                for (RemoteSessionSnapshot snapshot : drained) {
+                    ClientDisconnectionPayload payload = new ClientDisconnectionPayload();
+                    payload.setSessionId(snapshot.getSessionId());
+                    payload.setClienteId(snapshot.getClienteId());
+                    relayStateUpdate(null, PeerMessageType.CLIENT_DISCONNECTED,
+                        mapper.valueToTree(payload), remoteId);
+                }
+            }
             LOGGER.info(() -> "Conexión con servidor " + remoteId + " cerrada");
             if (removed) {
                 notifyPeerDisconnected(remoteId);
