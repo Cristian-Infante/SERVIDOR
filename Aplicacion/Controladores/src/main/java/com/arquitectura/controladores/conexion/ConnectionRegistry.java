@@ -166,6 +166,7 @@ public class ConnectionRegistry implements ConnectionGateway {
         broadcastInternal(payload, true);
     }
 
+    @Override
     public void broadcastLocal(Object payload) {
         broadcastInternal(payload, false);
     }

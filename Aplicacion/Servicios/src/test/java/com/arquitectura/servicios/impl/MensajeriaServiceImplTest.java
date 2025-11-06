@@ -145,6 +145,10 @@ class MensajeriaServiceImplTest {
         }
 
         @Override
+        public void broadcastLocal(Object payload) {
+        }
+
+        @Override
         public void sendToChannel(Long canalId, Object payload) {
         }
 
