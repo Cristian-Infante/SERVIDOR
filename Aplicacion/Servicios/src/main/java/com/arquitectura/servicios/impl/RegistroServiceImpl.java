@@ -8,6 +8,7 @@ import com.arquitectura.servicios.security.PasswordHasher;
 import com.arquitectura.servicios.eventos.SessionEvent;
 import com.arquitectura.servicios.eventos.SessionEventBus;
 import com.arquitectura.servicios.eventos.SessionEventType;
+import com.arquitectura.servicios.eventos.SessionEventTypes;
 
 import java.util.Objects;
 import java.util.logging.Logger;
@@ -19,6 +20,7 @@ public class RegistroServiceImpl implements RegistroService {
     private final ClienteRepository clienteRepository;
     private final PasswordHasher passwordHasher;
     private final SessionEventBus eventBus;
+    private final SessionEventType userRegisteredEventType;
     private ConexionService conexionService; // Inyección circular - se establece después
 
     public RegistroServiceImpl(ClienteRepository clienteRepository,
@@ -27,6 +29,10 @@ public class RegistroServiceImpl implements RegistroService {
         this.clienteRepository = Objects.requireNonNull(clienteRepository, "clienteRepository");
         this.passwordHasher = Objects.requireNonNull(passwordHasher, "passwordHasher");
         this.eventBus = Objects.requireNonNull(eventBus, "eventBus");
+        this.userRegisteredEventType = SessionEventTypes.userRegistered();
+        if (this.userRegisteredEventType == null) {
+            LOGGER.warning("Tipo de evento USER_REGISTERED no disponible; se omitirá la publicación de registros en el bus de eventos");
+        }
     }
     
     /**
@@ -58,7 +64,9 @@ public class RegistroServiceImpl implements RegistroService {
 
         Cliente saved = clienteRepository.save(cliente);
         LOGGER.info(() -> "Cliente registrado: " + saved.getId());
-        eventBus.publish(new SessionEvent(SessionEventType.USER_REGISTERED, null, saved.getId(), saved));
+        if (userRegisteredEventType != null) {
+            eventBus.publish(new SessionEvent(userRegisteredEventType, null, saved.getId(), saved));
+        }
         return saved;
     }
 

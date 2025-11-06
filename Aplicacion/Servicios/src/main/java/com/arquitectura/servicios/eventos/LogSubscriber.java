@@ -41,6 +41,10 @@ public class LogSubscriber implements SessionObserver {
     }
 
     private String describir(SessionEvent event) {
+        if (SessionEventTypes.isUserRegistered(event.getType())) {
+            return describirRegistro(event);
+        }
+
         return switch (event.getType()) {
             case LOGIN -> describirLogin(event);
             case LOGOUT -> describirLogout(event);
@@ -54,8 +58,12 @@ public class LogSubscriber implements SessionObserver {
             case INVITE_ACCEPTED -> describirInvitacionAceptada(event);
             case INVITE_REJECTED -> describirInvitacionRechazada(event);
             case AUDIO_SENT -> describirAudio(event);
-            case USER_REGISTERED -> describirRegistro(event);
+            default -> describirDesconocido(event);
         };
+    }
+
+    private String describirDesconocido(SessionEvent event) {
+        return "Evento " + event.getType();
     }
     
     private String describirConexionTCP(SessionEvent event) {
