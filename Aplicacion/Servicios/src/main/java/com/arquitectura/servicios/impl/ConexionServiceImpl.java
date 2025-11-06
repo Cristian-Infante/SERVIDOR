@@ -76,13 +76,13 @@ public class ConexionServiceImpl implements ConexionService, SessionObserver {
     
     @Override
     public void notificarApagado(String mensaje) {
-        LOGGER.info(() -> "Notificando apagado del servidor a todos los clientes");
+        LOGGER.info(() -> "Notificando apagado del servidor a los clientes locales");
         ServerNotification notificacion = new ServerNotification(
             "SERVER_SHUTDOWN",
             mensaje != null ? mensaje : "El servidor se está apagando",
             "Mantenimiento programado"
         );
-        connectionGateway.broadcast(notificacion);
+        connectionGateway.broadcastLocal(notificacion);
     }
 
     @Override

@@ -7,6 +7,8 @@ public interface ConnectionGateway {
 
     void broadcast(Object payload);
 
+    void broadcastLocal(Object payload);
+
     void sendToChannel(Long canalId, Object payload);
 
     void sendToSession(String sessionId, Object payload);
