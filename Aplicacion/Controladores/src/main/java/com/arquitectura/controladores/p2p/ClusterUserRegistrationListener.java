@@ -5,6 +5,7 @@ import com.arquitectura.servicios.eventos.SessionEvent;
 import com.arquitectura.servicios.eventos.SessionEventBus;
 import com.arquitectura.servicios.eventos.SessionEventType;
 import com.arquitectura.servicios.eventos.SessionObserver;
+import com.arquitectura.servicios.eventos.SessionEventTypes;
 
 import java.util.Base64;
 import java.util.List;
@@ -20,15 +21,20 @@ public class ClusterUserRegistrationListener implements SessionObserver {
     private static final Logger LOGGER = Logger.getLogger(ClusterUserRegistrationListener.class.getName());
 
     private final ServerPeerManager peerManager;
+    private final SessionEventType userRegisteredType;
 
     public ClusterUserRegistrationListener(ServerPeerManager peerManager, SessionEventBus eventBus) {
         this.peerManager = Objects.requireNonNull(peerManager, "peerManager");
         Objects.requireNonNull(eventBus, "eventBus").subscribe(this);
+        this.userRegisteredType = SessionEventTypes.userRegistered();
+        if (this.userRegisteredType == null) {
+            LOGGER.warning("SessionEventType USER_REGISTERED no disponible; no se replicarán nuevos registros al clúster");
+        }
     }
 
     @Override
     public void onEvent(SessionEvent event) {
-        if (event.getType() != SessionEventType.USER_REGISTERED) {
+        if (userRegisteredType == null || event.getType() != userRegisteredType) {
             return;
         }
         if (!(event.getPayload() instanceof Cliente cliente)) {
