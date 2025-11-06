@@ -51,7 +51,6 @@ public class ServerPeerManager {
     private final ConnectionRegistry registry;
     private final ObjectMapper mapper;
     private final Map<String, PeerConnection> peers = new ConcurrentHashMap<>();
-    private final Map<String, RouteEntry> routes = new ConcurrentHashMap<>();
     private final Set<PeerConnection> connections = ConcurrentHashMap.newKeySet();
     private final CopyOnWriteArrayList<PeerStatusListener> peerListeners = new CopyOnWriteArrayList<>();
     private final String serverId;
@@ -237,114 +236,12 @@ public class ServerPeerManager {
     private void sendToPeer(String targetServerId, PeerMessageType type, Object payload) {
         PeerConnection connection = peers.get(targetServerId);
         if (connection == null) {
-            connection = resolveRoute(targetServerId);
-        }
-        if (connection == null) {
             LOGGER.fine(() -> "No hay conexión con el servidor " + targetServerId + " para reenviar mensaje");
             return;
         }
         JsonNode node = payload instanceof JsonNode ? (JsonNode) payload : mapper.valueToTree(payload);
-        PeerEnvelope envelope = new PeerEnvelope(type, serverId, targetServerId, node);
+        PeerEnvelope envelope = new PeerEnvelope(type, serverId, node);
         connection.send(envelope);
-    }
-
-    private PeerConnection resolveRoute(String targetServerId) {
-        if (targetServerId == null) {
-            return null;
-        }
-        RouteEntry entry = routes.get(targetServerId);
-        if (entry == null) {
-            return null;
-        }
-        PeerConnection connection = entry.connection;
-        if (connection == null || !connection.isOpen()) {
-            routes.remove(targetServerId, entry);
-            return null;
-        }
-        if (connection.getRemoteServerId() != null && targetServerId.equals(connection.getRemoteServerId())) {
-            routes.remove(targetServerId, entry);
-        }
-        return connection;
-    }
-
-    private void registerRoute(String declaredServerId, PeerConnection connection) {
-        if (declaredServerId == null || declaredServerId.isBlank() || connection == null) {
-            return;
-        }
-        String effectiveServerId = resolveRemoteServerAlias(connection, declaredServerId);
-        if (effectiveServerId == null || effectiveServerId.equals(serverId)) {
-            return;
-        }
-        if (peers.containsKey(effectiveServerId)) {
-            routes.remove(effectiveServerId);
-            return;
-        }
-        if (effectiveServerId.equals(connection.getRemoteServerId())) {
-            routes.remove(effectiveServerId);
-            return;
-        }
-        routes.put(effectiveServerId, new RouteEntry(connection));
-    }
-
-    private boolean shouldRelay(PeerEnvelope envelope) {
-        if (envelope == null) {
-            return false;
-        }
-        String target = envelope.getTarget();
-        if (target == null || target.isBlank()) {
-            return false;
-        }
-        return !serverId.equals(target);
-    }
-
-    private void relayEnvelope(String targetServerId, PeerEnvelope envelope, PeerConnection source) {
-        if (targetServerId == null || targetServerId.isBlank()) {
-            return;
-        }
-        PeerConnection connection = selectRelayConnection(targetServerId, source);
-        if (connection == null) {
-            LOGGER.fine(() -> "No se encontró ruta para reenviar mensaje al servidor " + targetServerId);
-            return;
-        }
-        connection.send(copyEnvelope(envelope));
-    }
-
-    private PeerConnection selectRelayConnection(String targetServerId, PeerConnection source) {
-        PeerConnection direct = peers.get(targetServerId);
-        if (direct != null && direct != source && direct.isOpen()) {
-            return direct;
-        }
-        PeerConnection routed = resolveRoute(targetServerId);
-        if (routed != null && routed != source) {
-            return routed;
-        }
-        return null;
-    }
-
-    private PeerEnvelope copyEnvelope(PeerEnvelope envelope) {
-        if (envelope == null) {
-            return null;
-        }
-        JsonNode payloadCopy = envelope.getPayload() != null ? envelope.getPayload().deepCopy() : null;
-        return new PeerEnvelope(envelope.getType(), envelope.getOrigin(), envelope.getTarget(), payloadCopy);
-    }
-
-    private void purgeRoutesFor(PeerConnection connection) {
-        if (connection == null) {
-            return;
-        }
-        routes.entrySet().removeIf(entry -> {
-            RouteEntry value = entry.getValue();
-            return value == null || value.connection == connection;
-        });
-    }
-
-    private static final class RouteEntry {
-        private final PeerConnection connection;
-
-        private RouteEntry(PeerConnection connection) {
-            this.connection = connection;
-        }
     }
 
     private void startAcceptor() {
@@ -404,10 +301,7 @@ public class ServerPeerManager {
         PeerConnection previous = peers.put(remoteId, connection);
         if (previous != null && previous != connection) {
             previous.closeSilently();
-            purgeRoutesFor(previous);
         }
-        routes.remove(remoteId);
-        purgeRoutesFor(connection);
         LOGGER.info(() -> String.format(
             "Conexión P2P establecida con servidor %s (%s, %s desde %s)",
             remoteId,
@@ -612,9 +506,6 @@ public class ServerPeerManager {
             if (type == null) {
                 return;
             }
-            if (envelope.getOrigin() != null) {
-                registerRoute(envelope.getOrigin(), connection);
-            }
             logIncomingPayload(connection, envelope, json);
             switch (type) {
                 case HELLO -> {
@@ -625,9 +516,9 @@ public class ServerPeerManager {
                 case CLIENT_CONNECTED -> handleClientConnected(connection, envelope);
                 case CLIENT_DISCONNECTED -> handleClientDisconnected(connection, envelope);
                 case CHANNEL_MEMBERSHIP -> handleChannelMembership(connection, envelope);
-                case DIRECT_MESSAGE -> handleDirectMessage(connection, envelope);
-                case CHANNEL_MESSAGE -> handleChannelMessage(connection, envelope);
-                case SESSION_MESSAGE -> handleSessionMessage(connection, envelope);
+                case DIRECT_MESSAGE -> handleDirectMessage(envelope.getPayload());
+                case CHANNEL_MESSAGE -> handleChannelMessage(envelope.getPayload());
+                case SESSION_MESSAGE -> handleSessionMessage(envelope.getPayload());
                 case BROADCAST -> handleBroadcast(connection, envelope);
                 default -> LOGGER.fine(() -> "Mensaje P2P no soportado: " + type);
             }
@@ -658,7 +549,6 @@ public class ServerPeerManager {
                 }
                 List<RemoteSessionSnapshot> remapped = remapSnapshotsForServer(entry.getValue(), effectiveServerId);
                 updated |= registry.registerRemoteSessions(effectiveServerId, remapped);
-                registerRoute(effectiveServerId, connection);
             }
         }
         if (hasDatabase && databaseSync != null) {
@@ -688,7 +578,6 @@ public class ServerPeerManager {
         if (updated) {
             relayStateUpdate(connection, PeerMessageType.CLIENT_CONNECTED, envelope.getPayload(), envelope.getOrigin());
         }
-        registerRoute(fallbackId, connection);
     }
 
     private void handleClientDisconnected(PeerConnection connection, PeerEnvelope envelope) throws IOException {
@@ -702,7 +591,6 @@ public class ServerPeerManager {
         if (removed) {
             relayStateUpdate(connection, PeerMessageType.CLIENT_DISCONNECTED, envelope.getPayload(), envelope.getOrigin());
         }
-        registerRoute(fallbackId, connection);
     }
 
     private void handleChannelMembership(PeerConnection connection, PeerEnvelope envelope) throws IOException {
@@ -717,37 +605,24 @@ public class ServerPeerManager {
         if (changed) {
             relayStateUpdate(connection, PeerMessageType.CHANNEL_MEMBERSHIP, envelope.getPayload(), envelope.getOrigin());
         }
-        registerRoute(fallbackId, connection);
     }
 
-    private void handleDirectMessage(PeerConnection connection, PeerEnvelope envelope) throws IOException {
-        if (shouldRelay(envelope)) {
-            relayEnvelope(envelope.getTarget(), envelope, connection);
-            return;
-        }
-        DirectMessagePayload message = mapper.treeToValue(envelope.getPayload(), DirectMessagePayload.class);
+    private void handleDirectMessage(JsonNode payload) throws IOException {
+        DirectMessagePayload message = mapper.treeToValue(payload, DirectMessagePayload.class);
         if (message != null && message.getUserId() != null && message.getMessage() != null) {
             registry.deliverToUserLocally(message.getUserId(), message.getMessage());
         }
     }
 
-    private void handleChannelMessage(PeerConnection connection, PeerEnvelope envelope) throws IOException {
-        if (shouldRelay(envelope)) {
-            relayEnvelope(envelope.getTarget(), envelope, connection);
-            return;
-        }
-        ChannelMessagePayload message = mapper.treeToValue(envelope.getPayload(), ChannelMessagePayload.class);
+    private void handleChannelMessage(JsonNode payload) throws IOException {
+        ChannelMessagePayload message = mapper.treeToValue(payload, ChannelMessagePayload.class);
         if (message != null && message.getCanalId() != null && message.getMessage() != null) {
             registry.deliverToChannelLocally(message.getCanalId(), message.getMessage());
         }
     }
 
-    private void handleSessionMessage(PeerConnection connection, PeerEnvelope envelope) throws IOException {
-        if (shouldRelay(envelope)) {
-            relayEnvelope(envelope.getTarget(), envelope, connection);
-            return;
-        }
-        SessionForwardPayload message = mapper.treeToValue(envelope.getPayload(), SessionForwardPayload.class);
+    private void handleSessionMessage(JsonNode payload) throws IOException {
+        SessionForwardPayload message = mapper.treeToValue(payload, SessionForwardPayload.class);
         if (message != null && message.getSessionId() != null && message.getMessage() != null) {
             registry.deliverToSessionLocal(message.getSessionId(), message.getMessage());
         }
@@ -840,7 +715,6 @@ public class ServerPeerManager {
 
     private void onConnectionClosed(PeerConnection connection) {
         connections.remove(connection);
-        purgeRoutesFor(connection);
         String remoteId = connection.getRemoteServerId();
         if (remoteId != null) {
             boolean removed = peers.remove(remoteId, connection);
@@ -1057,10 +931,6 @@ public class ServerPeerManager {
             return initiator;
         }
 
-        private boolean isOpen() {
-            return !closed.get();
-        }
-
         private String describeAnnouncedId() {
             if (announcedServerId == null || announcedServerId.equals(remoteServerId)) {
                 return remoteServerId != null ? "ID confirmado" : "sin ID";
@@ -1124,20 +994,14 @@ public class ServerPeerManager {
     private static final class PeerEnvelope {
         private PeerMessageType type;
         private String origin;
-        private String target;
         private JsonNode payload;
 
         private PeerEnvelope() {
         }
 
         private PeerEnvelope(PeerMessageType type, String origin, JsonNode payload) {
-            this(type, origin, null, payload);
-        }
-
-        private PeerEnvelope(PeerMessageType type, String origin, String target, JsonNode payload) {
             this.type = type;
             this.origin = origin;
-            this.target = target;
             this.payload = payload;
         }
 
@@ -1155,14 +1019,6 @@ public class ServerPeerManager {
 
         public void setOrigin(String origin) {
             this.origin = origin;
-        }
-
-        public String getTarget() {
-            return target;
-        }
-
-        public void setTarget(String target) {
-            this.target = target;
         }
 
         public JsonNode getPayload() {
