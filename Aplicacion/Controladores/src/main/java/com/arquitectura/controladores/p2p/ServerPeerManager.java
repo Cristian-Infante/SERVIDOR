@@ -64,8 +64,7 @@ public class ServerPeerManager {
     private final List<PeerAddress> bootstrapPeers;
     private final DatabaseSyncCoordinator databaseSync;
     private final ClienteRepository clienteRepository;
-    private final Set<String> localIdentifiers = ConcurrentHashMap.newKeySet();
-    private final Set<String> localHostRepresentations = ConcurrentHashMap.newKeySet();
+    private final LocalAliasRegistry localAliases;
     private final String instanceId;
 
     private volatile boolean running;
@@ -86,8 +85,9 @@ public class ServerPeerManager {
         this.mapper = new ObjectMapper();
         this.mapper.registerModule(new JavaTimeModule());
         this.mapper.disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS);
+        this.localAliases = new LocalAliasRegistry(serverId);
         this.instanceId = UUID.randomUUID().toString();
-        initializeLocalIdentity();
+        this.localAliases.initialize();
     }
 
     public void start() {
@@ -332,7 +332,9 @@ public class ServerPeerManager {
     }
 
     private void registerConnection(PeerConnection connection) {
-        rememberLocalAddress(connection.socket != null ? connection.socket.getLocalAddress() : null);
+        if (connection != null && connection.socket != null) {
+            localAliases.registerAddress(connection.socket.getLocalAddress());
+        }
         connections.add(connection);
         connection.start();
     }
@@ -563,8 +565,9 @@ public class ServerPeerManager {
                 return;
             }
             logIncomingPayload(connection, envelope, json);
-            if (shouldForward(envelope)) {
-                forwardEnvelope(connection, envelope);
+            String target = envelope.getTarget();
+            if (target != null && !target.isBlank() && !localAliases.isLocal(target)) {
+                routeEnvelope(connection, envelope);
                 return;
             }
             switch (type) {
@@ -773,70 +776,6 @@ public class ServerPeerManager {
         return remapped != null ? remapped : effectiveOrigin;
     }
 
-    private boolean shouldForward(PeerEnvelope envelope) {
-        if (envelope == null) {
-            return false;
-        }
-        String target = envelope.getTarget();
-        if (target == null || target.isBlank()) {
-            return false;
-        }
-        if (isLocalTarget(target)) {
-            return false;
-        }
-        return true;
-    }
-
-    private void initializeLocalIdentity() {
-        if (serverId != null && !serverId.isBlank()) {
-            localIdentifiers.add(serverId);
-        }
-        discoverLocalNetworkAddresses();
-    }
-
-    private void discoverLocalNetworkAddresses() {
-        try {
-            Enumeration<NetworkInterface> interfaces = NetworkInterface.getNetworkInterfaces();
-            if (interfaces == null) {
-                return;
-            }
-            for (NetworkInterface networkInterface : Collections.list(interfaces)) {
-                if (networkInterface == null || !networkInterface.isUp()) {
-                    continue;
-                }
-                Enumeration<InetAddress> addresses = networkInterface.getInetAddresses();
-                if (addresses == null) {
-                    continue;
-                }
-                for (InetAddress address : Collections.list(addresses)) {
-                    rememberLocalAddress(address);
-                }
-            }
-        } catch (SocketException e) {
-            LOGGER.log(Level.FINE, "No se pudieron enumerar las direcciones locales para aliases", e);
-        }
-    }
-
-    private void rememberLocalAddress(InetAddress address) {
-        if (address == null || address.isAnyLocalAddress() || address.isLoopbackAddress()
-            || serverId == null || serverId.isBlank()) {
-            return;
-        }
-        String hostAddress = address.getHostAddress();
-        if (hostAddress != null && !hostAddress.isBlank() && localHostRepresentations.add(hostAddress)) {
-            localIdentifiers.add(serverId + "@" + hostAddress);
-        }
-        String hostName = address.getHostName();
-        if (hostName != null && !hostName.isBlank() && localHostRepresentations.add(hostName)) {
-            localIdentifiers.add(serverId + "@" + hostName);
-        }
-        String canonicalHostName = address.getCanonicalHostName();
-        if (canonicalHostName != null && !canonicalHostName.isBlank()
-            && localHostRepresentations.add(canonicalHostName)) {
-            localIdentifiers.add(serverId + "@" + canonicalHostName);
-        }
-    }
-
     private boolean isLocalTarget(String candidate) {
         if (candidate == null || candidate.isBlank()) {
             return false;
@@ -1030,6 +969,87 @@ public class ServerPeerManager {
             addresses.add(new PeerAddress(host, port));
         }
         return addresses;
+    }
+
+    private final class LocalAliasRegistry {
+        private final String baseIdentifier;
+        private final Set<String> identifiers = ConcurrentHashMap.newKeySet();
+        private final Set<String> hostRepresentations = ConcurrentHashMap.newKeySet();
+
+        private LocalAliasRegistry(String baseIdentifier) {
+            this.baseIdentifier = baseIdentifier;
+        }
+
+        private void initialize() {
+            if (baseIdentifier != null && !baseIdentifier.isBlank()) {
+                identifiers.add(baseIdentifier);
+            }
+            discoverNetworkAddresses();
+        }
+
+        private void discoverNetworkAddresses() {
+            try {
+                Enumeration<NetworkInterface> interfaces = NetworkInterface.getNetworkInterfaces();
+                if (interfaces == null) {
+                    return;
+                }
+                for (NetworkInterface networkInterface : Collections.list(interfaces)) {
+                    if (networkInterface == null || !networkInterface.isUp()) {
+                        continue;
+                    }
+                    Enumeration<InetAddress> addresses = networkInterface.getInetAddresses();
+                    if (addresses == null) {
+                        continue;
+                    }
+                    for (InetAddress address : Collections.list(addresses)) {
+                        registerAddress(address);
+                    }
+                }
+            } catch (SocketException e) {
+                LOGGER.log(Level.FINE, "No se pudieron enumerar las direcciones locales para aliases", e);
+            }
+        }
+
+        void registerAddress(InetAddress address) {
+            if (address == null || address.isAnyLocalAddress() || address.isLoopbackAddress()
+                || baseIdentifier == null || baseIdentifier.isBlank()) {
+                return;
+            }
+            registerHostRepresentation(address.getHostAddress());
+            registerHostRepresentation(address.getHostName());
+            registerHostRepresentation(address.getCanonicalHostName());
+        }
+
+        private void registerHostRepresentation(String representation) {
+            if (representation == null || representation.isBlank()) {
+                return;
+            }
+            if (hostRepresentations.add(representation)) {
+                identifiers.add(baseIdentifier + "@" + representation);
+            }
+        }
+
+        boolean isLocal(String candidate) {
+            if (candidate == null || candidate.isBlank()) {
+                return false;
+            }
+            if (identifiers.contains(candidate)) {
+                return true;
+            }
+            int separator = candidate.indexOf('@');
+            if (separator <= 0 || separator >= candidate.length() - 1) {
+                return false;
+            }
+            String hostPart = candidate.substring(separator + 1);
+            if (hostPart.isBlank()) {
+                return false;
+            }
+            if (hostRepresentations.contains(hostPart)) {
+                identifiers.add(candidate);
+                return true;
+            }
+            return false;
+        }
     }
 
     private final class PeerConnection {
