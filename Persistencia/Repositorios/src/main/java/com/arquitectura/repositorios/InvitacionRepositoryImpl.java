@@ -154,23 +154,43 @@ public class InvitacionRepositoryImpl implements InvitacionRepository {
     @Override
     public void updateEstado(Long id, String estado) {
         String sql = "UPDATE invitaciones SET estado = ? WHERE id = ?";
-        
+
         try (Connection conn = dataSource.getConnection();
              PreparedStatement stmt = conn.prepareStatement(sql)) {
-            
+
             stmt.setString(1, estado);
             stmt.setLong(2, id);
-            
+
             stmt.executeUpdate();
         } catch (SQLException e) {
             throw new RuntimeException("Error al actualizar estado de invitación", e);
         }
     }
-    
+
+    @Override
+    public void reactivarInvitacion(Long id, Long invitadorId) {
+        String sql = "UPDATE invitaciones SET invitador_id = ?, fecha_invitacion = CURRENT_TIMESTAMP, estado = 'PENDIENTE' WHERE id = ?";
+
+        try (Connection conn = dataSource.getConnection();
+             PreparedStatement stmt = conn.prepareStatement(sql)) {
+
+            if (invitadorId != null) {
+                stmt.setLong(1, invitadorId);
+            } else {
+                stmt.setNull(1, Types.BIGINT);
+            }
+            stmt.setLong(2, id);
+
+            stmt.executeUpdate();
+        } catch (SQLException e) {
+            throw new RuntimeException("Error al reactivar invitación", e);
+        }
+    }
+
     @Override
     public void delete(Long id) {
         String sql = "DELETE FROM invitaciones WHERE id = ?";
-        
+
         try (Connection conn = dataSource.getConnection();
              PreparedStatement stmt = conn.prepareStatement(sql)) {
             

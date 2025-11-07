@@ -57,6 +57,8 @@ public class ServerPeerManager {
     private final ConnectionRegistry registry;
     private final ObjectMapper mapper;
     private final Map<String, PeerConnection> peers = new ConcurrentHashMap<>();
+    private final Map<String, PeerConnection> peersByAlias = new ConcurrentHashMap<>();
+    private final Map<String, PeerConnection> routeHints = new ConcurrentHashMap<>();
     private final Set<PeerConnection> connections = ConcurrentHashMap.newKeySet();
     private final CopyOnWriteArrayList<PeerStatusListener> peerListeners = new CopyOnWriteArrayList<>();
     private final String serverId;
@@ -66,6 +68,7 @@ public class ServerPeerManager {
     private final ClienteRepository clienteRepository;
     private final LocalAliasRegistry localAliases;
     private final String instanceId;
+    private final String normalizedServerId;
 
     private volatile boolean running;
     private ServerSocket serverSocket;
@@ -87,6 +90,7 @@ public class ServerPeerManager {
         this.mapper.disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS);
         this.localAliases = new LocalAliasRegistry(serverId);
         this.instanceId = UUID.randomUUID().toString();
+        this.normalizedServerId = normalizeServerId(serverId);
         this.localAliases.initialize();
     }
 
@@ -111,6 +115,8 @@ public class ServerPeerManager {
         connections.forEach(PeerConnection::closeSilently);
         connections.clear();
         peers.clear();
+        peersByAlias.clear();
+        routeHints.clear();
     }
 
     public Set<String> connectedPeerIds() {
@@ -265,7 +271,7 @@ public class ServerPeerManager {
 
         String target = envelope.getTarget();
         if (target != null) {
-            PeerConnection direct = peers.get(target);
+            PeerConnection direct = findPeerConnection(target);
             if (direct != null && direct != source) {
                 direct.send(envelope);
                 return;
@@ -294,6 +300,131 @@ public class ServerPeerManager {
             LOGGER.fine(() -> "No se encontró ruta para mensaje " + envelope.getType()
                 + " con destino " + target);
         }
+    }
+
+    private PeerConnection findPeerConnection(String target) {
+        if (target == null) {
+            return null;
+        }
+        PeerConnection direct = peers.get(target);
+        if (direct != null) {
+            return direct;
+        }
+        String normalized = normalizeServerId(target);
+        if (normalized == null) {
+            return null;
+        }
+        PeerConnection alias = peersByAlias.get(normalized);
+        if (alias != null) {
+            return alias;
+        }
+        PeerConnection hinted = routeHints.get(normalized);
+        if (hinted != null) {
+            return hinted;
+        }
+        int separator = target.indexOf('@');
+        if (separator > 0) {
+            String prefix = target.substring(0, separator);
+            alias = peersByAlias.get(normalizeServerId(prefix));
+            if (alias != null) {
+                return alias;
+            }
+            String suffix = target.substring(separator + 1);
+            alias = peersByAlias.get(normalizeServerId(suffix));
+            if (alias != null) {
+                return alias;
+            }
+        }
+        return null;
+    }
+
+    private void registerPeerAliases(PeerConnection connection) {
+        if (connection == null) {
+            return;
+        }
+        unregisterPeerAliases(connection);
+        registerPeerAlias(connection, connection.getRemoteServerId());
+        registerPeerAlias(connection, connection.getAnnouncedServerId());
+        registerPeerAlias(connection, connection.getRemoteInstanceId());
+    }
+
+    private void registerPeerAlias(PeerConnection connection, String identifier) {
+        String normalized = normalizeServerId(identifier);
+        if (normalized == null) {
+            return;
+        }
+        peersByAlias.put(normalized, connection);
+        registerRouteHint(connection, identifier);
+        int separator = identifier.indexOf('@');
+        if (separator > 0) {
+            String prefix = identifier.substring(0, separator);
+            String suffix = identifier.substring(separator + 1);
+            String normalizedPrefix = normalizeServerId(prefix);
+            if (normalizedPrefix != null) {
+                peersByAlias.putIfAbsent(normalizedPrefix, connection);
+                registerRouteHintIdentifier(connection, normalizedPrefix);
+            }
+            String normalizedSuffix = normalizeServerId(suffix);
+            if (normalizedSuffix != null) {
+                peersByAlias.putIfAbsent(normalizedSuffix, connection);
+                registerRouteHintIdentifier(connection, normalizedSuffix);
+            }
+        }
+    }
+
+    private void unregisterPeerAliases(PeerConnection connection) {
+        if (connection == null) {
+            return;
+        }
+        peersByAlias.entrySet().removeIf(entry -> entry.getValue() == connection);
+    }
+
+    private void registerRouteHint(PeerConnection connection, String identifier) {
+        if (connection == null) {
+            return;
+        }
+        String normalized = normalizeServerId(identifier);
+        registerRouteHintIdentifier(connection, normalized);
+        if (identifier == null) {
+            return;
+        }
+        int separator = identifier.indexOf('@');
+        if (separator > 0) {
+            registerRouteHintIdentifier(connection, normalizeServerId(identifier.substring(0, separator)));
+            registerRouteHintIdentifier(connection, normalizeServerId(identifier.substring(separator + 1)));
+        }
+    }
+
+    private void registerRouteHintIdentifier(PeerConnection connection, String normalized) {
+        if (normalized == null || normalized.isBlank()) {
+            return;
+        }
+        if (normalizedServerId != null && normalizedServerId.equals(normalized)) {
+            return;
+        }
+        PeerConnection direct = peersByAlias.get(normalized);
+        if (direct != null && direct != connection) {
+            return;
+        }
+        routeHints.put(normalized, connection);
+    }
+
+    private void unregisterRouteHints(PeerConnection connection) {
+        if (connection == null) {
+            return;
+        }
+        routeHints.entrySet().removeIf(entry -> entry.getValue() == connection);
+    }
+
+    private String normalizeServerId(String identifier) {
+        if (identifier == null) {
+            return null;
+        }
+        String trimmed = identifier.trim();
+        if (trimmed.isEmpty()) {
+            return null;
+        }
+        return trimmed.toLowerCase(Locale.ROOT);
     }
 
     private void startAcceptor() {
@@ -358,8 +489,12 @@ public class ServerPeerManager {
         }
         PeerConnection previous = peers.put(remoteId, connection);
         if (previous != null && previous != connection) {
+            unregisterPeerAliases(previous);
+            unregisterRouteHints(previous);
             previous.closeSilently();
         }
+        registerPeerAliases(connection);
+        registerRouteHint(connection, remoteId);
         LOGGER.info(() -> String.format(
             "Conexión P2P establecida con servidor %s (%s, %s desde %s)",
             remoteId,
@@ -367,15 +502,21 @@ public class ServerPeerManager {
             connection.isInitiator() ? "iniciada" : "entrante",
             connection.remoteSummary()
         ));
+        registry.markServerKnown(remoteId);
         LOGGER.info(() -> "Sincronizando con servidor " + remoteId);
-        sendSyncState(connection);
+        JsonNode syncPayload = sendSyncState(connection);
+        broadcastRoutingUpdate(connection, syncPayload);
         notifyPeerConnected(remoteId);
     }
 
     private String resolveRemoteId(PeerConnection connection, String announcedId) {
         String trimmed = announcedId != null ? announcedId.trim() : null;
         if (trimmed == null || trimmed.isEmpty()) {
-            String fallback = connection.fallbackIdentifier("peer");
+            String base = chooseAliasBase(connection, null);
+            String fallbackCandidate = connection != null
+                ? connection.fallbackIdentifier(base)
+                : base;
+            String fallback = ensureUniqueRemoteId(connection, fallbackCandidate);
             LOGGER.warning(() -> String.format(
                 "Servidor remoto %s no envió un identificador válido. Se usará identificador alterno %s.",
                 connection.remoteSummary(),
@@ -384,7 +525,11 @@ public class ServerPeerManager {
             return fallback;
         }
         if (trimmed.equals(serverId)) {
-            String fallback = connection.fallbackIdentifier(trimmed);
+            String base = chooseAliasBase(connection, trimmed);
+            String fallbackCandidate = connection != null
+                ? connection.fallbackIdentifier(base)
+                : base;
+            String fallback = ensureUniqueRemoteId(connection, fallbackCandidate);
             LOGGER.warning(() -> String.format(
                 "Servidor remoto %s anunció el mismo ID (%s) que este servidor. Se utilizará identificador alterno %s.",
                 connection.remoteSummary(),
@@ -393,13 +538,165 @@ public class ServerPeerManager {
             ));
             return fallback;
         }
+        String unique = ensureUniqueRemoteId(connection, trimmed);
+        if (!unique.equals(trimmed)) {
+            String original = trimmed;
+            LOGGER.warning(() -> String.format(
+                "El identificador remoto %s de %s ya está en uso. Se asignó identificador alterno %s.",
+                original,
+                connection.remoteSummary(),
+                unique
+            ));
+        }
+        return unique;
+    }
+
+    private String ensureUniqueRemoteId(PeerConnection connection, String candidate) {
+        String current = candidate != null ? candidate.trim() : null;
+        if (current == null || current.isEmpty()) {
+            String aliasBase = chooseAliasBase(connection, null);
+            current = connection != null ? connection.fallbackIdentifier(aliasBase) : aliasBase;
+        }
+        String aliasBase = chooseAliasBase(connection, extractBaseIdentifier(current));
+        int attempts = 0;
+        while (true) {
+            String normalized = normalizeServerId(current);
+            boolean conflict = normalized == null
+                || normalized.equals(normalizedServerId)
+                || isRemoteIdentifierInUse(current, normalized, connection);
+            if (!conflict) {
+                return current;
+            }
+            String nextBase = aliasBase;
+            if (attempts > 0) {
+                nextBase = aliasBase + '-' + attempts;
+            }
+            current = connection != null ? connection.fallbackIdentifier(nextBase) : nextBase;
+            attempts++;
+            if (attempts > 8) {
+                String randomBase = aliasBase + '-' + UUID.randomUUID();
+                current = connection != null ? connection.fallbackIdentifier(randomBase) : randomBase;
+            }
+        }
+    }
+
+    private String extractBaseIdentifier(String identifier) {
+        if (identifier == null) {
+            return null;
+        }
+        String trimmed = identifier.trim();
+        if (trimmed.isEmpty()) {
+            return null;
+        }
+        int separator = trimmed.indexOf('@');
+        if (separator > 0) {
+            return trimmed.substring(0, separator);
+        }
         return trimmed;
     }
 
-    private void sendSyncState(PeerConnection connection) {
-        if (connection.getRemoteServerId() == null) {
-            return;
+    private String chooseAliasBase(PeerConnection connection, String preferredBase) {
+        String sanitizedPreferred = sanitizeAliasBase(preferredBase);
+        String normalizedPreferred = normalizeServerId(sanitizedPreferred);
+        if (normalizedPreferred != null && normalizedPreferred.equals(normalizedServerId)) {
+            sanitizedPreferred = null;
         }
+        if (sanitizedPreferred != null) {
+            return sanitizedPreferred;
+        }
+        if (connection != null) {
+            String suggestion = connection.suggestAliasBase(serverId);
+            String sanitizedSuggestion = sanitizeAliasBase(suggestion);
+            if (sanitizedSuggestion != null) {
+                return sanitizedSuggestion;
+            }
+        }
+        if (serverId != null && !serverId.isBlank()) {
+            String sanitizedLocal = sanitizeAliasBase(serverId + "-peer");
+            String normalizedLocal = normalizeServerId(sanitizedLocal);
+            if (sanitizedLocal != null && (normalizedLocal == null || !normalizedLocal.equals(normalizedServerId))) {
+                return sanitizedLocal;
+            }
+        }
+        return "peer";
+    }
+
+    private String sanitizeAliasBase(String candidate) {
+        if (candidate == null) {
+            return null;
+        }
+        String trimmed = candidate.trim();
+        if (trimmed.isEmpty()) {
+            return null;
+        }
+        StringBuilder sanitized = new StringBuilder(trimmed.length());
+        boolean lastSeparator = false;
+        for (char ch : trimmed.toCharArray()) {
+            char lower = Character.toLowerCase(ch);
+            if (Character.isLetterOrDigit(lower)) {
+                sanitized.append(lower);
+                lastSeparator = false;
+            } else if (lower == '-' || lower == '_') {
+                sanitized.append(lower);
+                lastSeparator = false;
+            } else if (!lastSeparator) {
+                sanitized.append('-');
+                lastSeparator = true;
+            }
+        }
+        int start = 0;
+        int end = sanitized.length();
+        while (start < end && (sanitized.charAt(start) == '-' || sanitized.charAt(start) == '_')) {
+            start++;
+        }
+        while (end > start && (sanitized.charAt(end - 1) == '-' || sanitized.charAt(end - 1) == '_')) {
+            end--;
+        }
+        if (end <= start) {
+            return null;
+        }
+        return sanitized.substring(start, end);
+    }
+
+    private boolean isRemoteIdentifierInUse(String identifier, String normalized, PeerConnection candidateConnection) {
+        if (identifier != null) {
+            PeerConnection existing = peers.get(identifier);
+            if (existing != null && existing != candidateConnection && !isSameRemote(existing, candidateConnection)) {
+                return true;
+            }
+        }
+        if (normalized == null || normalized.isBlank()) {
+            return false;
+        }
+        PeerConnection aliasPeer = peersByAlias.get(normalized);
+        return aliasPeer != null && aliasPeer != candidateConnection && !isSameRemote(aliasPeer, candidateConnection);
+    }
+
+    private boolean isSameRemote(PeerConnection first, PeerConnection second) {
+        if (first == null || second == null || first.socket == null || second.socket == null) {
+            return false;
+        }
+        InetAddress addressFirst = first.socket.getInetAddress();
+        InetAddress addressSecond = second.socket.getInetAddress();
+        if (addressFirst != null && addressFirst.equals(addressSecond)) {
+            return true;
+        }
+        return Objects.equals(first.socket.getRemoteSocketAddress(), second.socket.getRemoteSocketAddress());
+    }
+
+    private JsonNode sendSyncState(PeerConnection connection) {
+        if (connection.getRemoteServerId() == null) {
+            return null;
+        }
+        JsonNode payload = createSyncStatePayload();
+        if (payload == null) {
+            return null;
+        }
+        connection.send(new PeerEnvelope(PeerMessageType.SYNC_STATE, serverId, payload));
+        return payload;
+    }
+
+    private JsonNode createSyncStatePayload() {
         SyncStatePayload payload = new SyncStatePayload();
         payload.setServers(registry.snapshotSessionsByServer());
         if (databaseSync != null) {
@@ -409,7 +706,20 @@ public class ServerPeerManager {
                 LOGGER.log(Level.WARNING, "Error capturando snapshot de base de datos para sincronización", e);
             }
         }
-        connection.send(new PeerEnvelope(PeerMessageType.SYNC_STATE, serverId, mapper.valueToTree(payload)));
+        return mapper.valueToTree(payload);
+    }
+
+    private void broadcastRoutingUpdate(PeerConnection excluded, JsonNode payload) {
+        if (payload == null) {
+            return;
+        }
+        for (PeerConnection peer : peers.values()) {
+            if (peer == excluded) {
+                continue;
+            }
+            JsonNode copy = payload.deepCopy();
+            peer.send(new PeerEnvelope(PeerMessageType.SYNC_STATE, serverId, copy));
+        }
     }
 
     private String resolveRemoteServerAlias(PeerConnection connection, String declaredServerId) {
@@ -424,6 +734,27 @@ public class ServerPeerManager {
             return remoteAlias;
         }
         return declaredServerId;
+    }
+
+    private String resolveSnapshotServerId(PeerConnection connection, String declaredServerId, String fallbackAlias) {
+        String normalizedDeclared = normalizeServerId(declaredServerId);
+        if (normalizedDeclared == null || normalizedDeclared.equals(normalizedServerId)) {
+            String normalizedFallback = normalizeServerId(fallbackAlias);
+            if (normalizedFallback != null && !normalizedFallback.equals(normalizedServerId)) {
+                return fallbackAlias;
+            }
+            if (connection != null) {
+                String remoteAlias = connection.getRemoteServerId();
+                String normalizedRemote = normalizeServerId(remoteAlias);
+                if (normalizedRemote != null && !normalizedRemote.equals(normalizedServerId)) {
+                    return remoteAlias;
+                }
+            }
+        }
+        if (declaredServerId != null) {
+            return declaredServerId;
+        }
+        return fallbackAlias;
     }
 
     private List<RemoteSessionSnapshot> remapSnapshotsForServer(List<RemoteSessionSnapshot> snapshots, String serverId) {
@@ -565,6 +896,9 @@ public class ServerPeerManager {
                 return;
             }
             logIncomingPayload(connection, envelope, json);
+            if (connection != null) {
+                registerRouteHint(connection, envelope.getOrigin());
+            }
             String target = envelope.getTarget();
             if (target != null && !target.isBlank() && !localAliases.isLocal(target)) {
                 routeEnvelope(connection, envelope);
@@ -603,6 +937,11 @@ public class ServerPeerManager {
 
         boolean updated = false;
         boolean dbChanged = false;
+        ObjectNode serversNode = null;
+        JsonNode rawPayload = envelope.getPayload();
+        if (rawPayload instanceof ObjectNode objectNode && objectNode.has("servers") && objectNode.get("servers").isObject()) {
+            serversNode = (ObjectNode) objectNode.get("servers");
+        }
         if (hasServers) {
             for (Map.Entry<String, List<RemoteSessionSnapshot>> entry : sync.getServers().entrySet()) {
                 String declaredServerId = entry.getKey();
@@ -610,8 +949,13 @@ public class ServerPeerManager {
                 if (effectiveServerId == null || effectiveServerId.equals(serverId)) {
                     continue;
                 }
-                List<RemoteSessionSnapshot> remapped = remapSnapshotsForServer(entry.getValue(), effectiveServerId);
-                updated |= registry.registerRemoteSessions(effectiveServerId, remapped);
+                List<RemoteSessionSnapshot> remap = remapSnapshotsForServer(entry.getValue(), effectiveServerId);
+                if (serversNode != null && declaredServerId != null && !declaredServerId.equals(effectiveServerId)) {
+                    serversNode.remove(declaredServerId);
+                    serversNode.set(effectiveServerId, mapper.valueToTree(remap));
+                }
+                updated |= registry.registerRemoteSessions(effectiveServerId, remap);
+                registerRouteHint(connection, effectiveServerId);
             }
         }
         if (hasDatabase && databaseSync != null) {
@@ -634,8 +978,14 @@ public class ServerPeerManager {
         RemoteSessionSnapshot snapshot = mapper.treeToValue(envelope.getPayload(), RemoteSessionSnapshot.class);
         String fallbackId = resolveRemoteServerAlias(connection,
             envelope.getOrigin() != null ? envelope.getOrigin() : connection.getRemoteServerId());
+        registerRouteHint(connection, fallbackId);
         if (snapshot != null) {
-            snapshot.setServerId(resolveRemoteServerAlias(connection, snapshot.getServerId()));
+            String resolvedServer = resolveSnapshotServerId(connection, snapshot.getServerId(), fallbackId);
+            snapshot.setServerId(resolvedServer);
+            JsonNode payloadNode = envelope.getPayload();
+            if (payloadNode instanceof ObjectNode objectNode && resolvedServer != null) {
+                objectNode.put("serverId", resolvedServer);
+            }
         }
         boolean updated = registry.registerRemoteSession(fallbackId, snapshot);
         if (updated) {
@@ -650,6 +1000,7 @@ public class ServerPeerManager {
         }
         String fallbackId = resolveRemoteServerAlias(connection,
             envelope.getOrigin() != null ? envelope.getOrigin() : connection.getRemoteServerId());
+        registerRouteHint(connection, fallbackId);
         boolean removed = registry.removeRemoteSession(fallbackId, data.getSessionId(), data.getClienteId());
         if (removed) {
             relayStateUpdate(connection, PeerMessageType.CLIENT_DISCONNECTED, envelope.getPayload(), envelope.getOrigin());
@@ -663,7 +1014,9 @@ public class ServerPeerManager {
         }
         String fallbackId = resolveRemoteServerAlias(connection,
             envelope.getOrigin() != null ? envelope.getOrigin() : connection.getRemoteServerId());
-        boolean changed = registry.updateRemoteChannel(fallbackId, update.getSessionId(), update.getCanalId(),
+        registerRouteHint(connection, fallbackId);
+        boolean changed = registry.updateRemoteChannel(fallbackId,
+            update.getSessionId(), update.getCanalId(),
             "JOIN".equalsIgnoreCase(update.getAction()));
         if (changed) {
             relayStateUpdate(connection, PeerMessageType.CHANNEL_MEMBERSHIP, envelope.getPayload(), envelope.getOrigin());
@@ -783,6 +1136,8 @@ public class ServerPeerManager {
         String remoteId = connection.getRemoteServerId();
         if (remoteId != null) {
             boolean removed = peers.remove(remoteId, connection);
+            unregisterPeerAliases(connection);
+            unregisterRouteHints(connection);
             List<RemoteSessionSnapshot> drained = registry.drainRemoteSessions(remoteId);
             registry.forgetRemoteServer(remoteId);
             if (!drained.isEmpty()) {
@@ -917,22 +1272,39 @@ public class ServerPeerManager {
         }
 
         boolean isLocal(String candidate) {
-            if (candidate == null || candidate.isBlank()) {
+            if (candidate == null) {
                 return false;
             }
-            if (identifiers.contains(candidate)) {
+            String trimmed = candidate.trim();
+            if (trimmed.isEmpty()) {
+                return false;
+            }
+            if (identifiers.contains(trimmed)) {
                 return true;
             }
-            int separator = candidate.indexOf('@');
-            if (separator <= 0 || separator >= candidate.length() - 1) {
+            if (baseIdentifier != null && baseIdentifier.equalsIgnoreCase(trimmed)) {
+                identifiers.add(trimmed);
+                return true;
+            }
+            int separator = trimmed.indexOf('@');
+            if (separator <= 0 || separator >= trimmed.length() - 1) {
                 return false;
             }
-            String hostPart = candidate.substring(separator + 1);
+            String prefix = trimmed.substring(0, separator);
+            String hostPart = trimmed.substring(separator + 1);
             if (hostPart.isBlank()) {
                 return false;
             }
-            if (hostRepresentations.contains(hostPart)) {
-                identifiers.add(candidate);
+            for (String knownHost : hostRepresentations) {
+                if (knownHost.equalsIgnoreCase(hostPart)) {
+                    identifiers.add(trimmed);
+                    registerHostRepresentation(hostPart);
+                    return true;
+                }
+            }
+            if (baseIdentifier != null && baseIdentifier.equalsIgnoreCase(prefix)) {
+                registerHostRepresentation(hostPart);
+                identifiers.add(trimmed);
                 return true;
             }
             return false;
@@ -1039,6 +1411,7 @@ public class ServerPeerManager {
                 remoteInstanceId = resolvedId;
             }
             helloReceived = true;
+            registerPeerAliases(this);
             if (!helloSent) {
                 sendHello();
             } else {
@@ -1049,6 +1422,7 @@ public class ServerPeerManager {
         private void setRemoteInstanceId(String remoteInstanceId) {
             if (remoteInstanceId != null && !remoteInstanceId.isBlank()) {
                 this.remoteInstanceId = remoteInstanceId;
+                registerPeerAliases(this);
             }
         }
 
@@ -1086,6 +1460,14 @@ public class ServerPeerManager {
 
         private String getRemoteServerId() {
             return remoteServerId;
+        }
+
+        private String getAnnouncedServerId() {
+            return announcedServerId;
+        }
+
+        private String getRemoteInstanceId() {
+            return remoteInstanceId;
         }
 
         private boolean isInitiator() {
@@ -1137,15 +1519,75 @@ public class ServerPeerManager {
                 .map(inet -> inet.getHostAddress() != null ? inet.getHostAddress() : inet.getHostName())
                 .filter(addr -> !addr.isBlank())
                 .orElse(remoteSummary());
-            String sanitizedBase = (base != null && !base.isBlank()) ? base : "peer";
+            String sanitizedBase = ServerPeerManager.this.sanitizeAliasBase(base);
+            if (sanitizedBase == null) {
+                sanitizedBase = "peer";
+            }
             return sanitizedBase + "@" + host;
+        }
+
+        private String suggestAliasBase(String localServerId) {
+            InetAddress address = socket != null ? socket.getInetAddress() : null;
+            String host = null;
+            if (address != null) {
+                String hostName = address.getHostName();
+                String hostAddress = address.getHostAddress();
+                if (hostName != null && !hostName.isBlank() && !hostName.equals(hostAddress)) {
+                    host = hostName;
+                } else {
+                    host = hostAddress;
+                }
+            }
+            String sanitizedHost = ServerPeerManager.this.sanitizeAliasBase(host);
+            String normalizedLocal = ServerPeerManager.this.normalizeServerId(localServerId);
+            if (sanitizedHost != null) {
+                String normalizedHost = ServerPeerManager.this.normalizeServerId(sanitizedHost);
+                if (normalizedLocal != null && normalizedLocal.equals(normalizedHost)) {
+                    sanitizedHost = ServerPeerManager.this.sanitizeAliasBase(sanitizedHost + "-peer");
+                }
+                if (sanitizedHost != null) {
+                    return sanitizedHost;
+                }
+            }
+            String sanitizedSummary = ServerPeerManager.this.sanitizeAliasBase(remoteSummary());
+            if (sanitizedSummary != null) {
+                String normalizedSummary = ServerPeerManager.this.normalizeServerId(sanitizedSummary);
+                if (normalizedLocal != null && normalizedLocal.equals(normalizedSummary)) {
+                    sanitizedSummary = ServerPeerManager.this.sanitizeAliasBase(sanitizedSummary + "-peer");
+                }
+                if (sanitizedSummary != null) {
+                    return sanitizedSummary;
+                }
+            }
+            if (localServerId != null && !localServerId.isBlank()) {
+                String fallback = ServerPeerManager.this.sanitizeAliasBase(localServerId + "-peer");
+                if (fallback != null) {
+                    return fallback;
+                }
+            }
+            return "peer";
         }
 
         private boolean matchesIdentity(String candidate) {
             if (candidate == null) {
                 return false;
             }
-            return candidate.equals(remoteServerId) || candidate.equals(announcedServerId);
+            String normalized = normalizeServerId(candidate);
+            if (normalized == null) {
+                return false;
+            }
+            if (matchesNormalized(normalized, remoteServerId)) {
+                return true;
+            }
+            if (matchesNormalized(normalized, announcedServerId)) {
+                return true;
+            }
+            return matchesNormalized(normalized, remoteInstanceId);
+        }
+
+        private boolean matchesNormalized(String normalizedCandidate, String identifier) {
+            String normalizedIdentifier = normalizeServerId(identifier);
+            return normalizedIdentifier != null && normalizedIdentifier.equals(normalizedCandidate);
         }
     }
 
