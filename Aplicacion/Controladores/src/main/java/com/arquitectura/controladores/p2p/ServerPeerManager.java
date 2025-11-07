@@ -759,18 +759,108 @@ public class ServerPeerManager {
         if (payload == null) {
             return;
         }
-        String effectiveOrigin = origin != null ? origin : serverId;
-        JsonNode copy = payload.deepCopy();
-        PeerEnvelope envelope = new PeerEnvelope(type, effectiveOrigin, copy);
-        for (PeerConnection peer : peers.values()) {
-            if (peer == source) {
-                continue;
-            }
-            if (effectiveOrigin != null && peer.matchesIdentity(effectiveOrigin)) {
-                continue;
-            }
-            peer.send(envelope);
+        String effectiveOrigin = resolveEffectiveOrigin(source, origin);
+        PeerEnvelope envelope = new PeerEnvelope(type, effectiveOrigin, payload.deepCopy());
+        routeEnvelope(source, envelope);
+    }
+
+    private String resolveEffectiveOrigin(PeerConnection source, String origin) {
+        String effectiveOrigin = (origin == null || origin.isBlank()) ? serverId : origin;
+        if (source == null) {
+            return effectiveOrigin;
         }
+        String remapped = resolveRemoteServerAlias(source, effectiveOrigin);
+        return remapped != null ? remapped : effectiveOrigin;
+    }
+
+    private boolean shouldForward(PeerEnvelope envelope) {
+        if (envelope == null) {
+            return false;
+        }
+        String target = envelope.getTarget();
+        if (target == null || target.isBlank()) {
+            return false;
+        }
+        if (isLocalTarget(target)) {
+            return false;
+        }
+        return true;
+    }
+
+    private void initializeLocalIdentity() {
+        if (serverId != null && !serverId.isBlank()) {
+            localIdentifiers.add(serverId);
+        }
+        discoverLocalNetworkAddresses();
+    }
+
+    private void discoverLocalNetworkAddresses() {
+        try {
+            Enumeration<NetworkInterface> interfaces = NetworkInterface.getNetworkInterfaces();
+            if (interfaces == null) {
+                return;
+            }
+            for (NetworkInterface networkInterface : Collections.list(interfaces)) {
+                if (networkInterface == null || !networkInterface.isUp()) {
+                    continue;
+                }
+                Enumeration<InetAddress> addresses = networkInterface.getInetAddresses();
+                if (addresses == null) {
+                    continue;
+                }
+                for (InetAddress address : Collections.list(addresses)) {
+                    rememberLocalAddress(address);
+                }
+            }
+        } catch (SocketException e) {
+            LOGGER.log(Level.FINE, "No se pudieron enumerar las direcciones locales para aliases", e);
+        }
+    }
+
+    private void rememberLocalAddress(InetAddress address) {
+        if (address == null || address.isAnyLocalAddress() || address.isLoopbackAddress()
+            || serverId == null || serverId.isBlank()) {
+            return;
+        }
+        String hostAddress = address.getHostAddress();
+        if (hostAddress != null && !hostAddress.isBlank() && localHostRepresentations.add(hostAddress)) {
+            localIdentifiers.add(serverId + "@" + hostAddress);
+        }
+        String hostName = address.getHostName();
+        if (hostName != null && !hostName.isBlank() && localHostRepresentations.add(hostName)) {
+            localIdentifiers.add(serverId + "@" + hostName);
+        }
+        String canonicalHostName = address.getCanonicalHostName();
+        if (canonicalHostName != null && !canonicalHostName.isBlank()
+            && localHostRepresentations.add(canonicalHostName)) {
+            localIdentifiers.add(serverId + "@" + canonicalHostName);
+        }
+    }
+
+    private boolean isLocalTarget(String candidate) {
+        if (candidate == null || candidate.isBlank()) {
+            return false;
+        }
+        if (localIdentifiers.contains(candidate)) {
+            return true;
+        }
+        int separator = candidate.indexOf('@');
+        if (separator <= 0 || separator >= candidate.length() - 1) {
+            return false;
+        }
+        String hostPart = candidate.substring(separator + 1);
+        if (hostPart.isBlank()) {
+            return false;
+        }
+        if (localHostRepresentations.contains(hostPart)) {
+            localIdentifiers.add(candidate);
+            return true;
+        }
+        return false;
+    }
+
+    private void forwardEnvelope(PeerConnection source, PeerEnvelope envelope) {
+        routeEnvelope(source, envelope);
     }
 
     private boolean shouldForward(PeerEnvelope envelope) {
