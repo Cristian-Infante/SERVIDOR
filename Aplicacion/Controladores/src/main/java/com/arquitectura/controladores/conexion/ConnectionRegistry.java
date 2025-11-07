@@ -401,11 +401,14 @@ public class ConnectionRegistry implements ConnectionGateway {
         if (snapshot == null || snapshot.getSessionId() == null) {
             return false;
         }
-        String effectiveServerId = snapshot.getServerId();
-        if (effectiveServerId == null || effectiveServerId.isBlank()) {
-            effectiveServerId = fallbackServerId;
+        String effectiveServerId = normalizeServerId(snapshot.getServerId());
+        if (effectiveServerId == null || effectiveServerId.isBlank() || effectiveServerId.equals(localServerId)) {
+            effectiveServerId = normalizeServerId(fallbackServerId);
         }
-        if (effectiveServerId == null || effectiveServerId.equals(localServerId)) {
+        if (effectiveServerId == null || effectiveServerId.isBlank() || effectiveServerId.equals(localServerId)) {
+            effectiveServerId = resolveKnownAlias(snapshot, fallbackServerId);
+        }
+        if (effectiveServerId == null || effectiveServerId.isBlank() || effectiveServerId.equals(localServerId)) {
             return false;
         }
 
@@ -534,6 +537,63 @@ public class ConnectionRegistry implements ConnectionGateway {
             && Objects.equals(a.getUsuario(), b.getUsuario())
             && Objects.equals(a.getIp(), b.getIp())
             && Objects.equals(new HashSet<>(a.getCanales()), new HashSet<>(b.getCanales()));
+    }
+
+    private String normalizeServerId(String serverId) {
+        if (serverId == null) {
+            return null;
+        }
+        String trimmed = serverId.trim();
+        return trimmed.isEmpty() ? null : trimmed;
+    }
+
+    private String resolveKnownAlias(RemoteSessionSnapshot snapshot, String fallbackServerId) {
+        String host = extractHost(snapshot != null ? snapshot.getIp() : null);
+        if (host == null) {
+            host = extractAliasHost(fallbackServerId);
+        }
+        if (host == null) {
+            return null;
+        }
+        for (String candidate : knownRemoteServers) {
+            if (candidate == null || candidate.isBlank() || candidate.equals(localServerId)) {
+                continue;
+            }
+            String candidateHost = extractAliasHost(candidate);
+            if (candidateHost != null && candidateHost.equalsIgnoreCase(host)) {
+                return candidate;
+            }
+        }
+        return null;
+    }
+
+    private String extractAliasHost(String serverId) {
+        if (serverId == null) {
+            return null;
+        }
+        int separator = serverId.indexOf('@');
+        if (separator < 0 || separator == serverId.length() - 1) {
+            return null;
+        }
+        return extractHost(serverId.substring(separator + 1));
+    }
+
+    private String extractHost(String value) {
+        if (value == null) {
+            return null;
+        }
+        String trimmed = value.trim();
+        if (trimmed.isEmpty()) {
+            return null;
+        }
+        if (trimmed.startsWith("/")) {
+            trimmed = trimmed.substring(1);
+        }
+        int separator = trimmed.indexOf(':');
+        if (separator >= 0) {
+            trimmed = trimmed.substring(0, separator);
+        }
+        return trimmed.isEmpty() ? null : trimmed;
     }
 
     private RemoteSessionSnapshot toSnapshot(SessionDescriptor descriptor) {
