@@ -9,12 +9,14 @@ import java.sql.*;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
+import java.util.UUID;
 
 /**
  * Expected schema snippet:
  * <pre>
  * CREATE TABLE canales (
  *   id BIGINT AUTO_INCREMENT PRIMARY KEY,
+ *   uuid CHAR(36) NOT NULL UNIQUE,
  *   nombre VARCHAR(160) NOT NULL,
  *   privado TINYINT(1) NOT NULL
  * );
@@ -34,6 +36,12 @@ public class JdbcCanalRepository extends JdbcSupport implements CanalRepository 
 
     @Override
     public Canal save(Canal canal) {
+        if (canal == null) {
+            throw new IllegalArgumentException("canal no puede ser null");
+        }
+        if (canal.getUuid() == null || canal.getUuid().isBlank()) {
+            canal.setUuid(UUID.randomUUID().toString());
+        }
         if (canal.getId() == null) {
             return insert(canal);
         }
@@ -41,11 +49,12 @@ public class JdbcCanalRepository extends JdbcSupport implements CanalRepository 
     }
 
     private Canal insert(Canal canal) {
-        String sql = "INSERT INTO canales(nombre, privado) VALUES(?,?)";
+        String sql = "INSERT INTO canales(uuid, nombre, privado) VALUES(?,?,?)";
         try (Connection conn = getConnection();
              PreparedStatement ps = conn.prepareStatement(sql, Statement.RETURN_GENERATED_KEYS)) {
-            ps.setString(1, canal.getNombre());
-            ps.setBoolean(2, Boolean.TRUE.equals(canal.getPrivado()));
+            ps.setString(1, canal.getUuid());
+            ps.setString(2, canal.getNombre());
+            ps.setBoolean(3, Boolean.TRUE.equals(canal.getPrivado()));
             ps.executeUpdate();
             try (ResultSet rs = ps.getGeneratedKeys()) {
                 if (rs.next()) {
@@ -66,6 +75,8 @@ public class JdbcCanalRepository extends JdbcSupport implements CanalRepository 
             ps.setBoolean(2, Boolean.TRUE.equals(canal.getPrivado()));
             ps.setLong(3, canal.getId());
             ps.executeUpdate();
+            String currentUuid = fetchUuid(conn, canal.getId());
+            canal.setUuid(ensureUuid(conn, canal.getId(), currentUuid, canal.getUuid()));
             return canal;
         } catch (SQLException e) {
             throw new IllegalStateException("Error updating channel", e);
@@ -74,17 +85,13 @@ public class JdbcCanalRepository extends JdbcSupport implements CanalRepository 
 
     @Override
     public Optional<Canal> findById(Long id) {
-        String sql = "SELECT id, nombre, privado FROM canales WHERE id=?";
+        String sql = "SELECT id, uuid, nombre, privado FROM canales WHERE id=?";
         try (Connection conn = getConnection();
              PreparedStatement ps = conn.prepareStatement(sql)) {
             ps.setLong(1, id);
             try (ResultSet rs = ps.executeQuery()) {
                 if (rs.next()) {
-                    Canal canal = new Canal();
-                    canal.setId(rs.getLong("id"));
-                    canal.setNombre(rs.getString("nombre"));
-                    canal.setPrivado(rs.getBoolean("privado"));
-                    return Optional.of(canal);
+                    return Optional.of(mapCanal(conn, rs));
                 }
             }
         } catch (SQLException e) {
@@ -94,18 +101,31 @@ public class JdbcCanalRepository extends JdbcSupport implements CanalRepository 
     }
 
     @Override
+    public Optional<Canal> findByUuid(String uuid) {
+        String sql = "SELECT id, uuid, nombre, privado FROM canales WHERE uuid=?";
+        try (Connection conn = getConnection();
+             PreparedStatement ps = conn.prepareStatement(sql)) {
+            ps.setString(1, uuid);
+            try (ResultSet rs = ps.executeQuery()) {
+                if (rs.next()) {
+                    return Optional.of(mapCanal(conn, rs));
+                }
+            }
+        } catch (SQLException e) {
+            throw new IllegalStateException("Error finding channel by uuid", e);
+        }
+        return Optional.empty();
+    }
+
+    @Override
     public List<Canal> findAll() {
-        String sql = "SELECT id, nombre, privado FROM canales";
+        String sql = "SELECT id, uuid, nombre, privado FROM canales";
         List<Canal> result = new ArrayList<>();
         try (Connection conn = getConnection();
              PreparedStatement ps = conn.prepareStatement(sql);
              ResultSet rs = ps.executeQuery()) {
             while (rs.next()) {
-                Canal canal = new Canal();
-                canal.setId(rs.getLong("id"));
-                canal.setNombre(rs.getString("nombre"));
-                canal.setPrivado(rs.getBoolean("privado"));
-                result.add(canal);
+                result.add(mapCanal(conn, rs));
             }
         } catch (SQLException e) {
             throw new IllegalStateException("Error listing channels", e);
@@ -164,5 +184,63 @@ public class JdbcCanalRepository extends JdbcSupport implements CanalRepository 
         } catch (SQLException e) {
             throw new IllegalStateException("Error unlinking user from channel", e);
         }
+    }
+
+    private Canal mapCanal(Connection connection, ResultSet rs) throws SQLException {
+        Canal canal = new Canal();
+        canal.setId(rs.getLong("id"));
+        String uuid = rs.getString("uuid");
+        canal.setUuid(ensureUuid(connection, canal.getId(), uuid, null));
+        canal.setNombre(rs.getString("nombre"));
+        boolean privado = rs.getBoolean("privado");
+        if (rs.wasNull()) {
+            canal.setPrivado(null);
+        } else {
+            canal.setPrivado(privado);
+        }
+        return canal;
+    }
+
+    private String ensureUuid(Connection connection, Long canalId, String currentUuid, String desiredUuid) throws SQLException {
+        if (canalId == null) {
+            return currentUuid;
+        }
+        String normalizedCurrent = currentUuid != null && !currentUuid.isBlank() ? currentUuid : null;
+        String preferred = desiredUuid != null && !desiredUuid.isBlank() ? desiredUuid : null;
+        if (normalizedCurrent != null) {
+            if (preferred != null && !normalizedCurrent.equals(preferred)) {
+                try (PreparedStatement ps = connection.prepareStatement("UPDATE canales SET uuid=? WHERE id=?")) {
+                    ps.setString(1, preferred);
+                    ps.setLong(2, canalId);
+                    ps.executeUpdate();
+                }
+                return preferred;
+            }
+            return normalizedCurrent;
+        }
+        String newUuid = preferred != null ? preferred : UUID.randomUUID().toString();
+        try (PreparedStatement ps = connection.prepareStatement("UPDATE canales SET uuid=? WHERE id=?")) {
+            ps.setString(1, newUuid);
+            ps.setLong(2, canalId);
+            ps.executeUpdate();
+        }
+        return newUuid;
+    }
+
+    private String fetchUuid(Connection connection, Long canalId) throws SQLException {
+        if (canalId == null) {
+            return null;
+        }
+        String sql = "SELECT uuid FROM canales WHERE id=?";
+        try (PreparedStatement ps = connection.prepareStatement(sql)) {
+            ps.setLong(1, canalId);
+            try (ResultSet rs = ps.executeQuery()) {
+                if (rs.next()) {
+                    String value = rs.getString(1);
+                    return value != null && !value.isBlank() ? value : null;
+                }
+            }
+        }
+        return null;
     }
 }

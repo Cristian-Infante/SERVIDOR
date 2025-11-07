@@ -11,6 +11,8 @@ public interface CanalRepository {
 
     Optional<Canal> findById(Long id);
 
+    Optional<Canal> findByUuid(String uuid);
+
     List<Canal> findAll();
 
     List<Cliente> findUsers(Long canalId);

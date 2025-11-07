@@ -1,10 +1,12 @@
 package com.arquitectura.servicios.impl;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.UUID;
 import java.util.logging.Logger;
 
 import com.arquitectura.dto.InvitationSummary;
@@ -44,6 +46,7 @@ public class CanalServiceImpl implements CanalService {
             .orElseThrow(() -> new IllegalArgumentException("Usuario creador inexistente"));
         
         Canal canal = new Canal();
+        canal.setUuid(UUID.randomUUID().toString());
         canal.setNombre(nombre);
         canal.setPrivado(privado);
         Canal saved = canalRepository.save(canal);
@@ -58,8 +61,8 @@ public class CanalServiceImpl implements CanalService {
 
     @Override
     public void invitarUsuario(Long canalId, Long solicitanteId, Long invitadoId) {
-        validarCanalYUsuario(canalId, invitadoId);
-        
+        Canal canal = validarCanalYUsuario(canalId, invitadoId);
+
         // Verificar que el usuario no sea ya miembro
         List<Cliente> miembros = canalRepository.findUsers(canalId);
         boolean yaMiembro = miembros.stream().anyMatch(c -> c.getId().equals(invitadoId));
@@ -85,8 +88,12 @@ public class CanalServiceImpl implements CanalService {
                 " invitó a usuario " + invitadoId + " al canal " + canalId);
         }
 
-        eventBus.publish(new SessionEvent(SessionEventType.INVITE_SENT, null, solicitanteId,
-            Map.of("canalId", canalId, "invitadoId", invitadoId, "invitadorId", solicitanteId)));
+        Map<String, Object> payload = new HashMap<>();
+        payload.put("canalId", canalId);
+        payload.put("canalUuid", canal.getUuid());
+        payload.put("invitadoId", invitadoId);
+        payload.put("invitadorId", solicitanteId);
+        eventBus.publish(new SessionEvent(SessionEventType.INVITE_SENT, null, solicitanteId, payload));
     }
 
     @Override
@@ -109,8 +116,12 @@ public class CanalServiceImpl implements CanalService {
         LOGGER.info(() -> "Usuario " + invitadoId + " aceptó invitación y se unió al canal " + canalId);
         
         // Publicar evento de invitación aceptada
-        eventBus.publish(new SessionEvent(SessionEventType.INVITE_ACCEPTED, null, invitadoId, 
-            Map.of("canalId", canalId, "invitadoId", invitadoId, "invitadorId", invitadorId)));
+        Map<String, Object> payload = new HashMap<>();
+        payload.put("canalId", canalId);
+        canalRepository.findById(canalId).map(Canal::getUuid).ifPresent(uuid -> payload.put("canalUuid", uuid));
+        payload.put("invitadoId", invitadoId);
+        payload.put("invitadorId", invitadorId);
+        eventBus.publish(new SessionEvent(SessionEventType.INVITE_ACCEPTED, null, invitadoId, payload));
     }
 
     @Override
@@ -130,8 +141,12 @@ public class CanalServiceImpl implements CanalService {
         LOGGER.info(() -> "Usuario " + invitadoId + " rechazó invitación del canal " + canalId);
         
         // Publicar evento de invitación rechazada
-        eventBus.publish(new SessionEvent(SessionEventType.INVITE_REJECTED, null, invitadoId, 
-            Map.of("canalId", canalId, "invitadoId", invitadoId, "invitadorId", invitadorId)));
+        Map<String, Object> payload = new HashMap<>();
+        payload.put("canalId", canalId);
+        canalRepository.findById(canalId).map(Canal::getUuid).ifPresent(uuid -> payload.put("canalUuid", uuid));
+        payload.put("invitadoId", invitadoId);
+        payload.put("invitadorId", invitadorId);
+        eventBus.publish(new SessionEvent(SessionEventType.INVITE_REJECTED, null, invitadoId, payload));
     }
 
     @Override
@@ -195,11 +210,12 @@ public class CanalServiceImpl implements CanalService {
         return resumen;
     }
 
-    private void validarCanalYUsuario(Long canalId, Long usuarioId) {
+    private Canal validarCanalYUsuario(Long canalId, Long usuarioId) {
         Optional<Canal> canal = canalRepository.findById(canalId);
         if (canal.isEmpty()) {
             throw new IllegalArgumentException("Canal inexistente");
         }
         clienteRepository.findById(usuarioId).orElseThrow(() -> new IllegalArgumentException("Usuario inexistente"));
+        return canal.get();
     }
 }
