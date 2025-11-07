@@ -135,6 +135,7 @@ public class DatabaseSnapshot {
 
     public static final class CanalRecord {
         private Long id;
+        private String uuid;
         private String nombre;
         private Boolean privado;
 
@@ -147,6 +148,14 @@ public class DatabaseSnapshot {
 
         public void setId(Long id) {
             this.id = id;
+        }
+
+        public String getUuid() {
+            return uuid;
+        }
+
+        public void setUuid(String uuid) {
+            this.uuid = uuid;
         }
 
         public String getNombre() {
@@ -168,6 +177,7 @@ public class DatabaseSnapshot {
 
     public static final class ChannelMembershipRecord {
         private Long canalId;
+        private String canalUuid;
         private Long clienteId;
 
         public ChannelMembershipRecord() {
@@ -179,6 +189,14 @@ public class DatabaseSnapshot {
 
         public void setCanalId(Long canalId) {
             this.canalId = canalId;
+        }
+
+        public String getCanalUuid() {
+            return canalUuid;
+        }
+
+        public void setCanalUuid(String canalUuid) {
+            this.canalUuid = canalUuid;
         }
 
         public Long getClienteId() {
@@ -197,6 +215,7 @@ public class DatabaseSnapshot {
         private Long emisorId;
         private Long receptorId;
         private Long canalId;
+        private String canalUuid;
         private String contenido;
         private String rutaArchivo;
         private String mime;
@@ -254,6 +273,14 @@ public class DatabaseSnapshot {
             this.canalId = canalId;
         }
 
+        public String getCanalUuid() {
+            return canalUuid;
+        }
+
+        public void setCanalUuid(String canalUuid) {
+            this.canalUuid = canalUuid;
+        }
+
         public String getContenido() {
             return contenido;
         }
@@ -298,6 +325,7 @@ public class DatabaseSnapshot {
     public static final class InvitationRecord {
         private Long id;
         private Long canalId;
+        private String canalUuid;
         private Long invitadorId;
         private Long invitadoId;
         private String fechaInvitacion;
@@ -320,6 +348,14 @@ public class DatabaseSnapshot {
 
         public void setCanalId(Long canalId) {
             this.canalId = canalId;
+        }
+
+        public String getCanalUuid() {
+            return canalUuid;
+        }
+
+        public void setCanalUuid(String canalUuid) {
+            this.canalUuid = canalUuid;
         }
 
         public Long getInvitadorId() {

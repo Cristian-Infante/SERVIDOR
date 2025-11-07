@@ -1,6 +1,8 @@
 package com.arquitectura.controladores.p2p;
 
+import com.arquitectura.entidades.Canal;
 import com.arquitectura.entidades.Invitacion;
+import com.arquitectura.repositorios.CanalRepository;
 import com.arquitectura.repositorios.InvitacionRepository;
 import com.arquitectura.servicios.eventos.SessionEvent;
 import com.arquitectura.servicios.eventos.SessionEventBus;
@@ -25,12 +27,15 @@ public class ClusterInvitationReplicationListener implements SessionObserver {
     private static final Logger LOGGER = Logger.getLogger(ClusterInvitationReplicationListener.class.getName());
 
     private final ServerPeerManager peerManager;
+    private final CanalRepository canalRepository;
     private final InvitacionRepository invitacionRepository;
 
     public ClusterInvitationReplicationListener(ServerPeerManager peerManager,
+                                                CanalRepository canalRepository,
                                                 InvitacionRepository invitacionRepository,
                                                 SessionEventBus eventBus) {
         this.peerManager = Objects.requireNonNull(peerManager, "peerManager");
+        this.canalRepository = Objects.requireNonNull(canalRepository, "canalRepository");
         this.invitacionRepository = Objects.requireNonNull(invitacionRepository, "invitacionRepository");
         Objects.requireNonNull(eventBus, "eventBus").subscribe(this);
     }
@@ -66,10 +71,14 @@ public class ClusterInvitationReplicationListener implements SessionObserver {
                 return;
             }
             Invitacion invitacion = invitacionOpt.get();
+            String canalUuid = canalRepository.findById(invitacion.getCanalId())
+                .map(Canal::getUuid)
+                .orElse(null);
             DatabaseSnapshot snapshot = new DatabaseSnapshot();
             DatabaseSnapshot.InvitationRecord record = new DatabaseSnapshot.InvitationRecord();
             record.setId(invitacion.getId());
             record.setCanalId(invitacion.getCanalId());
+            record.setCanalUuid(canalUuid);
             record.setInvitadorId(invitacion.getInvitadorId());
             record.setInvitadoId(invitacion.getInvitadoId());
             LocalDateTime fecha = invitacion.getFechaInvitacion();

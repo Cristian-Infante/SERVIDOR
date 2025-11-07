@@ -12,6 +12,7 @@ import com.arquitectura.controladores.LogSubscriber;
 import com.arquitectura.controladores.ServidorController;
 import com.arquitectura.controladores.ServidorView;
 import com.arquitectura.controladores.conexion.ConnectionRegistry;
+import com.arquitectura.controladores.p2p.ClusterChannelReplicationListener;
 import com.arquitectura.controladores.p2p.ClusterInvitationReplicationListener;
 import com.arquitectura.controladores.p2p.ClusterUserRegistrationListener;
 import com.arquitectura.controladores.p2p.DatabaseSyncCoordinator;
@@ -97,7 +98,8 @@ public final class ServidorApplication {
         );
         connectionRegistry.setPeerManager(peerManager);
         new ClusterUserRegistrationListener(peerManager, eventBus);
-        new ClusterInvitationReplicationListener(peerManager, invitacionRepository, eventBus);
+        new ClusterChannelReplicationListener(peerManager, canalRepository, eventBus);
+        new ClusterInvitationReplicationListener(peerManager, canalRepository, invitacionRepository, eventBus);
         new com.arquitectura.servicios.eventos.LogSubscriber(logRepository, clienteRepository, canalRepository, eventBus);
         eventBus.subscribe(new LogSubscriber());
         

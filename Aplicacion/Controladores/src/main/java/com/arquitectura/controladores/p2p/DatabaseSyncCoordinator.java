@@ -16,14 +16,18 @@ import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.sql.SQLIntegrityConstraintViolationException;
 import java.sql.Statement;
 import java.sql.Timestamp;
 import java.sql.Types;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Base64;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
+import java.util.UUID;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
@@ -76,15 +80,20 @@ public class DatabaseSyncCoordinator {
 
         List<DatabaseSnapshot.CanalRecord> canales = new ArrayList<>();
         List<DatabaseSnapshot.ChannelMembershipRecord> memberships = new ArrayList<>();
+        Map<Long, String> canalUuidCache = new HashMap<>();
         for (Canal canal : canalRepository.findAll()) {
             if (canal == null || canal.getId() == null) {
                 continue;
             }
             DatabaseSnapshot.CanalRecord record = new DatabaseSnapshot.CanalRecord();
             record.setId(canal.getId());
+            record.setUuid(canal.getUuid());
             record.setNombre(canal.getNombre());
             record.setPrivado(canal.getPrivado());
             canales.add(record);
+            if (canal.getUuid() != null) {
+                canalUuidCache.put(canal.getId(), canal.getUuid());
+            }
 
             List<Cliente> usuarios = canalRepository.findUsers(canal.getId());
             for (Cliente usuario : usuarios) {
@@ -93,6 +102,7 @@ public class DatabaseSyncCoordinator {
                 }
                 DatabaseSnapshot.ChannelMembershipRecord membership = new DatabaseSnapshot.ChannelMembershipRecord();
                 membership.setCanalId(canal.getId());
+                membership.setCanalUuid(canal.getUuid());
                 membership.setClienteId(usuario.getId());
                 memberships.add(membership);
             }
@@ -112,7 +122,13 @@ public class DatabaseSyncCoordinator {
             record.setTipo(mensaje.getTipo());
             record.setEmisorId(mensaje.getEmisor());
             record.setReceptorId(mensaje.getReceptor());
-            record.setCanalId(mensaje.getCanalId());
+            Long mensajeCanalId = mensaje.getCanalId();
+            record.setCanalId(mensajeCanalId);
+            if (mensajeCanalId != null) {
+                String uuid = canalUuidCache.computeIfAbsent(mensajeCanalId,
+                    id -> canalRepository.findById(id).map(Canal::getUuid).orElse(null));
+                record.setCanalUuid(uuid);
+            }
             if (mensaje instanceof TextoMensaje texto) {
                 record.setContenido(texto.getContenido());
             } else if (mensaje instanceof AudioMensaje audio) {
@@ -215,7 +231,8 @@ public class DatabaseSyncCoordinator {
     }
 
     private List<DatabaseSnapshot.InvitationRecord> loadInvitaciones() {
-        String sql = "SELECT id, canal_id, invitador_id, invitado_id, fecha_invitacion, estado FROM invitaciones ORDER BY id";
+        String sql = "SELECT i.id, i.canal_id, c.uuid AS canal_uuid, i.invitador_id, i.invitado_id, i.fecha_invitacion, i.estado " +
+            "FROM invitaciones i LEFT JOIN canales c ON c.id = i.canal_id ORDER BY i.id";
         List<DatabaseSnapshot.InvitationRecord> invitaciones = new ArrayList<>();
         try (Connection connection = dataSource.getConnection();
              PreparedStatement ps = connection.prepareStatement(sql);
@@ -224,6 +241,7 @@ public class DatabaseSyncCoordinator {
                 DatabaseSnapshot.InvitationRecord record = new DatabaseSnapshot.InvitationRecord();
                 record.setId(rs.getLong("id"));
                 record.setCanalId(rs.getLong("canal_id"));
+                record.setCanalUuid(rs.getString("canal_uuid"));
                 record.setInvitadorId(rs.getLong("invitador_id"));
                 record.setInvitadoId(rs.getLong("invitado_id"));
                 Timestamp ts = rs.getTimestamp("fecha_invitacion");
@@ -258,11 +276,12 @@ public class DatabaseSyncCoordinator {
             connection.setAutoCommit(false);
 
             ClientSyncResult clientResult = syncClientes(connection, snapshot.getClientes());
+            ChannelSyncResult channelResult = syncCanales(connection, snapshot.getCanales());
             changed |= clientResult.changed();
-            changed |= syncCanales(connection, snapshot.getCanales());
-            changed |= syncMemberships(connection, snapshot.getCanalMiembros(), clientResult.idMapping());
-            changed |= syncMensajes(connection, snapshot.getMensajes(), clientResult.idMapping());
-            changed |= syncInvitaciones(connection, snapshot.getInvitaciones(), clientResult.idMapping());
+            changed |= channelResult.changed();
+            changed |= syncMemberships(connection, snapshot.getCanalMiembros(), clientResult.idMapping(), channelResult.idMapping());
+            changed |= syncMensajes(connection, snapshot.getMensajes(), clientResult.idMapping(), channelResult.idMapping());
+            changed |= syncInvitaciones(connection, snapshot.getInvitaciones(), clientResult.idMapping(), channelResult.idMapping());
 
             connection.commit();
             return changed;
@@ -461,34 +480,49 @@ public class DatabaseSyncCoordinator {
         return null;
     }
 
-    private boolean syncCanales(Connection connection, List<DatabaseSnapshot.CanalRecord> canales) throws SQLException {
-        if (canales == null || canales.isEmpty()) {
-            return false;
-        }
-        boolean changed = false;
-        String sql = "INSERT INTO canales(id, nombre, privado) VALUES(?,?,?) " +
-            "ON DUPLICATE KEY UPDATE nombre=VALUES(nombre), privado=VALUES(privado)";
+    private Long querySingleLong(Connection connection, String sql, Long value) throws SQLException {
         try (PreparedStatement ps = connection.prepareStatement(sql)) {
-            for (DatabaseSnapshot.CanalRecord record : canales) {
-                if (record.getId() == null) {
-                    continue;
+            ps.setLong(1, value);
+            try (ResultSet rs = ps.executeQuery()) {
+                if (rs.next()) {
+                    return rs.getLong(1);
                 }
-                ps.setLong(1, record.getId());
-                ps.setString(2, record.getNombre());
-                if (record.getPrivado() != null) {
-                    ps.setBoolean(3, record.getPrivado());
-                } else {
-                    ps.setNull(3, Types.TINYINT);
-                }
-                changed |= ps.executeUpdate() > 0;
             }
         }
-        return changed;
+        return null;
+    }
+
+    private ChannelSyncResult syncCanales(Connection connection, List<DatabaseSnapshot.CanalRecord> canales) throws SQLException {
+        if (canales == null || canales.isEmpty()) {
+            return ChannelSyncResult.empty();
+        }
+        boolean changed = false;
+        java.util.Map<Long, Long> idMapping = new java.util.HashMap<>();
+        for (DatabaseSnapshot.CanalRecord record : canales) {
+            if (record == null) {
+                continue;
+            }
+            normalizeChannelRecord(record);
+            Long localId = findChannelId(connection, record);
+            if (localId == null) {
+                localId = insertChannel(connection, record);
+                if (localId != null) {
+                    changed = true;
+                }
+            } else {
+                changed |= updateChannel(connection, localId, record);
+            }
+            if (record.getId() != null && localId != null) {
+                idMapping.put(record.getId(), localId);
+            }
+        }
+        return new ChannelSyncResult(changed, idMapping);
     }
 
     private boolean syncMemberships(Connection connection,
                                     List<DatabaseSnapshot.ChannelMembershipRecord> memberships,
-                                    java.util.Map<Long, Long> clientIdMap) throws SQLException {
+                                    java.util.Map<Long, Long> clientIdMap,
+                                    java.util.Map<Long, Long> channelIdMap) throws SQLException {
         if (memberships == null || memberships.isEmpty()) {
             return false;
         }
@@ -497,10 +531,14 @@ public class DatabaseSyncCoordinator {
             "ON DUPLICATE KEY UPDATE cliente_id=VALUES(cliente_id)";
         try (PreparedStatement ps = connection.prepareStatement(sql)) {
             for (DatabaseSnapshot.ChannelMembershipRecord record : memberships) {
-                if (record.getCanalId() == null || record.getClienteId() == null) {
+                if (record.getClienteId() == null) {
                     continue;
                 }
-                ps.setLong(1, record.getCanalId());
+                Long localCanalId = resolveChannelId(connection, record.getCanalId(), record.getCanalUuid(), channelIdMap);
+                if (localCanalId == null) {
+                    continue;
+                }
+                ps.setLong(1, localCanalId);
                 ps.setLong(2, resolveClientId(record.getClienteId(), clientIdMap));
                 changed |= ps.executeUpdate() > 0;
             }
@@ -510,7 +548,8 @@ public class DatabaseSyncCoordinator {
 
     private boolean syncMensajes(Connection connection,
                                  List<DatabaseSnapshot.MensajeRecord> mensajes,
-                                 java.util.Map<Long, Long> clientIdMap) throws SQLException {
+                                 java.util.Map<Long, Long> clientIdMap,
+                                 java.util.Map<Long, Long> channelIdMap) throws SQLException {
         if (mensajes == null || mensajes.isEmpty()) {
             return false;
         }
@@ -542,8 +581,9 @@ public class DatabaseSyncCoordinator {
                 } else {
                     ps.setNull(5, Types.BIGINT);
                 }
-                if (record.getCanalId() != null) {
-                    ps.setLong(6, record.getCanalId());
+                Long localCanalId = resolveChannelId(connection, record.getCanalId(), record.getCanalUuid(), channelIdMap);
+                if (localCanalId != null) {
+                    ps.setLong(6, localCanalId);
                 } else {
                     ps.setNull(6, Types.BIGINT);
                 }
@@ -564,7 +604,8 @@ public class DatabaseSyncCoordinator {
 
     private boolean syncInvitaciones(Connection connection,
                                      List<DatabaseSnapshot.InvitationRecord> invitaciones,
-                                     java.util.Map<Long, Long> clientIdMap) throws SQLException {
+                                     java.util.Map<Long, Long> clientIdMap,
+                                     java.util.Map<Long, Long> channelIdMap) throws SQLException {
         if (invitaciones == null || invitaciones.isEmpty()) {
             return false;
         }
@@ -578,7 +619,11 @@ public class DatabaseSyncCoordinator {
         try (PreparedStatement withId = connection.prepareStatement(sqlWithId);
              PreparedStatement withoutId = connection.prepareStatement(sqlWithoutId)) {
             for (DatabaseSnapshot.InvitationRecord record : invitaciones) {
-                if (record.getCanalId() == null || record.getInvitadoId() == null) {
+                if (record.getInvitadoId() == null) {
+                    continue;
+                }
+                Long localCanalId = resolveChannelId(connection, record.getCanalId(), record.getCanalUuid(), channelIdMap);
+                if (localCanalId == null) {
                     continue;
                 }
                 Timestamp timestamp = null;
@@ -592,7 +637,7 @@ public class DatabaseSyncCoordinator {
 
                 if (record.getId() != null) {
                     withId.setLong(1, record.getId());
-                    withId.setLong(2, record.getCanalId());
+                    withId.setLong(2, localCanalId);
                     if (invitadorId != null) {
                         withId.setLong(3, invitadorId);
                     } else {
@@ -611,7 +656,7 @@ public class DatabaseSyncCoordinator {
                     }
                     changed |= withId.executeUpdate() > 0;
                 } else {
-                    withoutId.setLong(1, record.getCanalId());
+                    withoutId.setLong(1, localCanalId);
                     if (invitadorId != null) {
                         withoutId.setLong(2, invitadorId);
                     } else {
@@ -635,6 +680,104 @@ public class DatabaseSyncCoordinator {
         return changed;
     }
 
+    private void normalizeChannelRecord(DatabaseSnapshot.CanalRecord record) {
+        if (record.getUuid() == null || record.getUuid().isBlank()) {
+            record.setUuid(UUID.randomUUID().toString());
+        }
+    }
+
+    private Long findChannelId(Connection connection, DatabaseSnapshot.CanalRecord record) throws SQLException {
+        Long localId = null;
+        if (record.getUuid() != null && !record.getUuid().isBlank()) {
+            localId = querySingleLong(connection, "SELECT id FROM canales WHERE uuid=?", record.getUuid());
+        }
+        if (localId == null && record.getId() != null) {
+            localId = querySingleLong(connection, "SELECT id FROM canales WHERE id=?", record.getId());
+        }
+        return localId;
+    }
+
+    private Long insertChannel(Connection connection, DatabaseSnapshot.CanalRecord record) throws SQLException {
+        if (record.getId() != null) {
+            String sqlWithId = "INSERT INTO canales(id, uuid, nombre, privado) VALUES(?,?,?,?)";
+            try (PreparedStatement ps = connection.prepareStatement(sqlWithId)) {
+                ps.setLong(1, record.getId());
+                ps.setString(2, record.getUuid());
+                ps.setString(3, record.getNombre());
+                setNullableBoolean(ps, 4, record.getPrivado());
+                ps.executeUpdate();
+                return record.getId();
+            } catch (SQLIntegrityConstraintViolationException ignored) {
+                Long existing = querySingleLong(connection, "SELECT id FROM canales WHERE id=?", record.getId());
+                if (existing != null) {
+                    updateChannel(connection, existing, record);
+                    return existing;
+                }
+            }
+        }
+        String sql = "INSERT INTO canales(uuid, nombre, privado) VALUES(?,?,?)";
+        try (PreparedStatement ps = connection.prepareStatement(sql, Statement.RETURN_GENERATED_KEYS)) {
+            ps.setString(1, record.getUuid());
+            ps.setString(2, record.getNombre());
+            setNullableBoolean(ps, 3, record.getPrivado());
+            ps.executeUpdate();
+            try (ResultSet rs = ps.getGeneratedKeys()) {
+                if (rs.next()) {
+                    return rs.getLong(1);
+                }
+            }
+        } catch (SQLIntegrityConstraintViolationException ignored) {
+            Long existing = querySingleLong(connection, "SELECT id FROM canales WHERE uuid=?", record.getUuid());
+            if (existing != null) {
+                updateChannel(connection, existing, record);
+                return existing;
+            }
+        }
+        return querySingleLong(connection, "SELECT id FROM canales WHERE uuid=?", record.getUuid());
+    }
+
+    private boolean updateChannel(Connection connection, Long localId, DatabaseSnapshot.CanalRecord record) throws SQLException {
+        String sql = "UPDATE canales SET nombre=?, privado=?, uuid=? WHERE id=?";
+        try (PreparedStatement ps = connection.prepareStatement(sql)) {
+            ps.setString(1, record.getNombre());
+            setNullableBoolean(ps, 2, record.getPrivado());
+            ps.setString(3, record.getUuid());
+            ps.setLong(4, localId);
+            return ps.executeUpdate() > 0;
+        }
+    }
+
+    private void setNullableBoolean(PreparedStatement ps, int index, Boolean value) throws SQLException {
+        if (value != null) {
+            ps.setBoolean(index, value);
+        } else {
+            ps.setNull(index, Types.TINYINT);
+        }
+    }
+
+    private Long resolveChannelId(Connection connection,
+                                  Long originalId,
+                                  String canalUuid,
+                                  java.util.Map<Long, Long> channelIdMap) throws SQLException {
+        if (originalId != null && channelIdMap != null && channelIdMap.containsKey(originalId)) {
+            return channelIdMap.get(originalId);
+        }
+        Long localId = null;
+        if (canalUuid != null && !canalUuid.isBlank()) {
+            localId = querySingleLong(connection, "SELECT id FROM canales WHERE uuid=?", canalUuid);
+            if (localId != null && channelIdMap != null && originalId != null) {
+                channelIdMap.put(originalId, localId);
+            }
+        }
+        if (localId == null && originalId != null) {
+            localId = querySingleLong(connection, "SELECT id FROM canales WHERE id=?", originalId);
+            if (localId != null && channelIdMap != null) {
+                channelIdMap.put(originalId, localId);
+            }
+        }
+        return localId;
+    }
+
     private long resolveClientId(Long originalId, java.util.Map<Long, Long> clientIdMap) {
         return clientIdMap != null && clientIdMap.containsKey(originalId)
             ? clientIdMap.get(originalId)
@@ -644,6 +787,12 @@ public class DatabaseSyncCoordinator {
     private record ClientSyncResult(boolean changed, java.util.Map<Long, Long> idMapping) {
         static ClientSyncResult empty() {
             return new ClientSyncResult(false, java.util.Collections.emptyMap());
+        }
+    }
+
+    private record ChannelSyncResult(boolean changed, java.util.Map<Long, Long> idMapping) {
+        static ChannelSyncResult empty() {
+            return new ChannelSyncResult(false, new java.util.HashMap<>());
         }
     }
 }

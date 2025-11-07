@@ -239,6 +239,11 @@ class MensajeriaServiceImplTest {
         }
 
         @Override
+        public Optional<com.arquitectura.entidades.Canal> findByUuid(String uuid) {
+            return Optional.empty();
+        }
+
+        @Override
         public List<com.arquitectura.entidades.Canal> findAll() {
             return Collections.emptyList();
         }
