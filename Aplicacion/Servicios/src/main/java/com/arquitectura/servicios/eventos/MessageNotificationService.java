@@ -226,6 +226,7 @@ public class MessageNotificationService implements SessionObserver {
             contenido.put("mime", audio.getMime());
             contenido.put("duracionSeg", audio.getDuracionSeg());
             contenido.put("transcripcion", audio.getTranscripcion());
+            contenido.put("audioBase64", audio.getAudioBase64());
         } else if (mensaje instanceof ArchivoMensaje archivo) {
             contenido.put("rutaArchivo", archivo.getRutaArchivo());
             contenido.put("mime", archivo.getMime());
