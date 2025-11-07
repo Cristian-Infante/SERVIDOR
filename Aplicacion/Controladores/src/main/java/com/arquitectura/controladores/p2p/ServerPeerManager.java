@@ -36,6 +36,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
+import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.ExecutorService;
@@ -65,6 +66,7 @@ public class ServerPeerManager {
     private final ClienteRepository clienteRepository;
     private final Set<String> localIdentifiers = ConcurrentHashMap.newKeySet();
     private final Set<String> localHostRepresentations = ConcurrentHashMap.newKeySet();
+    private final String instanceId;
 
     private volatile boolean running;
     private ServerSocket serverSocket;
@@ -84,6 +86,7 @@ public class ServerPeerManager {
         this.mapper = new ObjectMapper();
         this.mapper.registerModule(new JavaTimeModule());
         this.mapper.disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS);
+        this.instanceId = UUID.randomUUID().toString();
         initializeLocalIdentity();
     }
 
@@ -255,7 +258,7 @@ public class ServerPeerManager {
         if (envelope == null) {
             return;
         }
-        if (!envelope.markVisited(serverId)) {
+        if (!envelope.markVisited(instanceId)) {
             LOGGER.fine(() -> "Mensaje " + envelope.getType() + " ya pasó por " + serverId + ", descartando para evitar bucles");
             return;
         }
@@ -279,7 +282,8 @@ public class ServerPeerManager {
                 forwarded = true;
                 continue;
             }
-            if (envelope.hasVisited(peer.getRemoteServerId())) {
+            String peerRouteId = peer.getRouteIdentifier();
+            if (peerRouteId != null && envelope.hasVisited(peerRouteId)) {
                 continue;
             }
             peer.send(envelope);
@@ -338,6 +342,9 @@ public class ServerPeerManager {
         String resolvedId = resolveRemoteId(connection, announcedId);
         if (resolvedId == null) {
             return;
+        }
+        if (payload != null && payload.getInstanceId() != null) {
+            connection.setRemoteInstanceId(payload.getInstanceId());
         }
         connection.markHelloReceived(announcedId, resolvedId);
     }
@@ -851,6 +858,7 @@ public class ServerPeerManager {
         }
         return false;
     }
+
     private void forwardEnvelope(PeerConnection source, PeerEnvelope envelope) {
         routeEnvelope(source, envelope);
     }
@@ -944,6 +952,7 @@ public class ServerPeerManager {
         private volatile String announcedServerId;
         private volatile boolean helloSent;
         private volatile boolean helloReceived;
+        private volatile String remoteInstanceId;
         private final AtomicBoolean closed = new AtomicBoolean();
 
         private PeerConnection(Socket socket, boolean initiator) {
@@ -1016,7 +1025,7 @@ public class ServerPeerManager {
             }
             helloSent = true;
             send(new PeerEnvelope(PeerMessageType.HELLO, serverId,
-                mapper.valueToTree(new HelloPayload(serverId))));
+                mapper.valueToTree(new HelloPayload(serverId, instanceId))));
             if (helloReceived) {
                 onHandshakeComplete(this);
             }
@@ -1029,12 +1038,25 @@ public class ServerPeerManager {
             if (remoteServerId == null) {
                 remoteServerId = resolvedId;
             }
+            if (remoteInstanceId == null) {
+                remoteInstanceId = resolvedId;
+            }
             helloReceived = true;
             if (!helloSent) {
                 sendHello();
             } else {
                 onHandshakeComplete(this);
             }
+        }
+
+        private void setRemoteInstanceId(String remoteInstanceId) {
+            if (remoteInstanceId != null && !remoteInstanceId.isBlank()) {
+                this.remoteInstanceId = remoteInstanceId;
+            }
+        }
+
+        private String getRouteIdentifier() {
+            return remoteInstanceId != null ? remoteInstanceId : remoteServerId;
         }
 
         private void closeSilently() {
@@ -1227,12 +1249,14 @@ public class ServerPeerManager {
 
     private static final class HelloPayload {
         private String serverId;
+        private String instanceId;
 
         private HelloPayload() {
         }
 
-        private HelloPayload(String serverId) {
+        private HelloPayload(String serverId, String instanceId) {
             this.serverId = serverId;
+            this.instanceId = instanceId;
         }
 
         public String getServerId() {
@@ -1241,6 +1265,14 @@ public class ServerPeerManager {
 
         public void setServerId(String serverId) {
             this.serverId = serverId;
+        }
+
+        public String getInstanceId() {
+            return instanceId;
+        }
+
+        public void setInstanceId(String instanceId) {
+            this.instanceId = instanceId;
         }
     }
 
