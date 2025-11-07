@@ -31,6 +31,7 @@ import com.arquitectura.servicios.ConexionService;
 import com.arquitectura.servicios.MensajeriaService;
 import com.arquitectura.servicios.RegistroService;
 import com.arquitectura.servicios.ReporteService;
+import com.arquitectura.servicios.eventos.InvitationNotificationService;
 import com.arquitectura.servicios.eventos.MessageNotificationService;
 import com.arquitectura.servicios.eventos.SessionEventBus;
 import com.arquitectura.servicios.impl.CanalServiceImpl;
@@ -98,8 +99,9 @@ public final class ServidorApplication {
         new com.arquitectura.servicios.eventos.LogSubscriber(logRepository, clienteRepository, canalRepository, eventBus);
         eventBus.subscribe(new LogSubscriber());
         
-        // Servicio para notificar mensajes a los clientes
+        // Servicios para notificar eventos en tiempo real a los clientes
         new MessageNotificationService(connectionRegistry, canalRepository, clienteRepository, eventBus);
+        new InvitationNotificationService(connectionRegistry, canalRepository, clienteRepository, eventBus);
 
         PasswordHasher passwordHasher = new Sha256PasswordHasher(config);
         RegistroServiceImpl registroServiceImpl = new RegistroServiceImpl(clienteRepository, passwordHasher, eventBus);
