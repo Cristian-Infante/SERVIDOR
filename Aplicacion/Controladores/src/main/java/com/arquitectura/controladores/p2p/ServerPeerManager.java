@@ -851,7 +851,6 @@ public class ServerPeerManager {
         }
         return false;
     }
-
     private void forwardEnvelope(PeerConnection source, PeerEnvelope envelope) {
         routeEnvelope(source, envelope);
     }
