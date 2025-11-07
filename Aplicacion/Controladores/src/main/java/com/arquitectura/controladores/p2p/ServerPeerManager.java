@@ -57,6 +57,7 @@ public class ServerPeerManager {
     private final ConnectionRegistry registry;
     private final ObjectMapper mapper;
     private final Map<String, PeerConnection> peers = new ConcurrentHashMap<>();
+    private final Map<String, PeerConnection> peersByAlias = new ConcurrentHashMap<>();
     private final Set<PeerConnection> connections = ConcurrentHashMap.newKeySet();
     private final CopyOnWriteArrayList<PeerStatusListener> peerListeners = new CopyOnWriteArrayList<>();
     private final String serverId;
@@ -111,6 +112,7 @@ public class ServerPeerManager {
         connections.forEach(PeerConnection::closeSilently);
         connections.clear();
         peers.clear();
+        peersByAlias.clear();
     }
 
     public Set<String> connectedPeerIds() {
@@ -265,7 +267,7 @@ public class ServerPeerManager {
 
         String target = envelope.getTarget();
         if (target != null) {
-            PeerConnection direct = peers.get(target);
+            PeerConnection direct = findPeerConnection(target);
             if (direct != null && direct != source) {
                 direct.send(envelope);
                 return;
@@ -294,6 +296,87 @@ public class ServerPeerManager {
             LOGGER.fine(() -> "No se encontró ruta para mensaje " + envelope.getType()
                 + " con destino " + target);
         }
+    }
+
+    private PeerConnection findPeerConnection(String target) {
+        if (target == null) {
+            return null;
+        }
+        PeerConnection direct = peers.get(target);
+        if (direct != null) {
+            return direct;
+        }
+        String normalized = normalizeServerId(target);
+        if (normalized == null) {
+            return null;
+        }
+        PeerConnection alias = peersByAlias.get(normalized);
+        if (alias != null) {
+            return alias;
+        }
+        int separator = target.indexOf('@');
+        if (separator > 0) {
+            String prefix = target.substring(0, separator);
+            alias = peersByAlias.get(normalizeServerId(prefix));
+            if (alias != null) {
+                return alias;
+            }
+            String suffix = target.substring(separator + 1);
+            alias = peersByAlias.get(normalizeServerId(suffix));
+            if (alias != null) {
+                return alias;
+            }
+        }
+        return null;
+    }
+
+    private void registerPeerAliases(PeerConnection connection) {
+        if (connection == null) {
+            return;
+        }
+        unregisterPeerAliases(connection);
+        registerPeerAlias(connection, connection.getRemoteServerId());
+        registerPeerAlias(connection, connection.getAnnouncedServerId());
+        registerPeerAlias(connection, connection.getRemoteInstanceId());
+    }
+
+    private void registerPeerAlias(PeerConnection connection, String identifier) {
+        String normalized = normalizeServerId(identifier);
+        if (normalized == null) {
+            return;
+        }
+        peersByAlias.put(normalized, connection);
+        int separator = identifier.indexOf('@');
+        if (separator > 0) {
+            String prefix = identifier.substring(0, separator);
+            String suffix = identifier.substring(separator + 1);
+            String normalizedPrefix = normalizeServerId(prefix);
+            if (normalizedPrefix != null) {
+                peersByAlias.putIfAbsent(normalizedPrefix, connection);
+            }
+            String normalizedSuffix = normalizeServerId(suffix);
+            if (normalizedSuffix != null) {
+                peersByAlias.putIfAbsent(normalizedSuffix, connection);
+            }
+        }
+    }
+
+    private void unregisterPeerAliases(PeerConnection connection) {
+        if (connection == null) {
+            return;
+        }
+        peersByAlias.entrySet().removeIf(entry -> entry.getValue() == connection);
+    }
+
+    private String normalizeServerId(String identifier) {
+        if (identifier == null) {
+            return null;
+        }
+        String trimmed = identifier.trim();
+        if (trimmed.isEmpty()) {
+            return null;
+        }
+        return trimmed.toLowerCase(Locale.ROOT);
     }
 
     private void startAcceptor() {
@@ -358,8 +441,10 @@ public class ServerPeerManager {
         }
         PeerConnection previous = peers.put(remoteId, connection);
         if (previous != null && previous != connection) {
+            unregisterPeerAliases(previous);
             previous.closeSilently();
         }
+        registerPeerAliases(connection);
         LOGGER.info(() -> String.format(
             "Conexión P2P establecida con servidor %s (%s, %s desde %s)",
             remoteId,
@@ -807,6 +892,7 @@ public class ServerPeerManager {
         String remoteId = connection.getRemoteServerId();
         if (remoteId != null) {
             boolean removed = peers.remove(remoteId, connection);
+            unregisterPeerAliases(connection);
             List<RemoteSessionSnapshot> drained = registry.drainRemoteSessions(remoteId);
             registry.forgetRemoteServer(remoteId);
             if (!drained.isEmpty()) {
@@ -1080,6 +1166,7 @@ public class ServerPeerManager {
                 remoteInstanceId = resolvedId;
             }
             helloReceived = true;
+            registerPeerAliases(this);
             if (!helloSent) {
                 sendHello();
             } else {
@@ -1090,6 +1177,7 @@ public class ServerPeerManager {
         private void setRemoteInstanceId(String remoteInstanceId) {
             if (remoteInstanceId != null && !remoteInstanceId.isBlank()) {
                 this.remoteInstanceId = remoteInstanceId;
+                registerPeerAliases(this);
             }
         }
 
@@ -1127,6 +1215,14 @@ public class ServerPeerManager {
 
         private String getRemoteServerId() {
             return remoteServerId;
+        }
+
+        private String getAnnouncedServerId() {
+            return announcedServerId;
+        }
+
+        private String getRemoteInstanceId() {
+            return remoteInstanceId;
         }
 
         private boolean isInitiator() {
@@ -1186,7 +1282,22 @@ public class ServerPeerManager {
             if (candidate == null) {
                 return false;
             }
-            return candidate.equals(remoteServerId) || candidate.equals(announcedServerId);
+            String normalized = normalizeServerId(candidate);
+            if (normalized == null) {
+                return false;
+            }
+            if (matchesNormalized(normalized, remoteServerId)) {
+                return true;
+            }
+            if (matchesNormalized(normalized, announcedServerId)) {
+                return true;
+            }
+            return matchesNormalized(normalized, remoteInstanceId);
+        }
+
+        private boolean matchesNormalized(String normalizedCandidate, String identifier) {
+            String normalizedIdentifier = normalizeServerId(identifier);
+            return normalizedIdentifier != null && normalizedIdentifier.equals(normalizedCandidate);
         }
     }
 
