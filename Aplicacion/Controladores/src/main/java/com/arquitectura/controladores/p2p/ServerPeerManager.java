@@ -786,6 +786,11 @@ public class ServerPeerManager {
 
         boolean updated = false;
         boolean dbChanged = false;
+        ObjectNode serversNode = null;
+        JsonNode rawPayload = envelope.getPayload();
+        if (rawPayload instanceof ObjectNode objectNode && objectNode.has("servers") && objectNode.get("servers").isObject()) {
+            serversNode = (ObjectNode) objectNode.get("servers");
+        }
         if (hasServers) {
             for (Map.Entry<String, List<RemoteSessionSnapshot>> entry : sync.getServers().entrySet()) {
                 String declaredServerId = entry.getKey();
@@ -793,8 +798,12 @@ public class ServerPeerManager {
                 if (effectiveServerId == null || effectiveServerId.equals(serverId)) {
                     continue;
                 }
-                List<RemoteSessionSnapshot> remapped = remapSnapshotsForServer(entry.getValue(), effectiveServerId);
-                updated |= registry.registerRemoteSessions(effectiveServerId, remapped);
+                List<RemoteSessionSnapshot> remap = remapSnapshotsForServer(entry.getValue(), effectiveServerId);
+                if (serversNode != null && declaredServerId != null && !declaredServerId.equals(effectiveServerId)) {
+                    serversNode.remove(declaredServerId);
+                    serversNode.set(effectiveServerId, mapper.valueToTree(remap));
+                }
+                updated |= registry.registerRemoteSessions(effectiveServerId, remap);
                 registerRouteHint(connection, effectiveServerId);
             }
         }
@@ -820,7 +829,12 @@ public class ServerPeerManager {
             envelope.getOrigin() != null ? envelope.getOrigin() : connection.getRemoteServerId());
         registerRouteHint(connection, fallbackId);
         if (snapshot != null) {
-            snapshot.setServerId(resolveSnapshotServerId(connection, snapshot.getServerId(), fallbackId));
+            String resolvedServer = resolveSnapshotServerId(connection, snapshot.getServerId(), fallbackId);
+            snapshot.setServerId(resolvedServer);
+            JsonNode payloadNode = envelope.getPayload();
+            if (payloadNode instanceof ObjectNode objectNode && resolvedServer != null) {
+                objectNode.put("serverId", resolvedServer);
+            }
         }
         boolean updated = registry.registerRemoteSession(fallbackId, snapshot);
         if (updated) {

@@ -412,6 +412,8 @@ public class ConnectionRegistry implements ConnectionGateway {
         RemoteSessionSnapshot copy = copySnapshot(snapshot);
         copy.setServerId(effectiveServerId);
 
+        removeConflictingRemoteSessions(copy);
+
         knownRemoteServers.add(effectiveServerId);
 
         String key = remoteKey(effectiveServerId, copy.getSessionId());
@@ -421,6 +423,33 @@ public class ConnectionRegistry implements ConnectionGateway {
         }
         remoteSessions.put(key, copy);
         return true;
+    }
+
+    private void removeConflictingRemoteSessions(RemoteSessionSnapshot snapshot) {
+        if (snapshot == null) {
+            return;
+        }
+        String effectiveServerId = snapshot.getServerId();
+        String effectiveBase = baseServerId(effectiveServerId);
+        Long clienteId = snapshot.getClienteId();
+        String sessionId = snapshot.getSessionId();
+        remoteSessions.entrySet().removeIf(entry -> {
+            RemoteSessionSnapshot current = entry.getValue();
+            if (current == null) {
+                return false;
+            }
+            if (!Objects.equals(current.getClienteId(), clienteId)) {
+                return false;
+            }
+            if (sessionId != null && !sessionId.equals(current.getSessionId())) {
+                return false;
+            }
+            if (Objects.equals(current.getServerId(), effectiveServerId)) {
+                return false;
+            }
+            String currentBase = baseServerId(current.getServerId());
+            return currentBase != null && currentBase.equalsIgnoreCase(effectiveBase);
+        });
     }
 
     public boolean removeRemoteSession(String serverId, String sessionId, Long clienteId) {
@@ -539,6 +568,17 @@ public class ConnectionRegistry implements ConnectionGateway {
 
     private String remoteKey(String serverId, String sessionId) {
         return serverId + ":" + sessionId;
+    }
+
+    private String baseServerId(String serverId) {
+        if (serverId == null) {
+            return null;
+        }
+        int separator = serverId.indexOf('@');
+        if (separator > 0) {
+            return serverId.substring(0, separator);
+        }
+        return serverId;
     }
 
     private Long extractEmisorId(Object payload) {
