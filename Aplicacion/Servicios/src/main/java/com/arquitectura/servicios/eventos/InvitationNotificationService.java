@@ -3,8 +3,10 @@ package com.arquitectura.servicios.eventos;
 import com.arquitectura.dto.RealtimeInvitationDto;
 import com.arquitectura.entidades.Canal;
 import com.arquitectura.entidades.Cliente;
+import com.arquitectura.entidades.Invitacion;
 import com.arquitectura.repositorios.CanalRepository;
 import com.arquitectura.repositorios.ClienteRepository;
+import com.arquitectura.repositorios.InvitacionRepository;
 import com.arquitectura.servicios.conexion.ConnectionGateway;
 
 import java.time.LocalDateTime;
@@ -21,14 +23,17 @@ public class InvitationNotificationService implements SessionObserver {
     private final ConnectionGateway connectionGateway;
     private final CanalRepository canalRepository;
     private final ClienteRepository clienteRepository;
+    private final InvitacionRepository invitacionRepository;
 
     public InvitationNotificationService(ConnectionGateway connectionGateway,
                                          CanalRepository canalRepository,
                                          ClienteRepository clienteRepository,
+                                         InvitacionRepository invitacionRepository,
                                          SessionEventBus eventBus) {
         this.connectionGateway = Objects.requireNonNull(connectionGateway, "connectionGateway");
         this.canalRepository = Objects.requireNonNull(canalRepository, "canalRepository");
         this.clienteRepository = Objects.requireNonNull(clienteRepository, "clienteRepository");
+        this.invitacionRepository = Objects.requireNonNull(invitacionRepository, "invitacionRepository");
         Objects.requireNonNull(eventBus, "eventBus").subscribe(this);
     }
 
@@ -115,6 +120,11 @@ public class InvitationNotificationService implements SessionObserver {
         dto.setCanalId(context.canalId);
         dto.setEstado(estado);
 
+        Optional<Invitacion> invitacion = Optional.empty();
+        if (context.canalId != null && context.invitadoId != null) {
+            invitacion = invitacionRepository.findByCanalAndInvitado(context.canalId, context.invitadoId);
+        }
+
         Optional<Canal> canalOpt = context.canalId != null ? canalRepository.findById(context.canalId) : Optional.empty();
         canalOpt.ifPresent(canal -> {
             dto.setCanalNombre(canal.getNombre());
@@ -132,6 +142,13 @@ public class InvitationNotificationService implements SessionObserver {
             : Optional.empty();
         invitadoOpt.ifPresent(cliente -> dto.setInvitadoNombre(cliente.getNombreDeUsuario()));
         dto.setInvitadoId(context.invitadoId);
+
+        invitacion.ifPresent(inv -> {
+            dto.setInvitacionId(inv.getId());
+            if (inv.getEstado() != null) {
+                dto.setEstado(inv.getEstado());
+            }
+        });
 
         return dto;
     }
@@ -151,6 +168,7 @@ public class InvitationNotificationService implements SessionObserver {
         copy.setInvitadoId(original.getInvitadoId());
         copy.setInvitadoNombre(original.getInvitadoNombre());
         copy.setEstado(original.getEstado());
+        copy.setInvitacionId(original.getInvitacionId());
         return copy;
     }
 

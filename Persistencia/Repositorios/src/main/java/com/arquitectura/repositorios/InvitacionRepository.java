@@ -31,7 +31,12 @@ public interface InvitacionRepository {
      * Actualiza el estado de una invitación
      */
     void updateEstado(Long id, String estado);
-    
+
+    /**
+     * Actualiza la información básica de una invitación existente para reenviarla.
+     */
+    void reactivarInvitacion(Long id, Long invitadorId);
+
     /**
      * Elimina una invitación
      */

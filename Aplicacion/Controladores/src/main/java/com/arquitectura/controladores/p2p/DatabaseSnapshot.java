@@ -17,6 +17,7 @@ public class DatabaseSnapshot {
     private List<CanalRecord> canales = new ArrayList<>();
     private List<ChannelMembershipRecord> canalMiembros = new ArrayList<>();
     private List<MensajeRecord> mensajes = new ArrayList<>();
+    private List<InvitationRecord> invitaciones = new ArrayList<>();
 
     public List<ClienteRecord> getClientes() {
         return clientes;
@@ -50,8 +51,17 @@ public class DatabaseSnapshot {
         this.mensajes = mensajes != null ? new ArrayList<>(mensajes) : new ArrayList<>();
     }
 
+    public List<InvitationRecord> getInvitaciones() {
+        return invitaciones;
+    }
+
+    public void setInvitaciones(List<InvitationRecord> invitaciones) {
+        this.invitaciones = invitaciones != null ? new ArrayList<>(invitaciones) : new ArrayList<>();
+    }
+
     public boolean isEmpty() {
-        return clientes.isEmpty() && canales.isEmpty() && canalMiembros.isEmpty() && mensajes.isEmpty();
+        return clientes.isEmpty() && canales.isEmpty() && canalMiembros.isEmpty()
+            && mensajes.isEmpty() && invitaciones.isEmpty();
     }
 
     public static final class ClienteRecord {
@@ -282,6 +292,66 @@ public class DatabaseSnapshot {
 
         public void setTranscripcion(String transcripcion) {
             this.transcripcion = transcripcion;
+        }
+    }
+
+    public static final class InvitationRecord {
+        private Long id;
+        private Long canalId;
+        private Long invitadorId;
+        private Long invitadoId;
+        private String fechaInvitacion;
+        private String estado;
+
+        public InvitationRecord() {
+        }
+
+        public Long getId() {
+            return id;
+        }
+
+        public void setId(Long id) {
+            this.id = id;
+        }
+
+        public Long getCanalId() {
+            return canalId;
+        }
+
+        public void setCanalId(Long canalId) {
+            this.canalId = canalId;
+        }
+
+        public Long getInvitadorId() {
+            return invitadorId;
+        }
+
+        public void setInvitadorId(Long invitadorId) {
+            this.invitadorId = invitadorId;
+        }
+
+        public Long getInvitadoId() {
+            return invitadoId;
+        }
+
+        public void setInvitadoId(Long invitadoId) {
+            this.invitadoId = invitadoId;
+        }
+
+        public String getFechaInvitacion() {
+            return fechaInvitacion;
+        }
+
+        public void setFechaInvitacion(String fechaInvitacion) {
+            this.fechaInvitacion = fechaInvitacion;
+        }
+
+        public String getEstado() {
+            return estado;
+        }
+
+        public void setEstado(String estado) {
+            this.estado = estado;
         }
     }
 }

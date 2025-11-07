@@ -128,6 +128,8 @@ public class DatabaseSyncCoordinator {
         }
         snapshot.setMensajes(mensajes);
 
+        snapshot.setInvitaciones(loadInvitaciones());
+
         return snapshot;
     }
 
@@ -212,6 +214,29 @@ public class DatabaseSyncCoordinator {
         return mensaje;
     }
 
+    private List<DatabaseSnapshot.InvitationRecord> loadInvitaciones() {
+        String sql = "SELECT id, canal_id, invitador_id, invitado_id, fecha_invitacion, estado FROM invitaciones ORDER BY id";
+        List<DatabaseSnapshot.InvitationRecord> invitaciones = new ArrayList<>();
+        try (Connection connection = dataSource.getConnection();
+             PreparedStatement ps = connection.prepareStatement(sql);
+             ResultSet rs = ps.executeQuery()) {
+            while (rs.next()) {
+                DatabaseSnapshot.InvitationRecord record = new DatabaseSnapshot.InvitationRecord();
+                record.setId(rs.getLong("id"));
+                record.setCanalId(rs.getLong("canal_id"));
+                record.setInvitadorId(rs.getLong("invitador_id"));
+                record.setInvitadoId(rs.getLong("invitado_id"));
+                Timestamp ts = rs.getTimestamp("fecha_invitacion");
+                record.setFechaInvitacion(ts != null ? ts.toLocalDateTime().toString() : null);
+                record.setEstado(rs.getString("estado"));
+                invitaciones.add(record);
+            }
+        } catch (SQLException e) {
+            throw new IllegalStateException("Error consultando invitaciones para snapshot", e);
+        }
+        return invitaciones;
+    }
+
     private Long getNullableLong(ResultSet rs, String column) throws SQLException {
         long value = rs.getLong(column);
         return rs.wasNull() ? null : value;
@@ -237,6 +262,7 @@ public class DatabaseSyncCoordinator {
             changed |= syncCanales(connection, snapshot.getCanales());
             changed |= syncMemberships(connection, snapshot.getCanalMiembros(), clientResult.idMapping());
             changed |= syncMensajes(connection, snapshot.getMensajes(), clientResult.idMapping());
+            changed |= syncInvitaciones(connection, snapshot.getInvitaciones(), clientResult.idMapping());
 
             connection.commit();
             return changed;
@@ -531,6 +557,79 @@ public class DatabaseSyncCoordinator {
                 }
                 ps.setString(11, record.getTranscripcion());
                 changed |= ps.executeUpdate() > 0;
+            }
+        }
+        return changed;
+    }
+
+    private boolean syncInvitaciones(Connection connection,
+                                     List<DatabaseSnapshot.InvitationRecord> invitaciones,
+                                     java.util.Map<Long, Long> clientIdMap) throws SQLException {
+        if (invitaciones == null || invitaciones.isEmpty()) {
+            return false;
+        }
+        boolean changed = false;
+        String sqlWithId = "INSERT INTO invitaciones(id, canal_id, invitador_id, invitado_id, fecha_invitacion, estado) " +
+            "VALUES(?,?,?,?,?,?) ON DUPLICATE KEY UPDATE canal_id=VALUES(canal_id), invitador_id=VALUES(invitador_id), " +
+            "invitado_id=VALUES(invitado_id), fecha_invitacion=VALUES(fecha_invitacion), estado=VALUES(estado)";
+        String sqlWithoutId = "INSERT INTO invitaciones(canal_id, invitador_id, invitado_id, fecha_invitacion, estado) " +
+            "VALUES(?,?,?,?,?) ON DUPLICATE KEY UPDATE invitador_id=VALUES(invitador_id), fecha_invitacion=VALUES(fecha_invitacion), " +
+            "estado=VALUES(estado)";
+        try (PreparedStatement withId = connection.prepareStatement(sqlWithId);
+             PreparedStatement withoutId = connection.prepareStatement(sqlWithoutId)) {
+            for (DatabaseSnapshot.InvitationRecord record : invitaciones) {
+                if (record.getCanalId() == null || record.getInvitadoId() == null) {
+                    continue;
+                }
+                Timestamp timestamp = null;
+                if (record.getFechaInvitacion() != null && !record.getFechaInvitacion().isBlank()) {
+                    timestamp = Timestamp.valueOf(LocalDateTime.parse(record.getFechaInvitacion()));
+                }
+                Long invitadorId = record.getInvitadorId() != null
+                    ? resolveClientId(record.getInvitadorId(), clientIdMap)
+                    : null;
+                Long invitadoId = resolveClientId(record.getInvitadoId(), clientIdMap);
+
+                if (record.getId() != null) {
+                    withId.setLong(1, record.getId());
+                    withId.setLong(2, record.getCanalId());
+                    if (invitadorId != null) {
+                        withId.setLong(3, invitadorId);
+                    } else {
+                        withId.setNull(3, Types.BIGINT);
+                    }
+                    withId.setLong(4, invitadoId);
+                    if (timestamp != null) {
+                        withId.setTimestamp(5, timestamp);
+                    } else {
+                        withId.setNull(5, Types.TIMESTAMP);
+                    }
+                    if (record.getEstado() != null) {
+                        withId.setString(6, record.getEstado());
+                    } else {
+                        withId.setNull(6, Types.VARCHAR);
+                    }
+                    changed |= withId.executeUpdate() > 0;
+                } else {
+                    withoutId.setLong(1, record.getCanalId());
+                    if (invitadorId != null) {
+                        withoutId.setLong(2, invitadorId);
+                    } else {
+                        withoutId.setNull(2, Types.BIGINT);
+                    }
+                    withoutId.setLong(3, invitadoId);
+                    if (timestamp != null) {
+                        withoutId.setTimestamp(4, timestamp);
+                    } else {
+                        withoutId.setNull(4, Types.TIMESTAMP);
+                    }
+                    if (record.getEstado() != null) {
+                        withoutId.setString(5, record.getEstado());
+                    } else {
+                        withoutId.setNull(5, Types.VARCHAR);
+                    }
+                    changed |= withoutId.executeUpdate() > 0;
+                }
             }
         }
         return changed;

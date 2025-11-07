@@ -14,6 +14,7 @@ public class RealtimeInvitationDto {
     private Long invitadoId;
     private String invitadoNombre;
     private String estado;
+    private Long invitacionId;
 
     public String getEvento() {
         return evento;
@@ -93,5 +94,13 @@ public class RealtimeInvitationDto {
 
     public void setEstado(String estado) {
         this.estado = estado;
+    }
+
+    public Long getInvitacionId() {
+        return invitacionId;
+    }
+
+    public void setInvitacionId(Long invitacionId) {
+        this.invitacionId = invitacionId;
     }
 }
