@@ -81,7 +81,7 @@ public final class ServidorApplication {
         clienteRepository.disconnectAll();
 
         this.eventBus = new SessionEventBus();
-        this.connectionRegistry = new ConnectionRegistry(eventBus, serverConfig.getServerId());
+        this.connectionRegistry = new ConnectionRegistry(eventBus, serverConfig.getServerId(), canalRepository);
         DatabaseSyncCoordinator databaseSyncCoordinator = new DatabaseSyncCoordinator(
             clienteRepository,
             canalRepository,
@@ -94,7 +94,8 @@ public final class ServidorApplication {
             serverConfig.getPeerEndpoints(),
             connectionRegistry,
             databaseSyncCoordinator,
-            clienteRepository
+            clienteRepository,
+            canalRepository
         );
         connectionRegistry.setPeerManager(peerManager);
         new ClusterUserRegistrationListener(peerManager, eventBus);
