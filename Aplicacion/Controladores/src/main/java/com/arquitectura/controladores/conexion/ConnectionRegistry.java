@@ -38,6 +38,7 @@ public class ConnectionRegistry implements ConnectionGateway {
     private final ObjectMapper mapper;
     private final SessionEventBus eventBus;
     private final String localServerId;
+    private final Set<String> knownRemoteServers = ConcurrentHashMap.newKeySet();
 
     private volatile ServerPeerManager peerManager;
 
@@ -365,6 +366,12 @@ public class ConnectionRegistry implements ConnectionGateway {
             snapshot.computeIfAbsent(remote.getServerId(), key -> new ArrayList<>())
                 .add(copySnapshot(remote));
         });
+        for (String serverId : knownRemoteServers) {
+            if (serverId == null || serverId.equals(localServerId)) {
+                continue;
+            }
+            snapshot.computeIfAbsent(serverId, key -> new ArrayList<>());
+        }
         return snapshot;
     }
 
@@ -372,7 +379,8 @@ public class ConnectionRegistry implements ConnectionGateway {
         if (serverId == null || serverId.equals(localServerId)) {
             return false;
         }
-        boolean changed = clearRemoteSessions(serverId);
+        boolean changed = knownRemoteServers.add(serverId);
+        changed |= clearRemoteSessions(serverId);
         if (snapshots == null) {
             return changed;
         }
@@ -396,6 +404,8 @@ public class ConnectionRegistry implements ConnectionGateway {
 
         RemoteSessionSnapshot copy = copySnapshot(snapshot);
         copy.setServerId(effectiveServerId);
+
+        knownRemoteServers.add(effectiveServerId);
 
         String key = remoteKey(effectiveServerId, copy.getSessionId());
         RemoteSessionSnapshot current = remoteSessions.get(key);
@@ -455,6 +465,13 @@ public class ConnectionRegistry implements ConnectionGateway {
 
     public boolean clearRemoteSessions(String serverId) {
         return !drainRemoteSessions(serverId).isEmpty();
+    }
+
+    public void forgetRemoteServer(String serverId) {
+        if (serverId == null) {
+            return;
+        }
+        knownRemoteServers.remove(serverId);
     }
 
     private RemoteSessionSnapshot copySnapshot(RemoteSessionSnapshot snapshot) {

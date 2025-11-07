@@ -784,6 +784,7 @@ public class ServerPeerManager {
         if (remoteId != null) {
             boolean removed = peers.remove(remoteId, connection);
             List<RemoteSessionSnapshot> drained = registry.drainRemoteSessions(remoteId);
+            registry.forgetRemoteServer(remoteId);
             if (!drained.isEmpty()) {
                 for (RemoteSessionSnapshot snapshot : drained) {
                     ClientDisconnectionPayload payload = new ClientDisconnectionPayload();
