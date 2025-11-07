@@ -58,6 +58,7 @@ public class ServerPeerManager {
     private final ObjectMapper mapper;
     private final Map<String, PeerConnection> peers = new ConcurrentHashMap<>();
     private final Map<String, PeerConnection> peersByAlias = new ConcurrentHashMap<>();
+    private final Map<String, PeerConnection> routeHints = new ConcurrentHashMap<>();
     private final Set<PeerConnection> connections = ConcurrentHashMap.newKeySet();
     private final CopyOnWriteArrayList<PeerStatusListener> peerListeners = new CopyOnWriteArrayList<>();
     private final String serverId;
@@ -67,6 +68,7 @@ public class ServerPeerManager {
     private final ClienteRepository clienteRepository;
     private final LocalAliasRegistry localAliases;
     private final String instanceId;
+    private final String normalizedServerId;
 
     private volatile boolean running;
     private ServerSocket serverSocket;
@@ -88,6 +90,7 @@ public class ServerPeerManager {
         this.mapper.disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS);
         this.localAliases = new LocalAliasRegistry(serverId);
         this.instanceId = UUID.randomUUID().toString();
+        this.normalizedServerId = normalizeServerId(serverId);
         this.localAliases.initialize();
     }
 
@@ -113,6 +116,7 @@ public class ServerPeerManager {
         connections.clear();
         peers.clear();
         peersByAlias.clear();
+        routeHints.clear();
     }
 
     public Set<String> connectedPeerIds() {
@@ -314,6 +318,10 @@ public class ServerPeerManager {
         if (alias != null) {
             return alias;
         }
+        PeerConnection hinted = routeHints.get(normalized);
+        if (hinted != null) {
+            return hinted;
+        }
         int separator = target.indexOf('@');
         if (separator > 0) {
             String prefix = target.substring(0, separator);
@@ -346,6 +354,7 @@ public class ServerPeerManager {
             return;
         }
         peersByAlias.put(normalized, connection);
+        registerRouteHint(connection, identifier);
         int separator = identifier.indexOf('@');
         if (separator > 0) {
             String prefix = identifier.substring(0, separator);
@@ -353,10 +362,12 @@ public class ServerPeerManager {
             String normalizedPrefix = normalizeServerId(prefix);
             if (normalizedPrefix != null) {
                 peersByAlias.putIfAbsent(normalizedPrefix, connection);
+                registerRouteHintIdentifier(connection, normalizedPrefix);
             }
             String normalizedSuffix = normalizeServerId(suffix);
             if (normalizedSuffix != null) {
                 peersByAlias.putIfAbsent(normalizedSuffix, connection);
+                registerRouteHintIdentifier(connection, normalizedSuffix);
             }
         }
     }
@@ -366,6 +377,43 @@ public class ServerPeerManager {
             return;
         }
         peersByAlias.entrySet().removeIf(entry -> entry.getValue() == connection);
+    }
+
+    private void registerRouteHint(PeerConnection connection, String identifier) {
+        if (connection == null) {
+            return;
+        }
+        String normalized = normalizeServerId(identifier);
+        registerRouteHintIdentifier(connection, normalized);
+        if (identifier == null) {
+            return;
+        }
+        int separator = identifier.indexOf('@');
+        if (separator > 0) {
+            registerRouteHintIdentifier(connection, normalizeServerId(identifier.substring(0, separator)));
+            registerRouteHintIdentifier(connection, normalizeServerId(identifier.substring(separator + 1)));
+        }
+    }
+
+    private void registerRouteHintIdentifier(PeerConnection connection, String normalized) {
+        if (normalized == null || normalized.isBlank()) {
+            return;
+        }
+        if (normalizedServerId != null && normalizedServerId.equals(normalized)) {
+            return;
+        }
+        PeerConnection direct = peersByAlias.get(normalized);
+        if (direct != null && direct != connection) {
+            return;
+        }
+        routeHints.put(normalized, connection);
+    }
+
+    private void unregisterRouteHints(PeerConnection connection) {
+        if (connection == null) {
+            return;
+        }
+        routeHints.entrySet().removeIf(entry -> entry.getValue() == connection);
     }
 
     private String normalizeServerId(String identifier) {
@@ -442,9 +490,11 @@ public class ServerPeerManager {
         PeerConnection previous = peers.put(remoteId, connection);
         if (previous != null && previous != connection) {
             unregisterPeerAliases(previous);
+            unregisterRouteHints(previous);
             previous.closeSilently();
         }
         registerPeerAliases(connection);
+        registerRouteHint(connection, remoteId);
         LOGGER.info(() -> String.format(
             "Conexión P2P establecida con servidor %s (%s, %s desde %s)",
             remoteId,
@@ -674,6 +724,9 @@ public class ServerPeerManager {
                 return;
             }
             logIncomingPayload(connection, envelope, json);
+            if (connection != null) {
+                registerRouteHint(connection, envelope.getOrigin());
+            }
             String target = envelope.getTarget();
             if (target != null && !target.isBlank() && !localAliases.isLocal(target)) {
                 routeEnvelope(connection, envelope);
@@ -721,6 +774,7 @@ public class ServerPeerManager {
                 }
                 List<RemoteSessionSnapshot> remapped = remapSnapshotsForServer(entry.getValue(), effectiveServerId);
                 updated |= registry.registerRemoteSessions(effectiveServerId, remapped);
+                registerRouteHint(connection, effectiveServerId);
             }
         }
         if (hasDatabase && databaseSync != null) {
@@ -743,6 +797,7 @@ public class ServerPeerManager {
         RemoteSessionSnapshot snapshot = mapper.treeToValue(envelope.getPayload(), RemoteSessionSnapshot.class);
         String fallbackId = resolveRemoteServerAlias(connection,
             envelope.getOrigin() != null ? envelope.getOrigin() : connection.getRemoteServerId());
+        registerRouteHint(connection, fallbackId);
         if (snapshot != null) {
             snapshot.setServerId(resolveRemoteServerAlias(connection, snapshot.getServerId()));
         }
@@ -759,6 +814,7 @@ public class ServerPeerManager {
         }
         String fallbackId = resolveRemoteServerAlias(connection,
             envelope.getOrigin() != null ? envelope.getOrigin() : connection.getRemoteServerId());
+        registerRouteHint(connection, fallbackId);
         boolean removed = registry.removeRemoteSession(fallbackId, data.getSessionId(), data.getClienteId());
         if (removed) {
             relayStateUpdate(connection, PeerMessageType.CLIENT_DISCONNECTED, envelope.getPayload(), envelope.getOrigin());
@@ -772,6 +828,7 @@ public class ServerPeerManager {
         }
         String fallbackId = resolveRemoteServerAlias(connection,
             envelope.getOrigin() != null ? envelope.getOrigin() : connection.getRemoteServerId());
+        registerRouteHint(connection, fallbackId);
         boolean changed = registry.updateRemoteChannel(fallbackId, update.getSessionId(), update.getCanalId(),
             "JOIN".equalsIgnoreCase(update.getAction()));
         if (changed) {
@@ -893,6 +950,7 @@ public class ServerPeerManager {
         if (remoteId != null) {
             boolean removed = peers.remove(remoteId, connection);
             unregisterPeerAliases(connection);
+            unregisterRouteHints(connection);
             List<RemoteSessionSnapshot> drained = registry.drainRemoteSessions(remoteId);
             registry.forgetRemoteServer(remoteId);
             if (!drained.isEmpty()) {
