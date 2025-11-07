@@ -27,6 +27,26 @@ public final class DatabaseMigrations {
             LOGGER.info("Migraciones de base de datos completadas exitosamente");
         } catch (Exception e) {
             LOGGER.log(Level.SEVERE, "Error ejecutando migraciones de base de datos", e);
+            throw new IllegalStateException("Fallo en migraciones de base de datos", e);
+        }
+    }
+
+    private static void ensureCanalesUuidColumn(DataSource dataSource) throws SQLException {
+        try (Connection conn = dataSource.getConnection()) {
+            if (!columnExists(conn, "canales", "uuid")) {
+                String sql = "ALTER TABLE canales ADD COLUMN uuid CHAR(36) NULL AFTER id";
+                try (Statement stmt = conn.createStatement()) {
+                    stmt.executeUpdate(sql);
+                    LOGGER.info("✓ Columna 'uuid' agregada a la tabla 'canales'");
+                }
+            }
+
+            int updated = populateMissingChannelUuids(conn);
+            if (updated > 0) {
+                LOGGER.info(() -> "✓ " + updated + " canal(es) existentes recibieron UUID generado");
+            }
+
+            ensureUuidUniqueIndex(conn);
         }
     }
 
@@ -79,10 +99,30 @@ public final class DatabaseMigrations {
     }
 
     private static int populateMissingChannelUuids(Connection conn) throws SQLException {
-        String sql = "UPDATE canales SET uuid = UUID() WHERE uuid IS NULL OR uuid = ''";
-        try (Statement stmt = conn.createStatement()) {
-            return stmt.executeUpdate(sql);
+        final String sql = "UPDATE canales SET uuid = UUID() WHERE uuid IS NULL OR uuid = '' LIMIT ?";
+        int totalUpdated = 0;
+        int batchSize = 500;
+
+        try (PreparedStatement stmt = conn.prepareStatement(sql)) {
+            while (true) {
+                stmt.setInt(1, batchSize);
+                try {
+                    int updated = stmt.executeUpdate();
+                    if (updated == 0) {
+                        break;
+                    }
+                    totalUpdated += updated;
+                } catch (SQLTransactionRollbackException e) {
+                    if (batchSize == 1) {
+                        throw e;
+                    }
+                    batchSize = Math.max(1, batchSize / 2);
+                    continue;
+                }
+            }
         }
+
+        return totalUpdated;
     }
 
     private static void ensureUuidUniqueIndex(Connection conn) throws SQLException {
