@@ -20,11 +20,16 @@ import java.io.BufferedWriter;
 import java.io.IOException;
 import java.io.InputStreamReader;
 import java.io.OutputStreamWriter;
+import java.net.InetAddress;
 import java.net.InetSocketAddress;
+import java.net.NetworkInterface;
 import java.net.ServerSocket;
 import java.net.Socket;
+import java.net.SocketException;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
+import java.util.Collections;
+import java.util.Enumeration;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -58,6 +63,8 @@ public class ServerPeerManager {
     private final List<PeerAddress> bootstrapPeers;
     private final DatabaseSyncCoordinator databaseSync;
     private final ClienteRepository clienteRepository;
+    private final Set<String> localIdentifiers = ConcurrentHashMap.newKeySet();
+    private final Set<String> localHostRepresentations = ConcurrentHashMap.newKeySet();
 
     private volatile boolean running;
     private ServerSocket serverSocket;
@@ -77,6 +84,7 @@ public class ServerPeerManager {
         this.mapper = new ObjectMapper();
         this.mapper.registerModule(new JavaTimeModule());
         this.mapper.disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS);
+        initializeLocalIdentity();
     }
 
     public void start() {
@@ -234,14 +242,54 @@ public class ServerPeerManager {
     }
 
     private void sendToPeer(String targetServerId, PeerMessageType type, Object payload) {
-        PeerConnection connection = peers.get(targetServerId);
-        if (connection == null) {
-            LOGGER.fine(() -> "No hay conexión con el servidor " + targetServerId + " para reenviar mensaje");
+        if (targetServerId == null || targetServerId.isBlank()) {
+            LOGGER.fine(() -> "Destino inválido para mensaje P2P " + type);
             return;
         }
         JsonNode node = payload instanceof JsonNode ? (JsonNode) payload : mapper.valueToTree(payload);
-        PeerEnvelope envelope = new PeerEnvelope(type, serverId, node);
-        connection.send(envelope);
+        PeerEnvelope envelope = new PeerEnvelope(type, serverId, targetServerId, node);
+        routeEnvelope(null, envelope);
+    }
+
+    private void routeEnvelope(PeerConnection source, PeerEnvelope envelope) {
+        if (envelope == null) {
+            return;
+        }
+        if (!envelope.markVisited(serverId)) {
+            LOGGER.fine(() -> "Mensaje " + envelope.getType() + " ya pasó por " + serverId + ", descartando para evitar bucles");
+            return;
+        }
+
+        String target = envelope.getTarget();
+        if (target != null) {
+            PeerConnection direct = peers.get(target);
+            if (direct != null && direct != source) {
+                direct.send(envelope);
+                return;
+            }
+        }
+
+        boolean forwarded = false;
+        for (PeerConnection peer : peers.values()) {
+            if (peer == source) {
+                continue;
+            }
+            if (target != null && peer.matchesIdentity(target)) {
+                peer.send(envelope);
+                forwarded = true;
+                continue;
+            }
+            if (envelope.hasVisited(peer.getRemoteServerId())) {
+                continue;
+            }
+            peer.send(envelope);
+            forwarded = true;
+        }
+
+        if (!forwarded) {
+            LOGGER.fine(() -> "No se encontró ruta para mensaje " + envelope.getType()
+                + " con destino " + target);
+        }
     }
 
     private void startAcceptor() {
@@ -280,6 +328,7 @@ public class ServerPeerManager {
     }
 
     private void registerConnection(PeerConnection connection) {
+        rememberLocalAddress(connection.socket != null ? connection.socket.getLocalAddress() : null);
         connections.add(connection);
         connection.start();
     }
@@ -507,6 +556,10 @@ public class ServerPeerManager {
                 return;
             }
             logIncomingPayload(connection, envelope, json);
+            if (shouldForward(envelope)) {
+                forwardEnvelope(connection, envelope);
+                return;
+            }
             switch (type) {
                 case HELLO -> {
                     HelloPayload payload = mapper.treeToValue(envelope.getPayload(), HelloPayload.class);
@@ -711,6 +764,96 @@ public class ServerPeerManager {
             }
             peer.send(envelope);
         }
+    }
+
+    private boolean shouldForward(PeerEnvelope envelope) {
+        if (envelope == null) {
+            return false;
+        }
+        String target = envelope.getTarget();
+        if (target == null || target.isBlank()) {
+            return false;
+        }
+        if (isLocalTarget(target)) {
+            return false;
+        }
+        return true;
+    }
+
+    private void initializeLocalIdentity() {
+        if (serverId != null && !serverId.isBlank()) {
+            localIdentifiers.add(serverId);
+        }
+        discoverLocalNetworkAddresses();
+    }
+
+    private void discoverLocalNetworkAddresses() {
+        try {
+            Enumeration<NetworkInterface> interfaces = NetworkInterface.getNetworkInterfaces();
+            if (interfaces == null) {
+                return;
+            }
+            for (NetworkInterface networkInterface : Collections.list(interfaces)) {
+                if (networkInterface == null || !networkInterface.isUp()) {
+                    continue;
+                }
+                Enumeration<InetAddress> addresses = networkInterface.getInetAddresses();
+                if (addresses == null) {
+                    continue;
+                }
+                for (InetAddress address : Collections.list(addresses)) {
+                    rememberLocalAddress(address);
+                }
+            }
+        } catch (SocketException e) {
+            LOGGER.log(Level.FINE, "No se pudieron enumerar las direcciones locales para aliases", e);
+        }
+    }
+
+    private void rememberLocalAddress(InetAddress address) {
+        if (address == null || address.isAnyLocalAddress() || address.isLoopbackAddress()
+            || serverId == null || serverId.isBlank()) {
+            return;
+        }
+        String hostAddress = address.getHostAddress();
+        if (hostAddress != null && !hostAddress.isBlank() && localHostRepresentations.add(hostAddress)) {
+            localIdentifiers.add(serverId + "@" + hostAddress);
+        }
+        String hostName = address.getHostName();
+        if (hostName != null && !hostName.isBlank() && localHostRepresentations.add(hostName)) {
+            localIdentifiers.add(serverId + "@" + hostName);
+        }
+        String canonicalHostName = address.getCanonicalHostName();
+        if (canonicalHostName != null && !canonicalHostName.isBlank()
+            && localHostRepresentations.add(canonicalHostName)) {
+            localIdentifiers.add(serverId + "@" + canonicalHostName);
+        }
+    }
+
+    private boolean isLocalTarget(String candidate) {
+        if (candidate == null || candidate.isBlank()) {
+            return false;
+        }
+        if (localIdentifiers.contains(candidate)) {
+            return true;
+        }
+        int separator = candidate.indexOf('@');
+        if (separator <= 0 || separator >= candidate.length() - 1) {
+            return false;
+        }
+        String hostPart = candidate.substring(separator + 1);
+        if (hostPart.isBlank()) {
+            return false;
+        }
+        if (localHostRepresentations.contains(hostPart)) {
+            localIdentifiers.add(candidate);
+            return true;
+        }
+        return false;
+    }
+
+    private void forwardEnvelope(PeerConnection source, PeerEnvelope envelope) {
+        routeEnvelope(source, envelope);
     }
 
     private void onConnectionClosed(PeerConnection connection) {
@@ -942,13 +1085,22 @@ public class ServerPeerManager {
             if (!shouldLogPayload(envelope.getType())) {
                 return;
             }
-            String target = remoteServerId != null ? remoteServerId
-                : announcedServerId != null ? announcedServerId : remoteSummary();
-            String finalTarget = target;
+            String destinationLabel = envelope.getTarget();
+            if (destinationLabel == null) {
+                destinationLabel = remoteServerId != null ? remoteServerId
+                    : announcedServerId != null ? announcedServerId : remoteSummary();
+            } else {
+                String routeTarget = remoteServerId != null ? remoteServerId
+                    : announcedServerId != null ? announcedServerId : remoteSummary();
+                if (!destinationLabel.equals(routeTarget)) {
+                    destinationLabel = destinationLabel + " vía " + routeTarget;
+                }
+            }
+            String finalDestination = destinationLabel;
             String sanitized = sanitizePayloadForLogging(serialized);
             LOGGER.info(() -> String.format("Enviando %s a %s: %s",
                 envelope.getType(),
-                finalTarget,
+                finalDestination,
                 sanitized));
         }
 
@@ -994,14 +1146,21 @@ public class ServerPeerManager {
     private static final class PeerEnvelope {
         private PeerMessageType type;
         private String origin;
+        private String target;
+        private List<String> route;
         private JsonNode payload;
 
         private PeerEnvelope() {
         }
 
         private PeerEnvelope(PeerMessageType type, String origin, JsonNode payload) {
+            this(type, origin, null, payload);
+        }
+
+        private PeerEnvelope(PeerMessageType type, String origin, String target, JsonNode payload) {
             this.type = type;
             this.origin = origin;
+            this.target = target;
             this.payload = payload;
         }
 
@@ -1027,6 +1186,43 @@ public class ServerPeerManager {
 
         public void setPayload(JsonNode payload) {
             this.payload = payload;
+        }
+
+        public String getTarget() {
+            return target;
+        }
+
+        public void setTarget(String target) {
+            this.target = target;
+        }
+
+        public List<String> getRoute() {
+            return route;
+        }
+
+        public void setRoute(List<String> route) {
+            this.route = route;
+        }
+
+        private synchronized boolean markVisited(String serverId) {
+            if (serverId == null || serverId.isBlank()) {
+                return true;
+            }
+            if (route == null) {
+                route = new ArrayList<>();
+            }
+            if (route.contains(serverId)) {
+                return false;
+            }
+            route.add(serverId);
+            return true;
+        }
+
+        private synchronized boolean hasVisited(String serverId) {
+            if (serverId == null || serverId.isBlank() || route == null) {
+                return false;
+            }
+            return route.contains(serverId);
         }
     }
 
