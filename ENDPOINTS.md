@@ -216,13 +216,14 @@ Los mensajes de audio dentro de `mensajes` incluyen el campo `audioBase64` dentr
       "rutaArchivo": "media/audio/usuarios/1/rec_1760597378319.wav",
       "mime": "audio/wav",
       "duracionSeg": 15,
-      "transcripcion": "hola cómo estás me gustaría coordinar una reunión"
+      "transcripcion": "hola cómo estás me gustaría coordinar una reunión",
+      "audioBase64": "UklGRlIAAABXQVZFZm10IBAAAAABAAEA..."
     }
   }
 }
 ```
 
-> **Importante:** El evento en tiempo real **no** incluye el `audioBase64`. Ese campo llega únicamente en `MESSAGE_SYNC` al iniciar sesión.
+> **Importante:** El evento en tiempo real ahora incluye el campo `audioBase64` para que emisor y receptor puedan reproducir el audio sin descargar archivos adicionales.
 
 **Sincronización en tiempo real para el emisor:**
 
@@ -796,7 +797,8 @@ Los mensajes en tiempo real llegan como `EVENT` y se identifican por `payload.ev
       "rutaArchivo": "media/audio/usuarios/3/rec_456.wav",
       "mime": "audio/wav",
       "duracionSeg": 8,
-      "transcripcion": "reunión mañana a las 10"
+      "transcripcion": "reunión mañana a las 10",
+      "audioBase64": "UklGRlIAAABXQVZFZm10IBAAAAABAAEA..."
     }
   }
 }

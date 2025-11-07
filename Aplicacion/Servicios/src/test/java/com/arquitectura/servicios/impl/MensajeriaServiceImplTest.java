@@ -77,6 +77,53 @@ class MensajeriaServiceImplTest {
         assertEquals("hola bob", emisorDto.getContenido().get("contenido"));
     }
 
+    @Test
+    void incluyeAudioBase64EnNotificacionesDeAudio() {
+        InMemoryMensajeRepository mensajeRepository = new InMemoryMensajeRepository();
+        InMemoryLogRepository logRepository = new InMemoryLogRepository();
+        CapturingConnectionGateway connectionGateway = new CapturingConnectionGateway();
+        SessionEventBus eventBus = new SessionEventBus();
+        StubClienteRepository clienteRepository = new StubClienteRepository();
+        clienteRepository.put(1L, "alice");
+        clienteRepository.put(2L, "bob");
+        StubCanalRepository canalRepository = new StubCanalRepository();
+        AudioTranscriptionService transcriptionService = audioPath -> "[transcripcion]";
+        StubAudioStorageService audioStorageService = new StubAudioStorageService("QkFTRTY0");
+
+        new MessageNotificationService(connectionGateway, canalRepository, clienteRepository, eventBus);
+
+        MensajeriaServiceImpl service = new MensajeriaServiceImpl(
+                mensajeRepository,
+                logRepository,
+                connectionGateway,
+                eventBus,
+                transcriptionService,
+                audioStorageService
+        );
+
+        MessageRequest request = new MessageRequest();
+        request.setTipo("AUDIO");
+        request.setRutaArchivo("media/audio/usuarios/1/demo.wav");
+        request.setMime("audio/wav");
+        request.setDuracionSeg(12);
+        request.setEmisor(1L);
+        request.setReceptor(2L);
+
+        service.enviarMensajeAUsuario(request);
+
+        RealtimeMessageDto receptorDto = (RealtimeMessageDto) connectionGateway.deliveriesFor(2L).get(0);
+        assertEquals("NEW_MESSAGE", receptorDto.getEvento());
+        assertEquals("AUDIO", receptorDto.getTipoMensaje());
+        assertEquals("media/audio/usuarios/1/demo.wav", receptorDto.getContenido().get("rutaArchivo"));
+        assertEquals("audio/wav", receptorDto.getContenido().get("mime"));
+        assertEquals(12, receptorDto.getContenido().get("duracionSeg"));
+        assertEquals("[transcripcion]", receptorDto.getContenido().get("transcripcion"));
+        assertEquals("QkFTRTY0", receptorDto.getContenido().get("audioBase64"));
+
+        RealtimeMessageDto emisorDto = (RealtimeMessageDto) connectionGateway.deliveriesFor(1L).get(0);
+        assertEquals("QkFTRTY0", emisorDto.getContenido().get("audioBase64"));
+    }
+
     private static class InMemoryMensajeRepository implements MensajeRepository {
         private final AtomicLong sequence = new AtomicLong();
         private final Map<Long, Mensaje> storage = new ConcurrentHashMap<>();
@@ -277,6 +324,34 @@ class MensajeriaServiceImplTest {
         @Override
         public String cargarAudioBase64(String rutaArchivo) {
             return null;
+        }
+    }
+
+    private static class StubAudioStorageService implements AudioStorageService {
+        private final String base64;
+
+        private StubAudioStorageService(String base64) {
+            this.base64 = base64;
+        }
+
+        @Override
+        public String guardarAudio(String audioBase64, Long usuarioId, String mime) {
+            return "media/audio/usuarios/%d/uploaded".formatted(usuarioId != null ? usuarioId : 0L);
+        }
+
+        @Override
+        public boolean existeAudio(String rutaArchivo) {
+            return true;
+        }
+
+        @Override
+        public boolean eliminarAudio(String rutaArchivo) {
+            return false;
+        }
+
+        @Override
+        public String cargarAudioBase64(String rutaArchivo) {
+            return base64;
         }
     }
 }
