@@ -1,6 +1,8 @@
 package com.arquitectura.controladores.conexion;
 
+import java.util.HashMap;
 import java.util.HashSet;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 
@@ -16,6 +18,7 @@ public class RemoteSessionSnapshot {
     private String usuario;
     private String ip;
     private Set<Long> canales = new HashSet<>();
+    private Map<Long, String> channelUuids = new HashMap<>();
 
     public RemoteSessionSnapshot() {
     }
@@ -82,6 +85,14 @@ public class RemoteSessionSnapshot {
 
     public void setCanales(Set<Long> canales) {
         this.canales = canales != null ? new HashSet<>(canales) : new HashSet<>();
+    }
+
+    public Map<Long, String> getChannelUuids() {
+        return channelUuids;
+    }
+
+    public void setChannelUuids(Map<Long, String> channelUuids) {
+        this.channelUuids = channelUuids != null ? new HashMap<>(channelUuids) : new HashMap<>();
     }
 
     @Override
