@@ -50,6 +50,27 @@ public final class DatabaseMigrations {
         }
     }
 
+    private static void ensureCanalesUuidColumn(DataSource dataSource) {
+        try (Connection conn = dataSource.getConnection()) {
+            if (!columnExists(conn, "canales", "uuid")) {
+                String sql = "ALTER TABLE canales ADD COLUMN uuid CHAR(36) NULL AFTER id";
+                try (Statement stmt = conn.createStatement()) {
+                    stmt.executeUpdate(sql);
+                    LOGGER.info("✓ Columna 'uuid' agregada a la tabla 'canales'");
+                }
+            }
+
+            int updated = populateMissingChannelUuids(conn);
+            if (updated > 0) {
+                LOGGER.info(() -> "✓ " + updated + " canal(es) existentes recibieron UUID generado");
+            }
+
+            ensureUuidUniqueIndex(conn);
+        } catch (SQLException e) {
+            LOGGER.log(Level.WARNING, "Error asegurando columna 'uuid' en 'canales'", e);
+        }
+    }
+
     /**
      * Agrega la columna 'transcripcion' a la tabla mensajes si no existe
      */
