@@ -1229,11 +1229,8 @@ public class ServerPeerManager {
                     return true;
                 }
             }
-            if (baseIdentifier != null && baseIdentifier.equalsIgnoreCase(prefix)) {
-                registerHostRepresentation(hostPart);
-                identifiers.add(trimmed);
-                return true;
-            }
+            // NO registrar automáticamente cualquier dirección con el mismo prefijo de servidor
+            // Solo es local si la IP/host coincide con las direcciones conocidas de este servidor
             return false;
         }
     }
