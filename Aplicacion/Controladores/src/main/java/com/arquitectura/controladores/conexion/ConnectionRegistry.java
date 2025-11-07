@@ -375,6 +375,13 @@ public class ConnectionRegistry implements ConnectionGateway {
         return snapshot;
     }
 
+    public boolean markServerKnown(String serverId) {
+        if (serverId == null || serverId.isBlank() || serverId.equals(localServerId)) {
+            return false;
+        }
+        return knownRemoteServers.add(serverId);
+    }
+
     public boolean registerRemoteSessions(String serverId, List<RemoteSessionSnapshot> snapshots) {
         if (serverId == null || serverId.equals(localServerId)) {
             return false;
