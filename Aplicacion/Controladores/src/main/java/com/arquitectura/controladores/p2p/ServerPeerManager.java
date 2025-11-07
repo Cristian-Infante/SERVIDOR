@@ -1307,6 +1307,8 @@ public class ServerPeerManager {
                 identifiers.add(trimmed);
                 return true;
             }
+            // NO registrar automáticamente cualquier dirección con el mismo prefijo de servidor
+            // Solo es local si la IP/host coincide con las direcciones conocidas de este servidor
             return false;
         }
     }
