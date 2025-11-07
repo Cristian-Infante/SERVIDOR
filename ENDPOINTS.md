@@ -346,6 +346,13 @@ Los mensajes de audio dentro de `mensajes` incluyen el campo `audioBase64` dentr
 }
 ```
 
+**Notas:**
+- Si ya existía una invitación pendiente para el mismo canal y usuario, el servidor la **reactiva** (actualiza `estado` a `PENDIENTE`,
+  renueva la fecha y cambia el `invitadorId`) en lugar de devolver un error. Esta reactivación vuelve a disparar las notificaciones
+  en tiempo real descritas en la sección de eventos.
+- Tanto el invitado como el invitador reciben inmediatamente un `EVENT` con `payload.evento = "INVITE_SENT"` que incluye los metadatos
+  e identificador persistido de la invitación.
+
 ### `ACCEPT`
 **Request:**
 ```json
@@ -389,7 +396,8 @@ Los mensajes de audio dentro de `mensajes` incluyen el campo `audioBase64` dentr
 ```
 
 ### `LIST_RECEIVED_INVITATIONS`
-Muestra las invitaciones recibidas (que puedes aceptar o rechazar).
+Muestra las invitaciones recibidas (que puedes aceptar o rechazar). El listado refleja las invitaciones replicadas en la base local;
+cuando se recibe una invitación desde otro servidor aparecerá aquí tras la sincronización P2P.
 
 **Request:**
 ```json
@@ -639,6 +647,9 @@ El servidor envía notificaciones mediante mensajes `EVENT`. El contenido varía
 - `NEW_MESSAGE`: Nuevo mensaje privado recibido (`payload.contenido` depende del tipo de mensaje).
 - `NEW_CHANNEL_MESSAGE`: Nuevo mensaje en canal.
 - `USER_STATUS_CHANGED`: Actualización del estado de conexión de un usuario.
+- `INVITE_SENT`: Invitación recién creada o reactivada.
+- `INVITE_ACCEPTED`: Invitación aceptada por el invitado.
+- `INVITE_REJECTED`: Invitación rechazada por el invitado.
 
 Otros avisos del servidor utilizan estructuras distintas:
 - `KICKED` / `SERVER_SHUTDOWN`: llegan como `ServerNotification` con campos `tipo`, `mensaje` y `razon`.
@@ -665,7 +676,6 @@ Otros avisos del servidor utilizan estructuras distintas:
 - `"Canal inexistente"`
 - `"No existe invitación pendiente para el canal"`
 - `"El usuario ya es miembro del canal"`
-- `"Ya existe una invitación pendiente para este usuario"`
 - `"El contenido del audio no puede estar vacío"`
 - `"El ID de usuario es requerido"`
 - `"El audio Base64 es inválido"`
@@ -811,6 +821,54 @@ Los mensajes en tiempo real llegan como `EVENT` y se identifican por `payload.ev
 ```
 
 **Acción del cliente**: Actualizar la lista o indicadores de presencia en tiempo real para reflejar el nuevo estado del usuario.
+
+#### INVITE_SENT - Invitación emitida o reenviada
+```json
+{
+  "command": "EVENT",
+  "payload": {
+    "evento": "INVITE_SENT",
+    "timestamp": "2025-11-06T22:52:41.220091",
+    "canalId": 1,
+    "canalNombre": "Mis invitaciones",
+    "canalPrivado": true,
+    "invitadorId": 2,
+    "invitadorNombre": "nicole",
+    "invitadoId": 5,
+    "invitadoNombre": "emmanuel",
+    "estado": "PENDIENTE",
+    "invitacionId": 17
+  }
+}
+```
+
+**Acción del cliente**: Mostrar la invitación pendiente. Si ya existía, actualizar los metadatos (por ejemplo, el nuevo invitador o la
+nueva fecha).
+
+#### INVITE_ACCEPTED / INVITE_REJECTED - Respuesta del invitado
+```json
+{
+  "command": "EVENT",
+  "payload": {
+    "evento": "INVITE_ACCEPTED",
+    "timestamp": "2025-11-06T23:05:12.091422",
+    "canalId": 1,
+    "canalNombre": "Mis invitaciones",
+    "canalPrivado": true,
+    "invitadorId": 2,
+    "invitadorNombre": "nicole",
+    "invitadoId": 5,
+    "invitadoNombre": "emmanuel",
+    "estado": "ACEPTADA",
+    "invitacionId": 17
+  }
+}
+```
+
+Para un rechazo, el evento cambia a `"INVITE_REJECTED"` y `estado` pasa a `"RECHAZADA"`.
+
+**Acción del cliente**: Refrescar la bandeja de invitaciones. El invitador puede retirar la solicitud del listado y el invitado debe
+reflejar la membresía actualizada del canal si la invitación fue aceptada.
 
 ## Eventos de Desconexión
 

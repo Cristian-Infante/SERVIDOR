@@ -1,0 +1,112 @@
+package com.arquitectura.controladores.p2p;
+
+import com.arquitectura.entidades.Invitacion;
+import com.arquitectura.repositorios.InvitacionRepository;
+import com.arquitectura.servicios.eventos.SessionEvent;
+import com.arquitectura.servicios.eventos.SessionEventBus;
+import com.arquitectura.servicios.eventos.SessionEventType;
+import com.arquitectura.servicios.eventos.SessionObserver;
+
+import java.time.LocalDateTime;
+import java.util.List;
+import java.util.Map;
+import java.util.Objects;
+import java.util.Optional;
+import java.util.logging.Level;
+import java.util.logging.Logger;
+
+/**
+ * Replica los cambios de invitaciones entre servidores del clúster
+ * transmitiendo snapshots incrementales cada vez que se crea o actualiza una
+ * invitación.
+ */
+public class ClusterInvitationReplicationListener implements SessionObserver {
+
+    private static final Logger LOGGER = Logger.getLogger(ClusterInvitationReplicationListener.class.getName());
+
+    private final ServerPeerManager peerManager;
+    private final InvitacionRepository invitacionRepository;
+
+    public ClusterInvitationReplicationListener(ServerPeerManager peerManager,
+                                                InvitacionRepository invitacionRepository,
+                                                SessionEventBus eventBus) {
+        this.peerManager = Objects.requireNonNull(peerManager, "peerManager");
+        this.invitacionRepository = Objects.requireNonNull(invitacionRepository, "invitacionRepository");
+        Objects.requireNonNull(eventBus, "eventBus").subscribe(this);
+    }
+
+    @Override
+    public void onEvent(SessionEvent event) {
+        if (event == null) {
+            return;
+        }
+        SessionEventType type = event.getType();
+        if (type == null) {
+            return;
+        }
+        if (type != SessionEventType.INVITE_SENT
+            && type != SessionEventType.INVITE_ACCEPTED
+            && type != SessionEventType.INVITE_REJECTED) {
+            return;
+        }
+        InvitationKey key = extractKey(event.getPayload());
+        if (key == null) {
+            return;
+        }
+        replicateInvitation(key.canalId(), key.invitadoId());
+    }
+
+    private void replicateInvitation(Long canalId, Long invitadoId) {
+        if (canalId == null || invitadoId == null) {
+            return;
+        }
+        try {
+            Optional<Invitacion> invitacionOpt = invitacionRepository.findByCanalAndInvitado(canalId, invitadoId);
+            if (invitacionOpt.isEmpty()) {
+                return;
+            }
+            Invitacion invitacion = invitacionOpt.get();
+            DatabaseSnapshot snapshot = new DatabaseSnapshot();
+            DatabaseSnapshot.InvitationRecord record = new DatabaseSnapshot.InvitationRecord();
+            record.setId(invitacion.getId());
+            record.setCanalId(invitacion.getCanalId());
+            record.setInvitadorId(invitacion.getInvitadorId());
+            record.setInvitadoId(invitacion.getInvitadoId());
+            LocalDateTime fecha = invitacion.getFechaInvitacion();
+            record.setFechaInvitacion(fecha != null ? fecha.toString() : null);
+            record.setEstado(invitacion.getEstado());
+            snapshot.setInvitaciones(List.of(record));
+            peerManager.broadcastDatabaseUpdate(snapshot);
+        } catch (Exception ex) {
+            LOGGER.log(Level.WARNING, "No se pudo replicar la invitación del canal " + canalId, ex);
+        }
+    }
+
+    private InvitationKey extractKey(Object payload) {
+        if (!(payload instanceof Map<?, ?> map)) {
+            return null;
+        }
+        Long canalId = asLong(map.get("canalId"));
+        Long invitadoId = asLong(map.get("invitadoId"));
+        if (canalId == null || invitadoId == null) {
+            return null;
+        }
+        return new InvitationKey(canalId, invitadoId);
+    }
+
+    private Long asLong(Object value) {
+        if (value instanceof Number number) {
+            return number.longValue();
+        }
+        if (value instanceof String str) {
+            try {
+                return Long.parseLong(str);
+            } catch (NumberFormatException ignored) {
+            }
+        }
+        return null;
+    }
+
+    private record InvitationKey(Long canalId, Long invitadoId) {
+    }
+}

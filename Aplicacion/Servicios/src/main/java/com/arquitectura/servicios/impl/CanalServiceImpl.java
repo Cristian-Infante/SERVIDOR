@@ -69,18 +69,23 @@ public class CanalServiceImpl implements CanalService {
         
         // Verificar si ya existe una invitación pendiente
         Optional<Invitacion> existente = invitacionRepository.findByCanalAndInvitado(canalId, invitadoId);
-        if (existente.isPresent() && "PENDIENTE".equals(existente.get().getEstado())) {
-            throw new IllegalArgumentException("Ya existe una invitación pendiente para este usuario");
+        Invitacion invitacion;
+        if (existente.isPresent()) {
+            invitacion = existente.get();
+            invitacionRepository.reactivarInvitacion(invitacion.getId(), solicitanteId);
+            invitacion.setInvitadorId(solicitanteId);
+            invitacion.setEstado("PENDIENTE");
+            invitacion.setFechaInvitacion(java.time.LocalDateTime.now());
+            LOGGER.info(() -> "Invitación reactivada: usuario " + solicitanteId +
+                " reenviará invitación a usuario " + invitadoId + " para canal " + canalId);
+        } else {
+            invitacion = new Invitacion(canalId, solicitanteId, invitadoId);
+            invitacionRepository.save(invitacion);
+            LOGGER.info(() -> "Invitación registrada: usuario " + solicitanteId +
+                " invitó a usuario " + invitadoId + " al canal " + canalId);
         }
-        
-        // Guardar la invitación en la base de datos
-        Invitacion invitacion = new Invitacion(canalId, solicitanteId, invitadoId);
-        invitacionRepository.save(invitacion);
-        
-        LOGGER.info(() -> "Invitación registrada: usuario " + solicitanteId + 
-                    " invitó a usuario " + invitadoId + " al canal " + canalId);
-        
-        eventBus.publish(new SessionEvent(SessionEventType.INVITE_SENT, null, solicitanteId, 
+
+        eventBus.publish(new SessionEvent(SessionEventType.INVITE_SENT, null, solicitanteId,
             Map.of("canalId", canalId, "invitadoId", invitadoId, "invitadorId", solicitanteId)));
     }
 
