@@ -1253,7 +1253,7 @@ public class ServerPeerManager {
         }
 
         void registerAddress(InetAddress address) {
-            if (address == null || address.isAnyLocalAddress() || address.isLoopbackAddress()
+            if (address == null || address.isAnyLocalAddress()
                 || baseIdentifier == null || baseIdentifier.isBlank()) {
                 return;
             }
