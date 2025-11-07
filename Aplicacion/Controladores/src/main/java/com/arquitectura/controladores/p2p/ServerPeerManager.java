@@ -367,8 +367,10 @@ public class ServerPeerManager {
             connection.isInitiator() ? "iniciada" : "entrante",
             connection.remoteSummary()
         ));
+        registry.markServerKnown(remoteId);
         LOGGER.info(() -> "Sincronizando con servidor " + remoteId);
-        sendSyncState(connection);
+        JsonNode syncPayload = sendSyncState(connection);
+        broadcastRoutingUpdate(connection, syncPayload);
         notifyPeerConnected(remoteId);
     }
 
@@ -396,10 +398,19 @@ public class ServerPeerManager {
         return trimmed;
     }
 
-    private void sendSyncState(PeerConnection connection) {
+    private JsonNode sendSyncState(PeerConnection connection) {
         if (connection.getRemoteServerId() == null) {
-            return;
+            return null;
         }
+        JsonNode payload = createSyncStatePayload();
+        if (payload == null) {
+            return null;
+        }
+        connection.send(new PeerEnvelope(PeerMessageType.SYNC_STATE, serverId, payload));
+        return payload;
+    }
+
+    private JsonNode createSyncStatePayload() {
         SyncStatePayload payload = new SyncStatePayload();
         payload.setServers(registry.snapshotSessionsByServer());
         if (databaseSync != null) {
@@ -409,7 +420,20 @@ public class ServerPeerManager {
                 LOGGER.log(Level.WARNING, "Error capturando snapshot de base de datos para sincronización", e);
             }
         }
-        connection.send(new PeerEnvelope(PeerMessageType.SYNC_STATE, serverId, mapper.valueToTree(payload)));
+        return mapper.valueToTree(payload);
+    }
+
+    private void broadcastRoutingUpdate(PeerConnection excluded, JsonNode payload) {
+        if (payload == null) {
+            return;
+        }
+        for (PeerConnection peer : peers.values()) {
+            if (peer == excluded) {
+                continue;
+            }
+            JsonNode copy = payload.deepCopy();
+            peer.send(new PeerEnvelope(PeerMessageType.SYNC_STATE, serverId, copy));
+        }
     }
 
     private String resolveRemoteServerAlias(PeerConnection connection, String declaredServerId) {
