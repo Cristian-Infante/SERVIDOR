@@ -512,7 +512,7 @@ public class ServerPeerManager {
     private String resolveRemoteId(PeerConnection connection, String announcedId) {
         String trimmed = announcedId != null ? announcedId.trim() : null;
         if (trimmed == null || trimmed.isEmpty()) {
-            String fallback = connection.fallbackIdentifier("peer");
+            String fallback = ensureUniqueRemoteId(connection, connection.fallbackIdentifier("peer"));
             LOGGER.warning(() -> String.format(
                 "Servidor remoto %s no envió un identificador válido. Se usará identificador alterno %s.",
                 connection.remoteSummary(),
@@ -521,7 +521,7 @@ public class ServerPeerManager {
             return fallback;
         }
         if (trimmed.equals(serverId)) {
-            String fallback = connection.fallbackIdentifier(trimmed);
+            String fallback = ensureUniqueRemoteId(connection, connection.fallbackIdentifier(trimmed));
             LOGGER.warning(() -> String.format(
                 "Servidor remoto %s anunció el mismo ID (%s) que este servidor. Se utilizará identificador alterno %s.",
                 connection.remoteSummary(),
@@ -530,7 +530,85 @@ public class ServerPeerManager {
             ));
             return fallback;
         }
+        String unique = ensureUniqueRemoteId(connection, trimmed);
+        if (!unique.equals(trimmed)) {
+            String original = trimmed;
+            LOGGER.warning(() -> String.format(
+                "El identificador remoto %s de %s ya está en uso. Se asignó identificador alterno %s.",
+                original,
+                connection.remoteSummary(),
+                unique
+            ));
+        }
+        return unique;
+    }
+
+    private String ensureUniqueRemoteId(PeerConnection connection, String candidate) {
+        String current = candidate != null ? candidate.trim() : null;
+        if (current == null || current.isEmpty()) {
+            current = connection.fallbackIdentifier("peer");
+        }
+        String base = extractBaseIdentifier(current);
+        if (base == null || base.isBlank()) {
+            base = serverId != null && !serverId.isBlank() ? serverId : "peer";
+        }
+        int attempts = 0;
+        while (true) {
+            String normalized = normalizeServerId(current);
+            boolean conflict = normalized == null
+                || normalized.equals(normalizedServerId)
+                || isRemoteIdentifierInUse(current, normalized, connection);
+            if (!conflict) {
+                return current;
+            }
+            attempts++;
+            String fallbackBase = base + '-' + attempts;
+            current = connection.fallbackIdentifier(fallbackBase);
+            if (attempts > 8) {
+                current = connection.fallbackIdentifier(base + '-' + UUID.randomUUID());
+            }
+        }
+    }
+
+    private String extractBaseIdentifier(String identifier) {
+        if (identifier == null) {
+            return null;
+        }
+        String trimmed = identifier.trim();
+        if (trimmed.isEmpty()) {
+            return null;
+        }
+        int separator = trimmed.indexOf('@');
+        if (separator > 0) {
+            return trimmed.substring(0, separator);
+        }
         return trimmed;
+    }
+
+    private boolean isRemoteIdentifierInUse(String identifier, String normalized, PeerConnection candidateConnection) {
+        if (identifier != null) {
+            PeerConnection existing = peers.get(identifier);
+            if (existing != null && existing != candidateConnection && !isSameRemote(existing, candidateConnection)) {
+                return true;
+            }
+        }
+        if (normalized == null || normalized.isBlank()) {
+            return false;
+        }
+        PeerConnection aliasPeer = peersByAlias.get(normalized);
+        return aliasPeer != null && aliasPeer != candidateConnection && !isSameRemote(aliasPeer, candidateConnection);
+    }
+
+    private boolean isSameRemote(PeerConnection first, PeerConnection second) {
+        if (first == null || second == null || first.socket == null || second.socket == null) {
+            return false;
+        }
+        InetAddress addressFirst = first.socket.getInetAddress();
+        InetAddress addressSecond = second.socket.getInetAddress();
+        if (addressFirst != null && addressFirst.equals(addressSecond)) {
+            return true;
+        }
+        return Objects.equals(first.socket.getRemoteSocketAddress(), second.socket.getRemoteSocketAddress());
     }
 
     private JsonNode sendSyncState(PeerConnection connection) {
