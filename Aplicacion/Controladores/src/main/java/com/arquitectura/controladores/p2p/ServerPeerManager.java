@@ -585,6 +585,27 @@ public class ServerPeerManager {
         return declaredServerId;
     }
 
+    private String resolveSnapshotServerId(PeerConnection connection, String declaredServerId, String fallbackAlias) {
+        String normalizedDeclared = normalizeServerId(declaredServerId);
+        if (normalizedDeclared == null || normalizedDeclared.equals(normalizedServerId)) {
+            String normalizedFallback = normalizeServerId(fallbackAlias);
+            if (normalizedFallback != null && !normalizedFallback.equals(normalizedServerId)) {
+                return fallbackAlias;
+            }
+            if (connection != null) {
+                String remoteAlias = connection.getRemoteServerId();
+                String normalizedRemote = normalizeServerId(remoteAlias);
+                if (normalizedRemote != null && !normalizedRemote.equals(normalizedServerId)) {
+                    return remoteAlias;
+                }
+            }
+        }
+        if (declaredServerId != null) {
+            return declaredServerId;
+        }
+        return fallbackAlias;
+    }
+
     private List<RemoteSessionSnapshot> remapSnapshotsForServer(List<RemoteSessionSnapshot> snapshots, String serverId) {
         if (snapshots == null || serverId == null) {
             return snapshots;
@@ -799,7 +820,7 @@ public class ServerPeerManager {
             envelope.getOrigin() != null ? envelope.getOrigin() : connection.getRemoteServerId());
         registerRouteHint(connection, fallbackId);
         if (snapshot != null) {
-            snapshot.setServerId(resolveRemoteServerAlias(connection, snapshot.getServerId()));
+            snapshot.setServerId(resolveSnapshotServerId(connection, snapshot.getServerId(), fallbackId));
         }
         boolean updated = registry.registerRemoteSession(fallbackId, snapshot);
         if (updated) {
@@ -829,7 +850,8 @@ public class ServerPeerManager {
         String fallbackId = resolveRemoteServerAlias(connection,
             envelope.getOrigin() != null ? envelope.getOrigin() : connection.getRemoteServerId());
         registerRouteHint(connection, fallbackId);
-        boolean changed = registry.updateRemoteChannel(fallbackId, update.getSessionId(), update.getCanalId(),
+        boolean changed = registry.updateRemoteChannel(fallbackId,
+            update.getSessionId(), update.getCanalId(),
             "JOIN".equalsIgnoreCase(update.getAction()));
         if (changed) {
             relayStateUpdate(connection, PeerMessageType.CHANNEL_MEMBERSHIP, envelope.getPayload(), envelope.getOrigin());
