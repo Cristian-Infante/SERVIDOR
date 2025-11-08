@@ -36,7 +36,7 @@ public interface AudioStorageService {
      * Carga un archivo de audio y lo codifica en Base64
      *
      * @param rutaArchivo Ruta del archivo en el servidor
-     * @return Contenido codificado en Base64
+     * @return Contenido codificado en Base64 o {@code null} si el archivo no existe o no puede leerse
      */
     String cargarAudioBase64(String rutaArchivo);
 }

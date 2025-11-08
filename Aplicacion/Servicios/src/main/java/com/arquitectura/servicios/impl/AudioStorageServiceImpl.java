@@ -89,13 +89,19 @@ public class AudioStorageServiceImpl implements AudioStorageService {
         if (rutaArchivo == null || rutaArchivo.isBlank()) {
             throw new IllegalArgumentException("La ruta del audio no puede estar vacía");
         }
+        Path path = Paths.get(rutaArchivo);
         try {
-            Path path = Paths.get(rutaArchivo);
+            if (!Files.exists(path)) {
+                LOGGER.warning(() -> "Archivo de audio no encontrado: " + path.toAbsolutePath());
+                return null;
+            }
+
             byte[] audioBytes = Files.readAllBytes(path);
             return Base64.getEncoder().encodeToString(audioBytes);
         } catch (IOException e) {
-            LOGGER.log(Level.WARNING, "Error leyendo archivo de audio: " + rutaArchivo, e);
-            throw new IllegalStateException("No se pudo leer el archivo de audio", e);
+            LOGGER.log(Level.WARNING,
+                    () -> "Error leyendo archivo de audio " + path.toAbsolutePath() + ": " + e.getMessage());
+            return null;
         }
     }
 
