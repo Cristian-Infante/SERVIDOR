@@ -44,12 +44,12 @@ class DirectMessageDeliveryIntegrationTest {
     @Test
     void enviaEventoNewMessageAlEmisorYReceptor() throws Exception {
         SessionEventBus eventBus = new SessionEventBus();
-        ConnectionRegistry registry = new ConnectionRegistry(eventBus);
+        StubCanalRepository canalRepository = new StubCanalRepository();
+        ConnectionRegistry registry = new ConnectionRegistry(eventBus, canalRepository);
 
         StubClienteRepository clienteRepository = new StubClienteRepository();
         clienteRepository.put(1L, "alice");
         clienteRepository.put(2L, "bob");
-        StubCanalRepository canalRepository = new StubCanalRepository();
 
         new MessageNotificationService(registry, canalRepository, clienteRepository, eventBus);
 
