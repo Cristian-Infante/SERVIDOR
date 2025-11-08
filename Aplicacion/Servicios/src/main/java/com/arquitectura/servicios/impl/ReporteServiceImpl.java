@@ -47,7 +47,7 @@ public class ReporteServiceImpl implements ReporteService {
     public List<ChannelSummary> canalesConUsuarios() {
         return canalRepository.findAll().stream()
                 .map(canal -> {
-                    ChannelSummary summary = new ChannelSummary(canal.getId(), canal.getNombre(), Boolean.TRUE.equals(canal.getPrivado()));
+                    ChannelSummary summary = new ChannelSummary(canal.getId(), canal.getUuid(), canal.getNombre(), Boolean.TRUE.equals(canal.getPrivado()));
                     List<UserSummary> usuarios = canalRepository.findUsers(canal.getId()).stream()
                             .map(cli -> new UserSummary(cli.getId(), cli.getNombreDeUsuario(), cli.getEmail(), Boolean.TRUE.equals(cli.getEstado())))
                             .collect(Collectors.toCollection(ArrayList::new));
@@ -68,7 +68,7 @@ public class ReporteServiceImpl implements ReporteService {
                     return miembrosIds.contains(usuarioId);
                 })
                 .map(canal -> {
-                    ChannelSummary summary = new ChannelSummary(canal.getId(), canal.getNombre(), Boolean.TRUE.equals(canal.getPrivado()));
+                    ChannelSummary summary = new ChannelSummary(canal.getId(), canal.getUuid(), canal.getNombre(), Boolean.TRUE.equals(canal.getPrivado()));
                     List<UserSummary> usuarios = canalRepository.findUsers(canal.getId()).stream()
                             .map(cli -> new UserSummary(cli.getId(), cli.getNombreDeUsuario(), cli.getEmail(), Boolean.TRUE.equals(cli.getEstado())))
                             .collect(Collectors.toCollection(ArrayList::new));

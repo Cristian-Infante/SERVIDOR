@@ -60,18 +60,19 @@ public class CanalServiceImpl implements CanalService {
     }
 
     @Override
-    public void invitarUsuario(Long canalId, Long solicitanteId, Long invitadoId) {
-        Canal canal = validarCanalYUsuario(canalId, invitadoId);
+    public void invitarUsuario(Long canalId, String canalUuid, Long solicitanteId, Long invitadoId) {
+        Canal canal = validarCanalYUsuario(canalId, canalUuid, invitadoId);
+        Long effectiveCanalId = canal.getId();
 
         // Verificar que el usuario no sea ya miembro
-        List<Cliente> miembros = canalRepository.findUsers(canalId);
+        List<Cliente> miembros = canalRepository.findUsers(effectiveCanalId);
         boolean yaMiembro = miembros.stream().anyMatch(c -> c.getId().equals(invitadoId));
         if (yaMiembro) {
             throw new IllegalArgumentException("El usuario ya es miembro del canal");
         }
         
         // Verificar si ya existe una invitación pendiente
-        Optional<Invitacion> existente = invitacionRepository.findByCanalAndInvitado(canalId, invitadoId);
+        Optional<Invitacion> existente = invitacionRepository.findByCanalAndInvitado(effectiveCanalId, invitadoId);
         Invitacion invitacion;
         if (existente.isPresent()) {
             invitacion = existente.get();
@@ -80,16 +81,16 @@ public class CanalServiceImpl implements CanalService {
             invitacion.setEstado("PENDIENTE");
             invitacion.setFechaInvitacion(java.time.LocalDateTime.now());
             LOGGER.info(() -> "Invitación reactivada: usuario " + solicitanteId +
-                " reenviará invitación a usuario " + invitadoId + " para canal " + canalId);
+                " reenviará invitación a usuario " + invitadoId + " para canal " + effectiveCanalId);
         } else {
-            invitacion = new Invitacion(canalId, solicitanteId, invitadoId);
+            invitacion = new Invitacion(effectiveCanalId, solicitanteId, invitadoId);
             invitacionRepository.save(invitacion);
             LOGGER.info(() -> "Invitación registrada: usuario " + solicitanteId +
-                " invitó a usuario " + invitadoId + " al canal " + canalId);
+                " invitó a usuario " + invitadoId + " al canal " + effectiveCanalId);
         }
 
         Map<String, Object> payload = new HashMap<>();
-        payload.put("canalId", canalId);
+        payload.put("canalId", effectiveCanalId);
         payload.put("canalUuid", canal.getUuid());
         payload.put("invitadoId", invitadoId);
         payload.put("invitadorId", solicitanteId);
@@ -97,53 +98,60 @@ public class CanalServiceImpl implements CanalService {
     }
 
     @Override
-    public void aceptarInvitacion(Long canalId, Long invitadoId) {
+    public Canal aceptarInvitacion(Long canalId, String canalUuid, Long invitadoId) {
+        Canal canal = resolveCanal(canalId, canalUuid)
+            .orElseThrow(() -> new IllegalArgumentException("Canal inexistente"));
+        Long effectiveCanalId = canal.getId();
         // Buscar la invitación pendiente
-        Optional<Invitacion> invitacionOpt = invitacionRepository.findByCanalAndInvitado(canalId, invitadoId);
+        Optional<Invitacion> invitacionOpt = invitacionRepository.findByCanalAndInvitado(effectiveCanalId, invitadoId);
         if (invitacionOpt.isEmpty() || !"PENDIENTE".equals(invitacionOpt.get().getEstado())) {
             throw new IllegalStateException("No existe invitación pendiente para el canal");
         }
-        
+
         Invitacion invitacion = invitacionOpt.get();
         Long invitadorId = invitacion.getInvitadorId();
-        
+
         // Agregar al usuario al canal
-        canalRepository.linkUser(canalId, invitadoId);
-        
+        canalRepository.linkUser(effectiveCanalId, invitadoId);
+
         // Actualizar estado de la invitación
         invitacionRepository.updateEstado(invitacion.getId(), "ACEPTADA");
-        
-        LOGGER.info(() -> "Usuario " + invitadoId + " aceptó invitación y se unió al canal " + canalId);
-        
+
+        LOGGER.info(() -> "Usuario " + invitadoId + " aceptó invitación y se unió al canal " + effectiveCanalId);
+
         // Publicar evento de invitación aceptada
         Map<String, Object> payload = new HashMap<>();
-        payload.put("canalId", canalId);
-        canalRepository.findById(canalId).map(Canal::getUuid).ifPresent(uuid -> payload.put("canalUuid", uuid));
+        payload.put("canalId", effectiveCanalId);
+        payload.put("canalUuid", canal.getUuid());
         payload.put("invitadoId", invitadoId);
         payload.put("invitadorId", invitadorId);
         eventBus.publish(new SessionEvent(SessionEventType.INVITE_ACCEPTED, null, invitadoId, payload));
+        return canal;
     }
 
     @Override
-    public void rechazarInvitacion(Long canalId, Long invitadoId) {
+    public void rechazarInvitacion(Long canalId, String canalUuid, Long invitadoId) {
+        Canal canal = resolveCanal(canalId, canalUuid)
+            .orElseThrow(() -> new IllegalArgumentException("Canal inexistente"));
+        Long effectiveCanalId = canal.getId();
         // Buscar la invitación pendiente
-        Optional<Invitacion> invitacionOpt = invitacionRepository.findByCanalAndInvitado(canalId, invitadoId);
+        Optional<Invitacion> invitacionOpt = invitacionRepository.findByCanalAndInvitado(effectiveCanalId, invitadoId);
         if (invitacionOpt.isEmpty() || !"PENDIENTE".equals(invitacionOpt.get().getEstado())) {
             throw new IllegalStateException("No existe invitación pendiente para el canal");
         }
-        
+
         Invitacion invitacion = invitacionOpt.get();
         Long invitadorId = invitacion.getInvitadorId();
-        
+
         // Actualizar estado de la invitación
         invitacionRepository.updateEstado(invitacion.getId(), "RECHAZADA");
-        
-        LOGGER.info(() -> "Usuario " + invitadoId + " rechazó invitación del canal " + canalId);
-        
+
+        LOGGER.info(() -> "Usuario " + invitadoId + " rechazó invitación del canal " + effectiveCanalId);
+
         // Publicar evento de invitación rechazada
         Map<String, Object> payload = new HashMap<>();
-        payload.put("canalId", canalId);
-        canalRepository.findById(canalId).map(Canal::getUuid).ifPresent(uuid -> payload.put("canalUuid", uuid));
+        payload.put("canalId", effectiveCanalId);
+        payload.put("canalUuid", canal.getUuid());
         payload.put("invitadoId", invitadoId);
         payload.put("invitadorId", invitadorId);
         eventBus.publish(new SessionEvent(SessionEventType.INVITE_REJECTED, null, invitadoId, payload));
@@ -168,6 +176,7 @@ public class CanalServiceImpl implements CanalService {
             
             InvitationSummary summary = new InvitationSummary(
                 inv.getCanalId(),
+                canal.getUuid(),
                 canal.getNombre(),
                 canal.getPrivado(),
                 inv.getInvitadorId(),
@@ -198,6 +207,7 @@ public class CanalServiceImpl implements CanalService {
             
             SentInvitationSummary summary = new SentInvitationSummary(
                 inv.getCanalId(),
+                canal.getUuid(),
                 canal.getNombre(),
                 canal.getPrivado(),
                 inv.getInvitadoId(),
@@ -210,12 +220,21 @@ public class CanalServiceImpl implements CanalService {
         return resumen;
     }
 
-    private Canal validarCanalYUsuario(Long canalId, Long usuarioId) {
-        Optional<Canal> canal = canalRepository.findById(canalId);
-        if (canal.isEmpty()) {
-            throw new IllegalArgumentException("Canal inexistente");
-        }
+    private Canal validarCanalYUsuario(Long canalId, String canalUuid, Long usuarioId) {
+        Canal canal = resolveCanal(canalId, canalUuid)
+            .orElseThrow(() -> new IllegalArgumentException("Canal inexistente"));
         clienteRepository.findById(usuarioId).orElseThrow(() -> new IllegalArgumentException("Usuario inexistente"));
-        return canal.get();
+        return canal;
+    }
+
+    private Optional<Canal> resolveCanal(Long canalId, String canalUuid) {
+        Optional<Canal> canal = Optional.empty();
+        if (canalUuid != null && !canalUuid.isBlank()) {
+            canal = canalRepository.findByUuid(canalUuid);
+        }
+        if (canal.isEmpty() && canalId != null) {
+            canal = canalRepository.findById(canalId);
+        }
+        return canal;
     }
 }

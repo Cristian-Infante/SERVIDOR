@@ -12,6 +12,7 @@ import com.arquitectura.dto.RegisterRequest;
 import com.arquitectura.dto.MessageSyncResponse;
 import com.arquitectura.dto.UploadAudioRequest;
 import com.arquitectura.dto.UploadAudioResponse;
+import com.arquitectura.entidades.Canal;
 import com.arquitectura.servicios.AudioStorageService;
 import com.arquitectura.servicios.CanalService;
 import com.arquitectura.servicios.ConexionService;
@@ -320,22 +321,22 @@ public class ConnectionHandler implements Runnable {
         ensureAuthenticated();
         InviteRequest request = mapper.treeToValue(payload, InviteRequest.class);
         request.setSolicitanteId(clienteId);
-        canalService.invitarUsuario(request.getCanalId(), request.getSolicitanteId(), request.getInvitadoId());
+        canalService.invitarUsuario(request.getCanalId(), request.getCanalUuid(), request.getSolicitanteId(), request.getInvitadoId());
         send("INVITE", new AckResponse("Invitación enviada"));
     }
 
     private void handleAccept(JsonNode payload) throws IOException {
         ensureAuthenticated();
         InviteRequest request = mapper.treeToValue(payload, InviteRequest.class);
-        canalService.aceptarInvitacion(request.getCanalId(), clienteId);
-        registry.joinChannel(sessionId, request.getCanalId());
+        Canal canal = canalService.aceptarInvitacion(request.getCanalId(), request.getCanalUuid(), clienteId);
+        registry.joinChannel(sessionId, canal.getId());
         send("ACCEPT", new AckResponse("Canal aceptado"));
     }
 
     private void handleReject(JsonNode payload) throws IOException {
         ensureAuthenticated();
         InviteRequest request = mapper.treeToValue(payload, InviteRequest.class);
-        canalService.rechazarInvitacion(request.getCanalId(), clienteId);
+        canalService.rechazarInvitacion(request.getCanalId(), request.getCanalUuid(), clienteId);
         send("REJECT", new AckResponse("Invitación rechazada"));
     }
 
