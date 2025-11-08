@@ -113,7 +113,9 @@ public class MessageSyncServiceImpl implements MessageSyncService {
             if (audio.getRutaArchivo() != null && !audio.getRutaArchivo().isBlank()) {
                 try {
                     String audioBase64 = audioStorageService.cargarAudioBase64(audio.getRutaArchivo());
-                    contenido.put("audioBase64", audioBase64);
+                    if (audioBase64 != null) {
+                        contenido.put("audioBase64", audioBase64);
+                    }
                 } catch (Exception e) {
                     LOGGER.warning(() -> "No se pudo cargar audio para sincronización: " + e.getMessage());
                 }
