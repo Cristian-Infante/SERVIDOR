@@ -687,14 +687,29 @@ public class DatabaseSyncCoordinator {
     }
 
     private Long findChannelId(Connection connection, DatabaseSnapshot.CanalRecord record) throws SQLException {
-        Long localId = null;
-        if (record.getUuid() != null && !record.getUuid().isBlank()) {
-            localId = querySingleLong(connection, "SELECT id FROM canales WHERE uuid=?", record.getUuid());
+        String uuid = normalizeUuid(record.getUuid());
+        Long recordId = record.getId();
+        if (uuid != null) {
+            Long byUuid = querySingleLong(connection, "SELECT id FROM canales WHERE uuid=?", uuid);
+            if (byUuid != null) {
+                return byUuid;
+            }
+            if (recordId != null) {
+                ChannelRowState row = fetchChannelRowById(connection, recordId);
+                if (!row.exists()) {
+                    return null;
+                }
+                if (row.uuid() == null || uuid.equals(row.uuid())) {
+                    return recordId;
+                }
+                return null;
+            }
+            return null;
         }
-        if (localId == null && record.getId() != null) {
-            localId = querySingleLong(connection, "SELECT id FROM canales WHERE id=?", record.getId());
+        if (recordId != null) {
+            return querySingleLong(connection, "SELECT id FROM canales WHERE id=?", recordId);
         }
-        return localId;
+        return null;
     }
 
     private Long insertChannel(Connection connection, DatabaseSnapshot.CanalRecord record) throws SQLException {
@@ -708,10 +723,10 @@ public class DatabaseSyncCoordinator {
                 ps.executeUpdate();
                 return record.getId();
             } catch (SQLIntegrityConstraintViolationException ignored) {
-                Long existing = querySingleLong(connection, "SELECT id FROM canales WHERE id=?", record.getId());
-                if (existing != null) {
-                    updateChannel(connection, existing, record);
-                    return existing;
+                ChannelRowState row = fetchChannelRowById(connection, record.getId());
+                if (row.exists() && (row.uuid() == null || row.uuid().equals(record.getUuid()))) {
+                    updateChannel(connection, record.getId(), record);
+                    return record.getId();
                 }
             }
         }
@@ -762,26 +777,63 @@ public class DatabaseSyncCoordinator {
         if (originalId != null && channelIdMap != null && channelIdMap.containsKey(originalId)) {
             return channelIdMap.get(originalId);
         }
-        Long localId = null;
         if (canalUuid != null && !canalUuid.isBlank()) {
-            localId = querySingleLong(connection, "SELECT id FROM canales WHERE uuid=?", canalUuid);
-            if (localId != null && channelIdMap != null && originalId != null) {
-                channelIdMap.put(originalId, localId);
+            Long byUuid = querySingleLong(connection, "SELECT id FROM canales WHERE uuid=?", canalUuid);
+            if (byUuid != null) {
+                if (channelIdMap != null && originalId != null) {
+                    channelIdMap.put(originalId, byUuid);
+                }
+                return byUuid;
             }
-        }
-        if (localId == null && originalId != null) {
-            localId = querySingleLong(connection, "SELECT id FROM canales WHERE id=?", originalId);
-            if (localId != null && channelIdMap != null) {
-                channelIdMap.put(originalId, localId);
+            if (originalId != null) {
+                ChannelRowState row = fetchChannelRowById(connection, originalId);
+                if (row.exists() && (row.uuid() == null || canalUuid.equals(row.uuid()))) {
+                    if (channelIdMap != null) {
+                        channelIdMap.put(originalId, originalId);
+                    }
+                    return originalId;
+                }
             }
+            return null;
         }
-        return localId;
+        if (originalId != null) {
+            Long byId = querySingleLong(connection, "SELECT id FROM canales WHERE id=?", originalId);
+            if (byId != null && channelIdMap != null) {
+                channelIdMap.put(originalId, byId);
+            }
+            return byId;
+        }
+        return null;
     }
 
     private long resolveClientId(Long originalId, java.util.Map<Long, Long> clientIdMap) {
         return clientIdMap != null && clientIdMap.containsKey(originalId)
             ? clientIdMap.get(originalId)
             : originalId;
+    }
+
+    private String normalizeUuid(String uuid) {
+        if (uuid == null) {
+            return null;
+        }
+        String trimmed = uuid.trim();
+        return trimmed.isEmpty() ? null : trimmed;
+    }
+
+    private ChannelRowState fetchChannelRowById(Connection connection, Long id) throws SQLException {
+        if (id == null) {
+            return new ChannelRowState(false, null);
+        }
+        String sql = "SELECT uuid FROM canales WHERE id=?";
+        try (PreparedStatement ps = connection.prepareStatement(sql)) {
+            ps.setLong(1, id);
+            try (ResultSet rs = ps.executeQuery()) {
+                if (rs.next()) {
+                    return new ChannelRowState(true, normalizeUuid(rs.getString(1)));
+                }
+            }
+        }
+        return new ChannelRowState(false, null);
     }
 
     private record ClientSyncResult(boolean changed, java.util.Map<Long, Long> idMapping) {
@@ -794,6 +846,9 @@ public class DatabaseSyncCoordinator {
         static ChannelSyncResult empty() {
             return new ChannelSyncResult(false, new java.util.HashMap<>());
         }
+    }
+
+    private record ChannelRowState(boolean exists, String uuid) {
     }
 }
 

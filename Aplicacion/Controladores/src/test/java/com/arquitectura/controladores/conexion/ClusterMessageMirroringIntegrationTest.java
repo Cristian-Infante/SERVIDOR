@@ -56,16 +56,16 @@ class ClusterMessageMirroringIntegrationTest {
         AudioTranscriptionService transcriptionService = audio -> "";
         AudioStorageService audioStorageService = new NoopAudioStorageService();
 
-        ConnectionRegistry registryA = new ConnectionRegistry(busA, "server-a");
-        ConnectionRegistry registryB = new ConnectionRegistry(busB, "server-a");
+        ConnectionRegistry registryA = new ConnectionRegistry(busA, "server-a", canalRepository);
+        ConnectionRegistry registryB = new ConnectionRegistry(busB, "server-a", canalRepository);
 
         int portA = freePort();
         int portB = freePort();
 
         com.arquitectura.controladores.p2p.ServerPeerManager peerA = new com.arquitectura.controladores.p2p.ServerPeerManager(
-            "server-a", portA, List.of("127.0.0.1:" + portB), registryA, null, clienteRepository);
+            "server-a", portA, List.of("127.0.0.1:" + portB), registryA, null, clienteRepository, canalRepository);
         com.arquitectura.controladores.p2p.ServerPeerManager peerB = new com.arquitectura.controladores.p2p.ServerPeerManager(
-            "server-a", portB, List.of(), registryB, null, clienteRepository);
+            "server-a", portB, List.of(), registryB, null, clienteRepository, canalRepository);
 
         registryA.setPeerManager(peerA);
         registryB.setPeerManager(peerB);

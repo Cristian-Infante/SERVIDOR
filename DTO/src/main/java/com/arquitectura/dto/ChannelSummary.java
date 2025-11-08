@@ -6,6 +6,7 @@ import java.util.List;
 public class ChannelSummary {
 
     private Long id;
+    private String uuid;
     private String nombre;
     private boolean privado;
     private List<UserSummary> usuarios = new ArrayList<>();
@@ -13,10 +14,15 @@ public class ChannelSummary {
     public ChannelSummary() {
     }
 
-    public ChannelSummary(Long id, String nombre, boolean privado) {
+    public ChannelSummary(Long id, String uuid, String nombre, boolean privado) {
         this.id = id;
+        this.uuid = uuid;
         this.nombre = nombre;
         this.privado = privado;
+    }
+
+    public ChannelSummary(Long id, String nombre, boolean privado) {
+        this(id, null, nombre, privado);
     }
 
     public Long getId() {
@@ -25,6 +31,14 @@ public class ChannelSummary {
 
     public void setId(Long id) {
         this.id = id;
+    }
+
+    public String getUuid() {
+        return uuid;
+    }
+
+    public void setUuid(String uuid) {
+        this.uuid = uuid;
     }
 
     public String getNombre() {

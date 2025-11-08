@@ -2,6 +2,8 @@ package com.arquitectura.controladores.conexion;
 
 import com.arquitectura.controladores.p2p.ServerPeerManager;
 import com.arquitectura.dto.CommandEnvelope;
+import com.arquitectura.entidades.Canal;
+import com.arquitectura.repositorios.CanalRepository;
 import com.arquitectura.servicios.conexion.ConnectionGateway;
 import com.arquitectura.servicios.conexion.SessionDescriptor;
 import com.arquitectura.servicios.eventos.SessionEvent;
@@ -20,6 +22,7 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicLong;
@@ -38,17 +41,19 @@ public class ConnectionRegistry implements ConnectionGateway {
     private final ObjectMapper mapper;
     private final SessionEventBus eventBus;
     private final String localServerId;
+    private final CanalRepository canalRepository;
     private final Set<String> knownRemoteServers = ConcurrentHashMap.newKeySet();
 
     private volatile ServerPeerManager peerManager;
 
-    public ConnectionRegistry(SessionEventBus eventBus) {
-        this(eventBus, DEFAULT_SERVER_ID);
+    public ConnectionRegistry(SessionEventBus eventBus, CanalRepository canalRepository) {
+        this(eventBus, DEFAULT_SERVER_ID, canalRepository);
     }
 
-    public ConnectionRegistry(SessionEventBus eventBus, String localServerId) {
-        this.eventBus = eventBus;
+    public ConnectionRegistry(SessionEventBus eventBus, String localServerId, CanalRepository canalRepository) {
+        this.eventBus = Objects.requireNonNull(eventBus, "eventBus");
         this.localServerId = localServerId != null ? localServerId : DEFAULT_SERVER_ID;
+        this.canalRepository = Objects.requireNonNull(canalRepository, "canalRepository");
         this.mapper = new ObjectMapper();
         this.mapper.registerModule(new JavaTimeModule());
         this.mapper.disable(com.fasterxml.jackson.databind.SerializationFeature.WRITE_DATES_AS_TIMESTAMPS);
@@ -414,6 +419,7 @@ public class ConnectionRegistry implements ConnectionGateway {
 
         RemoteSessionSnapshot copy = copySnapshot(snapshot);
         copy.setServerId(effectiveServerId);
+        remapChannelMembership(copy);
 
         removeConflictingRemoteSessions(copy);
 
@@ -514,7 +520,7 @@ public class ConnectionRegistry implements ConnectionGateway {
     }
 
     private RemoteSessionSnapshot copySnapshot(RemoteSessionSnapshot snapshot) {
-        return new RemoteSessionSnapshot(
+        RemoteSessionSnapshot copy = new RemoteSessionSnapshot(
             snapshot.getServerId(),
             snapshot.getSessionId(),
             snapshot.getClienteId(),
@@ -522,6 +528,108 @@ public class ConnectionRegistry implements ConnectionGateway {
             snapshot.getIp(),
             snapshot.getCanales()
         );
+        copy.setChannelUuids(snapshot.getChannelUuids());
+        return copy;
+    }
+
+    private void populateChannelMetadata(RemoteSessionSnapshot snapshot) {
+        if (snapshot == null || snapshot.getCanales() == null) {
+            return;
+        }
+        Map<Long, String> mapping = new HashMap<>();
+        for (Long canalId : snapshot.getCanales()) {
+            if (canalId == null) {
+                continue;
+            }
+            canalRepository.findById(canalId)
+                .map(Canal::getUuid)
+                .filter(uuid -> uuid != null && !uuid.isBlank())
+                .ifPresent(uuid -> mapping.put(canalId, uuid));
+        }
+        snapshot.setChannelUuids(mapping);
+    }
+
+    private void remapChannelMembership(RemoteSessionSnapshot snapshot) {
+        if (snapshot == null) {
+            return;
+        }
+        Set<Long> original = snapshot.getCanales() != null ? new HashSet<>(snapshot.getCanales()) : Set.of();
+        Map<Long, String> provided = snapshot.getChannelUuids() != null
+            ? new HashMap<>(snapshot.getChannelUuids())
+            : Map.of();
+        if (original.isEmpty() && provided.isEmpty()) {
+            return;
+        }
+        Set<Long> remapped = new HashSet<>();
+        Map<Long, String> updated = new HashMap<>();
+        for (Long remoteId : original) {
+            if (remoteId == null) {
+                continue;
+            }
+            String uuid = provided.get(remoteId);
+            Long localId = resolveChannelId(remoteId, uuid);
+            if (localId != null) {
+                remapped.add(localId);
+                String resolvedUuid = resolveChannelUuid(localId, uuid);
+                if (resolvedUuid != null && !resolvedUuid.isBlank()) {
+                    updated.put(localId, resolvedUuid);
+                }
+            } else {
+                remapped.add(remoteId);
+                if (uuid != null && !uuid.isBlank()) {
+                    updated.put(remoteId, uuid);
+                }
+            }
+        }
+        if (remapped.isEmpty() && !provided.isEmpty()) {
+            for (String uuid : provided.values()) {
+                Long localId = resolveChannelId(null, uuid);
+                if (localId != null) {
+                    remapped.add(localId);
+                    String resolvedUuid = resolveChannelUuid(localId, uuid);
+                    if (resolvedUuid != null && !resolvedUuid.isBlank()) {
+                        updated.put(localId, resolvedUuid);
+                    }
+                }
+            }
+        }
+        snapshot.setCanales(remapped);
+        snapshot.setChannelUuids(updated);
+    }
+
+    private Long resolveChannelId(Long remoteId, String canalUuid) {
+        if (canalRepository == null) {
+            return remoteId;
+        }
+        if (canalUuid != null && !canalUuid.isBlank()) {
+            Optional<Canal> byUuid = canalRepository.findByUuid(canalUuid);
+            if (byUuid.isPresent()) {
+                return byUuid.get().getId();
+            }
+            if (remoteId != null) {
+                return canalRepository.findById(remoteId)
+                    .filter(c -> canalUuid.equals(c.getUuid()))
+                    .map(Canal::getId)
+                    .orElse(null);
+            }
+            return null;
+        }
+        if (remoteId != null) {
+            return canalRepository.findById(remoteId)
+                .map(Canal::getId)
+                .orElse(remoteId);
+        }
+        return null;
+    }
+
+    private String resolveChannelUuid(Long localId, String fallbackUuid) {
+        if (localId == null) {
+            return fallbackUuid;
+        }
+        return canalRepository.findById(localId)
+            .map(Canal::getUuid)
+            .filter(uuid -> uuid != null && !uuid.isBlank())
+            .orElse(fallbackUuid);
     }
 
     private boolean snapshotsEquivalent(RemoteSessionSnapshot a, RemoteSessionSnapshot b) {
@@ -536,7 +644,8 @@ public class ConnectionRegistry implements ConnectionGateway {
             && Objects.equals(a.getClienteId(), b.getClienteId())
             && Objects.equals(a.getUsuario(), b.getUsuario())
             && Objects.equals(a.getIp(), b.getIp())
-            && Objects.equals(new HashSet<>(a.getCanales()), new HashSet<>(b.getCanales()));
+            && Objects.equals(new HashSet<>(a.getCanales()), new HashSet<>(b.getCanales()))
+            && Objects.equals(a.getChannelUuids(), b.getChannelUuids());
     }
 
     private String normalizeServerId(String serverId) {
@@ -598,12 +707,14 @@ public class ConnectionRegistry implements ConnectionGateway {
 
     private RemoteSessionSnapshot toSnapshot(SessionDescriptor descriptor) {
         Set<Long> canales = descriptor != null ? new HashSet<>(descriptor.getCanales()) : Set.of();
-        return new RemoteSessionSnapshot(localServerId,
-            descriptor.getSessionId(),
-            descriptor.getClienteId(),
-            descriptor.getUsuario(),
-            descriptor.getIp(),
+        RemoteSessionSnapshot snapshot = new RemoteSessionSnapshot(localServerId,
+            descriptor != null ? descriptor.getSessionId() : null,
+            descriptor != null ? descriptor.getClienteId() : null,
+            descriptor != null ? descriptor.getUsuario() : null,
+            descriptor != null ? descriptor.getIp() : null,
             canales);
+        populateChannelMetadata(snapshot);
+        return snapshot;
     }
 
     private RemoteSessionSnapshot findRemoteSessionByCompositeId(String sessionId) {

@@ -9,11 +9,11 @@ import com.arquitectura.entidades.Canal;
 public interface CanalService {
     Canal crearCanal(String nombre, boolean privado, Long creadorId);
 
-    void invitarUsuario(Long canalId, Long solicitanteId, Long invitadoId);
+    void invitarUsuario(Long canalId, String canalUuid, Long solicitanteId, Long invitadoId);
 
-    void aceptarInvitacion(Long canalId, Long invitadoId);
+    Canal aceptarInvitacion(Long canalId, String canalUuid, Long invitadoId);
 
-    void rechazarInvitacion(Long canalId, Long invitadoId);
+    void rechazarInvitacion(Long canalId, String canalUuid, Long invitadoId);
 
     List<InvitationSummary> obtenerInvitacionesRecibidas(Long usuarioId);
 
