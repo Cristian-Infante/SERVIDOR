@@ -2,6 +2,7 @@ package com.arquitectura.dto;
 
 public class SentInvitationSummary {
     private Long canalId;
+    private String canalUuid;
     private String canalNombre;
     private boolean canalPrivado;
     private Long invitadoId;
@@ -11,13 +12,20 @@ public class SentInvitationSummary {
     public SentInvitationSummary() {
     }
 
-    public SentInvitationSummary(Long canalId, String canalNombre, boolean canalPrivado, Long invitadoId, String invitadoNombre, String estado) {
+    public SentInvitationSummary(Long canalId, String canalUuid, String canalNombre, boolean canalPrivado,
+                                 Long invitadoId, String invitadoNombre, String estado) {
         this.canalId = canalId;
+        this.canalUuid = canalUuid;
         this.canalNombre = canalNombre;
         this.canalPrivado = canalPrivado;
         this.invitadoId = invitadoId;
         this.invitadoNombre = invitadoNombre;
         this.estado = estado;
+    }
+
+    public SentInvitationSummary(Long canalId, String canalNombre, boolean canalPrivado,
+                                 Long invitadoId, String invitadoNombre, String estado) {
+        this(canalId, null, canalNombre, canalPrivado, invitadoId, invitadoNombre, estado);
     }
 
     public Long getCanalId() {
@@ -26,6 +34,14 @@ public class SentInvitationSummary {
 
     public void setCanalId(Long canalId) {
         this.canalId = canalId;
+    }
+
+    public String getCanalUuid() {
+        return canalUuid;
+    }
+
+    public void setCanalUuid(String canalUuid) {
+        this.canalUuid = canalUuid;
     }
 
     public String getCanalNombre() {
