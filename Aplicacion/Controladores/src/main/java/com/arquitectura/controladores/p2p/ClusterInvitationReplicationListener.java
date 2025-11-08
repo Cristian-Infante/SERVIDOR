@@ -58,22 +58,26 @@ public class ClusterInvitationReplicationListener implements SessionObserver {
         if (key == null) {
             return;
         }
-        replicateInvitation(key.canalId(), key.invitadoId());
+        replicateInvitation(key);
     }
 
-    private void replicateInvitation(Long canalId, Long invitadoId) {
-        if (canalId == null || invitadoId == null) {
+    private void replicateInvitation(InvitationKey key) {
+        if (key.canalId() == null || key.invitadoId() == null) {
             return;
         }
         try {
-            Optional<Invitacion> invitacionOpt = invitacionRepository.findByCanalAndInvitado(canalId, invitadoId);
+            Optional<Invitacion> invitacionOpt = invitacionRepository.findByCanalAndInvitado(key.canalId(), key.invitadoId());
             if (invitacionOpt.isEmpty()) {
                 return;
             }
             Invitacion invitacion = invitacionOpt.get();
-            String canalUuid = canalRepository.findById(invitacion.getCanalId())
-                .map(Canal::getUuid)
-                .orElse(null);
+            String canalUuid = resolveCanalUuid(key, invitacion);
+            if (canalUuid == null || canalUuid.isBlank()) {
+                LOGGER.log(Level.FINE,
+                    () -> "Omitiendo replicación de invitación del canal " + key.canalId()
+                        + " porque no se pudo resolver el UUID");
+                return;
+            }
             DatabaseSnapshot snapshot = new DatabaseSnapshot();
             DatabaseSnapshot.InvitationRecord record = new DatabaseSnapshot.InvitationRecord();
             record.setId(invitacion.getId());
@@ -87,8 +91,20 @@ public class ClusterInvitationReplicationListener implements SessionObserver {
             snapshot.setInvitaciones(List.of(record));
             peerManager.broadcastDatabaseUpdate(snapshot);
         } catch (Exception ex) {
-            LOGGER.log(Level.WARNING, "No se pudo replicar la invitación del canal " + canalId, ex);
+            LOGGER.log(Level.WARNING, "No se pudo replicar la invitación del canal " + key.canalId(), ex);
         }
+    }
+
+    private String resolveCanalUuid(InvitationKey key, Invitacion invitacion) {
+        if (key.canalUuid() != null && !key.canalUuid().isBlank()) {
+            return key.canalUuid();
+        }
+        if (invitacion != null) {
+            return canalRepository.findById(invitacion.getCanalId())
+                .map(Canal::getUuid)
+                .orElse(null);
+        }
+        return null;
     }
 
     private InvitationKey extractKey(Object payload) {
@@ -100,7 +116,8 @@ public class ClusterInvitationReplicationListener implements SessionObserver {
         if (canalId == null || invitadoId == null) {
             return null;
         }
-        return new InvitationKey(canalId, invitadoId);
+        String canalUuid = asString(map.get("canalUuid"));
+        return new InvitationKey(canalId, invitadoId, canalUuid);
     }
 
     private Long asLong(Object value) {
@@ -116,6 +133,10 @@ public class ClusterInvitationReplicationListener implements SessionObserver {
         return null;
     }
 
-    private record InvitationKey(Long canalId, Long invitadoId) {
+    private String asString(Object value) {
+        return value != null ? value.toString() : null;
+    }
+
+    private record InvitationKey(Long canalId, Long invitadoId, String canalUuid) {
     }
 }

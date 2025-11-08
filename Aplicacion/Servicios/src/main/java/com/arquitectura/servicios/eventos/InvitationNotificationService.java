@@ -94,6 +94,7 @@ public class InvitationNotificationService implements SessionObserver {
         }
         InvitationContext context = new InvitationContext();
         context.canalId = asLong(map.get("canalId"));
+        context.canalUuid = asString(map.get("canalUuid"));
         context.invitadoId = asLong(map.get("invitadoId"));
         context.invitadorId = asLong(map.get("invitadorId"));
         return context;
@@ -112,23 +113,41 @@ public class InvitationNotificationService implements SessionObserver {
         return null;
     }
 
+    private String asString(Object value) {
+        return value != null ? value.toString() : null;
+    }
+
     private RealtimeInvitationDto buildDto(String evento, LocalDateTime timestamp,
                                            InvitationContext context, String estado) {
         RealtimeInvitationDto dto = new RealtimeInvitationDto();
         dto.setEvento(evento);
         dto.setTimestamp(timestamp);
         dto.setCanalId(context.canalId);
+        dto.setCanalUuid(context.canalUuid);
         dto.setEstado(estado);
 
         Optional<Invitacion> invitacion = Optional.empty();
-        if (context.canalId != null && context.invitadoId != null) {
-            invitacion = invitacionRepository.findByCanalAndInvitado(context.canalId, context.invitadoId);
+        Long canalId = context.canalId;
+        if (canalId == null && context.canalUuid != null) {
+            canalId = canalRepository.findByUuid(context.canalUuid)
+                .map(Canal::getId)
+                .orElse(null);
+        }
+        if (canalId != null && context.invitadoId != null) {
+            invitacion = invitacionRepository.findByCanalAndInvitado(canalId, context.invitadoId);
         }
 
-        Optional<Canal> canalOpt = context.canalId != null ? canalRepository.findById(context.canalId) : Optional.empty();
+        Optional<Canal> canalOpt = Optional.empty();
+        if (canalId != null) {
+            canalOpt = canalRepository.findById(canalId);
+        } else if (context.canalUuid != null) {
+            canalOpt = canalRepository.findByUuid(context.canalUuid);
+        }
         canalOpt.ifPresent(canal -> {
             dto.setCanalNombre(canal.getNombre());
             dto.setCanalPrivado(canal.getPrivado());
+            dto.setCanalUuid(canal.getUuid());
+            dto.setCanalId(canal.getId());
         });
 
         Optional<Cliente> invitadorOpt = context.invitadorId != null
@@ -161,6 +180,7 @@ public class InvitationNotificationService implements SessionObserver {
         copy.setEvento(original.getEvento());
         copy.setTimestamp(original.getTimestamp());
         copy.setCanalId(original.getCanalId());
+        copy.setCanalUuid(original.getCanalUuid());
         copy.setCanalNombre(original.getCanalNombre());
         copy.setCanalPrivado(original.getCanalPrivado());
         copy.setInvitadorId(original.getInvitadorId());
@@ -174,6 +194,7 @@ public class InvitationNotificationService implements SessionObserver {
 
     private static final class InvitationContext {
         private Long canalId;
+        private String canalUuid;
         private Long invitadoId;
         private Long invitadorId;
     }

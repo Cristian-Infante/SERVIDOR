@@ -7,6 +7,7 @@ public class RealtimeInvitationDto {
     private String evento;
     private LocalDateTime timestamp;
     private Long canalId;
+    private String canalUuid;
     private String canalNombre;
     private Boolean canalPrivado;
     private Long invitadorId;
@@ -38,6 +39,14 @@ public class RealtimeInvitationDto {
 
     public void setCanalId(Long canalId) {
         this.canalId = canalId;
+    }
+
+    public String getCanalUuid() {
+        return canalUuid;
+    }
+
+    public void setCanalUuid(String canalUuid) {
+        this.canalUuid = canalUuid;
     }
 
     public String getCanalNombre() {

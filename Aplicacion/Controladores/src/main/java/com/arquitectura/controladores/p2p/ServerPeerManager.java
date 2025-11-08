@@ -3,6 +3,8 @@ package com.arquitectura.controladores.p2p;
 import com.arquitectura.controladores.conexion.ConnectionRegistry;
 import com.arquitectura.controladores.conexion.RemoteSessionSnapshot;
 import com.arquitectura.dto.ConnectionStatusUpdateDto;
+import com.arquitectura.entidades.Canal;
+import com.arquitectura.repositorios.CanalRepository;
 import com.arquitectura.repositorios.ClienteRepository;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -66,6 +68,7 @@ public class ServerPeerManager {
     private final List<PeerAddress> bootstrapPeers;
     private final DatabaseSyncCoordinator databaseSync;
     private final ClienteRepository clienteRepository;
+    private final CanalRepository canalRepository;
     private final LocalAliasRegistry localAliases;
     private final String instanceId;
     private final String normalizedServerId;
@@ -78,13 +81,15 @@ public class ServerPeerManager {
                              List<String> configuredPeers,
                              ConnectionRegistry registry,
                              DatabaseSyncCoordinator databaseSync,
-                             ClienteRepository clienteRepository) {
+                             ClienteRepository clienteRepository,
+                             CanalRepository canalRepository) {
         this.registry = Objects.requireNonNull(registry, "registry");
         this.serverId = Objects.requireNonNull(serverId, "serverId");
         this.peerPort = peerPort;
         this.bootstrapPeers = parsePeers(configuredPeers);
         this.databaseSync = databaseSync;
         this.clienteRepository = Objects.requireNonNull(clienteRepository, "clienteRepository");
+        this.canalRepository = Objects.requireNonNull(canalRepository, "canalRepository");
         this.mapper = new ObjectMapper();
         this.mapper.registerModule(new JavaTimeModule());
         this.mapper.disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS);
@@ -187,6 +192,7 @@ public class ServerPeerManager {
         payload.setSessionId(snapshot.getSessionId());
         payload.setClienteId(snapshot.getClienteId());
         payload.setCanalId(canalId);
+        payload.setCanalUuid(resolveChannelUuid(canalId));
         payload.setAction("JOIN");
         broadcast(PeerMessageType.CHANNEL_MEMBERSHIP, payload);
     }
@@ -223,6 +229,7 @@ public class ServerPeerManager {
         }
         ChannelMessagePayload message = new ChannelMessagePayload();
         message.setCanalId(canalId);
+        message.setCanalUuid(resolveChannelUuid(canalId));
         message.setMessage(mapper.valueToTree(payload));
         sendToPeer(targetServerId, PeerMessageType.CHANNEL_MESSAGE, message);
     }
@@ -1009,14 +1016,18 @@ public class ServerPeerManager {
 
     private void handleChannelMembership(PeerConnection connection, PeerEnvelope envelope) throws IOException {
         ChannelUpdatePayload update = mapper.treeToValue(envelope.getPayload(), ChannelUpdatePayload.class);
-        if (update == null || update.getCanalId() == null) {
+        if (update == null) {
             return;
         }
         String fallbackId = resolveRemoteServerAlias(connection,
             envelope.getOrigin() != null ? envelope.getOrigin() : connection.getRemoteServerId());
         registerRouteHint(connection, fallbackId);
+        Long localCanalId = resolveChannelId(update.getCanalId(), update.getCanalUuid());
+        if (localCanalId == null) {
+            return;
+        }
         boolean changed = registry.updateRemoteChannel(fallbackId,
-            update.getSessionId(), update.getCanalId(),
+            update.getSessionId(), localCanalId,
             "JOIN".equalsIgnoreCase(update.getAction()));
         if (changed) {
             relayStateUpdate(connection, PeerMessageType.CHANNEL_MEMBERSHIP, envelope.getPayload(), envelope.getOrigin());
@@ -1032,9 +1043,14 @@ public class ServerPeerManager {
 
     private void handleChannelMessage(JsonNode payload) throws IOException {
         ChannelMessagePayload message = mapper.treeToValue(payload, ChannelMessagePayload.class);
-        if (message != null && message.getCanalId() != null && message.getMessage() != null) {
-            registry.deliverToChannelLocally(message.getCanalId(), message.getMessage());
+        if (message == null || message.getMessage() == null) {
+            return;
         }
+        Long localCanalId = resolveChannelId(message.getCanalId(), message.getCanalUuid());
+        if (localCanalId == null) {
+            return;
+        }
+        registry.deliverToChannelLocally(localCanalId, message.getMessage());
     }
 
     private void handleSessionMessage(JsonNode payload) throws IOException {
@@ -1118,6 +1134,40 @@ public class ServerPeerManager {
         String effectiveOrigin = resolveEffectiveOrigin(source, origin);
         PeerEnvelope envelope = new PeerEnvelope(type, effectiveOrigin, payload.deepCopy());
         routeEnvelope(source, envelope);
+    }
+
+    private Long resolveChannelId(Long canalId, String canalUuid) {
+        if (canalRepository == null) {
+            return canalId;
+        }
+        if (canalUuid != null && !canalUuid.isBlank()) {
+            Optional<Canal> byUuid = canalRepository.findByUuid(canalUuid);
+            if (byUuid.isPresent()) {
+                return byUuid.get().getId();
+            }
+            if (canalId != null) {
+                return canalRepository.findById(canalId)
+                    .filter(c -> canalUuid.equals(c.getUuid()))
+                    .map(Canal::getId)
+                    .orElse(null);
+            }
+            return null;
+        }
+        if (canalId != null) {
+            return canalRepository.findById(canalId)
+                .map(Canal::getId)
+                .orElse(canalId);
+        }
+        return null;
+    }
+
+    private String resolveChannelUuid(Long canalId) {
+        if (canalRepository == null || canalId == null) {
+            return null;
+        }
+        return canalRepository.findById(canalId)
+            .map(Canal::getUuid)
+            .orElse(null);
     }
 
     private String resolveEffectiveOrigin(PeerConnection source, String origin) {
@@ -1764,6 +1814,7 @@ public class ServerPeerManager {
         private Long clienteId;
         private Long canalId;
         private String action;
+        private String canalUuid;
 
         public String getSessionId() {
             return sessionId;
@@ -1787,6 +1838,14 @@ public class ServerPeerManager {
 
         public void setCanalId(Long canalId) {
             this.canalId = canalId;
+        }
+
+        public String getCanalUuid() {
+            return canalUuid;
+        }
+
+        public void setCanalUuid(String canalUuid) {
+            this.canalUuid = canalUuid;
         }
 
         public String getAction() {
@@ -1822,6 +1881,7 @@ public class ServerPeerManager {
     private static final class ChannelMessagePayload {
         private Long canalId;
         private JsonNode message;
+        private String canalUuid;
 
         public Long getCanalId() {
             return canalId;
@@ -1829,6 +1889,14 @@ public class ServerPeerManager {
 
         public void setCanalId(Long canalId) {
             this.canalId = canalId;
+        }
+
+        public String getCanalUuid() {
+            return canalUuid;
+        }
+
+        public void setCanalUuid(String canalUuid) {
+            this.canalUuid = canalUuid;
         }
 
         public JsonNode getMessage() {

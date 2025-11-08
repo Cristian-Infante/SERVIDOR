@@ -319,11 +319,14 @@ Los mensajes de audio dentro de `mensajes` incluyen el campo `audioBase64` dentr
   "command": "CREATE_CHANNEL",
   "payload": {
     "id": 99,
+    "uuid": "3b1f0a4c-0f5d-48a2-9a3c-4f2de8e08c94",
     "nombre": "general",
     "privado": false
   }
 }
 ```
+
+El cliente debe persistir tanto el `id` como el `uuid`; **todas las operaciones inter-servidor requieren enviar el `uuid`** para evitar colisiones de identificadores.
 
 ### `INVITE`
 **Request:**
@@ -332,6 +335,7 @@ Los mensajes de audio dentro de `mensajes` incluyen el campo `audioBase64` dentr
   "command": "INVITE",
   "payload": {
     "canalId": 99,
+    "canalUuid": "3b1f0a4c-0f5d-48a2-9a3c-4f2de8e08c94",
     "invitadoId": 42
   }
 }
@@ -348,6 +352,8 @@ Los mensajes de audio dentro de `mensajes` incluyen el campo `audioBase64` dentr
 ```
 
 **Notas:**
+- **El campo `canalUuid` es obligatorio** para mantener la compatibilidad entre nodos del clúster. Envía siempre el valor devuelto por `CREATE_CHANNEL`, `LIST_CHANNELS` u otros eventos relacionados antes de invitar, aceptar o rechazar.
+- `canalId` se mantiene por retrocompatibilidad local, pero puede apuntar a otro canal en servidores distintos si el `uuid` no coincide; úsalo solo como caché local.
 - Si ya existía una invitación pendiente para el mismo canal y usuario, el servidor la **reactiva** (actualiza `estado` a `PENDIENTE`,
   renueva la fecha y cambia el `invitadorId`) en lugar de devolver un error. Esta reactivación vuelve a disparar las notificaciones
   en tiempo real descritas en la sección de eventos.
@@ -360,7 +366,8 @@ Los mensajes de audio dentro de `mensajes` incluyen el campo `audioBase64` dentr
 {
   "command": "ACCEPT",
   "payload": {
-    "canalId": 99
+    "canalId": 99,
+    "canalUuid": "3b1f0a4c-0f5d-48a2-9a3c-4f2de8e08c94"
   }
 }
 ```
@@ -375,13 +382,16 @@ Los mensajes de audio dentro de `mensajes` incluyen el campo `audioBase64` dentr
 }
 ```
 
+Incluye siempre `canalUuid`. El servidor coteja el `id` cacheado con ese identificador global y, si difieren, prioriza el `uuid` para ubicar el canal correcto.
+
 ### `REJECT`
 **Request:**
 ```json
 {
   "command": "REJECT",
   "payload": {
-    "canalId": 99
+    "canalId": 99,
+    "canalUuid": "3b1f0a4c-0f5d-48a2-9a3c-4f2de8e08c94"
   }
 }
 ```
@@ -395,6 +405,8 @@ Los mensajes de audio dentro de `mensajes` incluyen el campo `audioBase64` dentr
   }
 }
 ```
+
+Igual que en `ACCEPT`, el `uuid` evita rechazar invitaciones sobre canales incorrectos cuando trabajas con múltiples nodos.
 
 ### `LIST_RECEIVED_INVITATIONS`
 Muestra las invitaciones recibidas (que puedes aceptar o rechazar). El listado refleja las invitaciones replicadas en la base local;
@@ -414,6 +426,7 @@ cuando se recibe una invitación desde otro servidor aparecerá aquí tras la si
   "payload": [
     {
       "canalId": 99,
+      "canalUuid": "3b1f0a4c-0f5d-48a2-9a3c-4f2de8e08c94",
       "canalNombre": "desarrollo",
       "canalPrivado": true,
       "invitadorId": 42,
@@ -422,6 +435,8 @@ cuando se recibe una invitación desde otro servidor aparecerá aquí tras la si
   ]
 }
 ```
+
+> Conserva `canalUuid` para poder responder la invitación desde otros servidores o sesiones posteriores.
 
 ### `LIST_SENT_INVITATIONS`
 Muestra las invitaciones que has enviado y su estado actual.
@@ -440,6 +455,7 @@ Muestra las invitaciones que has enviado y su estado actual.
   "payload": [
     {
       "canalId": 99,
+      "canalUuid": "3b1f0a4c-0f5d-48a2-9a3c-4f2de8e08c94",
       "canalNombre": "desarrollo",
       "canalPrivado": true,
       "invitadoId": 55,
@@ -449,6 +465,8 @@ Muestra las invitaciones que has enviado y su estado actual.
   ]
 }
 ```
+
+> Tanto las invitaciones enviadas como las recibidas incluyen `canalUuid`; consérvalo para acciones futuras (`ACCEPT`/`REJECT`).
 
 ### `LIST_USERS`
 **Request:**
@@ -488,6 +506,7 @@ Muestra las invitaciones que has enviado y su estado actual.
   "payload": [
     {
       "id": 10,
+      "uuid": "3b1f0a4c-0f5d-48a2-9a3c-4f2de8e08c94",
       "nombre": "general",
       "privado": false,
       "usuarios": [...]
@@ -495,6 +514,8 @@ Muestra las invitaciones que has enviado y su estado actual.
   ]
 }
 ```
+
+> **Importante:** usa el `uuid` para correlacionar canales entre servidores. El `id` puede variar entre nodos, pero el `uuid` es único en todo el clúster.
 
 ### `LIST_CONNECTED`
 **Request:**
@@ -832,6 +853,7 @@ Los mensajes en tiempo real llegan como `EVENT` y se identifican por `payload.ev
     "evento": "INVITE_SENT",
     "timestamp": "2025-11-06T22:52:41.220091",
     "canalId": 1,
+    "canalUuid": "3b1f0a4c-0f5d-48a2-9a3c-4f2de8e08c94",
     "canalNombre": "Mis invitaciones",
     "canalPrivado": true,
     "invitadorId": 2,
@@ -844,7 +866,7 @@ Los mensajes en tiempo real llegan como `EVENT` y se identifican por `payload.ev
 }
 ```
 
-**Acción del cliente**: Mostrar la invitación pendiente. Si ya existía, actualizar los metadatos (por ejemplo, el nuevo invitador o la
+**Acción del cliente**: Mostrar la invitación pendiente. Recuerda almacenar `canalUuid` junto al resto de metadatos para responder desde cualquier nodo. Si ya existía, actualizar los metadatos (por ejemplo, el nuevo invitador o la
 nueva fecha).
 
 #### INVITE_ACCEPTED / INVITE_REJECTED - Respuesta del invitado
@@ -855,6 +877,7 @@ nueva fecha).
     "evento": "INVITE_ACCEPTED",
     "timestamp": "2025-11-06T23:05:12.091422",
     "canalId": 1,
+    "canalUuid": "3b1f0a4c-0f5d-48a2-9a3c-4f2de8e08c94",
     "canalNombre": "Mis invitaciones",
     "canalPrivado": true,
     "invitadorId": 2,
@@ -867,7 +890,7 @@ nueva fecha).
 }
 ```
 
-Para un rechazo, el evento cambia a `"INVITE_REJECTED"` y `estado` pasa a `"RECHAZADA"`.
+Para un rechazo, el evento cambia a `"INVITE_REJECTED"`, conserva el mismo `canalUuid` (úsalo sobre cualquier `canalId` cacheado) y `estado` pasa a `"RECHAZADA"`.
 
 **Acción del cliente**: Refrescar la bandeja de invitaciones. El invitador puede retirar la solicitud del listado y el invitado debe
 reflejar la membresía actualizada del canal si la invitación fue aceptada.
