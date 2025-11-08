@@ -598,11 +598,21 @@ public class ConnectionRegistry implements ConnectionGateway {
     }
 
     private Long resolveChannelId(Long remoteId, String canalUuid) {
+        if (canalRepository == null) {
+            return remoteId;
+        }
         if (canalUuid != null && !canalUuid.isBlank()) {
             Optional<Canal> byUuid = canalRepository.findByUuid(canalUuid);
             if (byUuid.isPresent()) {
                 return byUuid.get().getId();
             }
+            if (remoteId != null) {
+                return canalRepository.findById(remoteId)
+                    .filter(c -> canalUuid.equals(c.getUuid()))
+                    .map(Canal::getId)
+                    .orElse(null);
+            }
+            return null;
         }
         if (remoteId != null) {
             return canalRepository.findById(remoteId)

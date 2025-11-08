@@ -228,13 +228,20 @@ public class CanalServiceImpl implements CanalService {
     }
 
     private Optional<Canal> resolveCanal(Long canalId, String canalUuid) {
-        Optional<Canal> canal = Optional.empty();
         if (canalUuid != null && !canalUuid.isBlank()) {
-            canal = canalRepository.findByUuid(canalUuid);
+            Optional<Canal> byUuid = canalRepository.findByUuid(canalUuid);
+            if (byUuid.isPresent()) {
+                return byUuid;
+            }
+            if (canalId != null) {
+                return canalRepository.findById(canalId)
+                    .filter(c -> canalUuid.equals(c.getUuid()));
+            }
+            return Optional.empty();
         }
-        if (canal.isEmpty() && canalId != null) {
-            canal = canalRepository.findById(canalId);
+        if (canalId != null) {
+            return canalRepository.findById(canalId);
         }
-        return canal;
+        return Optional.empty();
     }
 }

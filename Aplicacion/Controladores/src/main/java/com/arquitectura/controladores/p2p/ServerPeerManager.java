@@ -1145,6 +1145,13 @@ public class ServerPeerManager {
             if (byUuid.isPresent()) {
                 return byUuid.get().getId();
             }
+            if (canalId != null) {
+                return canalRepository.findById(canalId)
+                    .filter(c -> canalUuid.equals(c.getUuid()))
+                    .map(Canal::getId)
+                    .orElse(null);
+            }
+            return null;
         }
         if (canalId != null) {
             return canalRepository.findById(canalId)
