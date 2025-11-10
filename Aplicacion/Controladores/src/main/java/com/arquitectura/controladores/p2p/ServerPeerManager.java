@@ -38,6 +38,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
+import java.util.TreeSet;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CopyOnWriteArrayList;
@@ -126,6 +127,14 @@ public class ServerPeerManager {
 
     public Set<String> connectedPeerIds() {
         return peers.keySet();
+    }
+
+    public Set<String> knownClusterServerIds() {
+        TreeSet<String> servers = new TreeSet<>(String.CASE_INSENSITIVE_ORDER);
+        servers.addAll(peers.keySet());
+        servers.addAll(registry.knownServersSnapshot());
+        servers.remove(serverId);
+        return Collections.unmodifiableSet(servers);
     }
 
     public void addPeerStatusListener(PeerStatusListener listener) {

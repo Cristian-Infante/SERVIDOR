@@ -18,8 +18,10 @@ import java.io.OutputStreamWriter;
 import java.net.Socket;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -380,11 +382,28 @@ public class ConnectionRegistry implements ConnectionGateway {
         return snapshot;
     }
 
+    public Set<String> knownServersSnapshot() {
+        Set<String> servers = new LinkedHashSet<>();
+        servers.add(localServerId);
+        servers.addAll(knownRemoteServers);
+        for (RemoteSessionSnapshot snapshot : remoteSessions.values()) {
+            String serverId = snapshot.getServerId();
+            if (serverId != null && !serverId.isBlank()) {
+                servers.add(serverId);
+            }
+        }
+        return Collections.unmodifiableSet(servers);
+    }
+
     public boolean markServerKnown(String serverId) {
         if (serverId == null || serverId.isBlank() || serverId.equals(localServerId)) {
             return false;
         }
-        return knownRemoteServers.add(serverId);
+        boolean added = knownRemoteServers.add(serverId);
+        if (added) {
+            publishClusterStateUpdate();
+        }
+        return added;
     }
 
     public boolean registerRemoteSessions(String serverId, List<RemoteSessionSnapshot> snapshots) {
@@ -392,17 +411,30 @@ public class ConnectionRegistry implements ConnectionGateway {
             return false;
         }
         boolean changed = knownRemoteServers.add(serverId);
-        changed |= clearRemoteSessions(serverId);
-        if (snapshots == null) {
-            return changed;
+        List<RemoteSessionSnapshot> removed = drainRemoteSessions(serverId, true);
+        if (!removed.isEmpty()) {
+            changed = true;
         }
-        for (RemoteSessionSnapshot snapshot : snapshots) {
-            changed |= registerRemoteSession(serverId, snapshot);
+        if (snapshots != null) {
+            for (RemoteSessionSnapshot snapshot : snapshots) {
+                if (registerRemoteSessionInternal(serverId, snapshot, false)) {
+                    changed = true;
+                }
+            }
+        }
+        if (changed) {
+            publishClusterStateUpdate();
         }
         return changed;
     }
 
     public boolean registerRemoteSession(String fallbackServerId, RemoteSessionSnapshot snapshot) {
+        return registerRemoteSessionInternal(fallbackServerId, snapshot, true);
+    }
+
+    private boolean registerRemoteSessionInternal(String fallbackServerId,
+                                                  RemoteSessionSnapshot snapshot,
+                                                  boolean notify) {
         if (snapshot == null || snapshot.getSessionId() == null) {
             return false;
         }
@@ -421,27 +453,35 @@ public class ConnectionRegistry implements ConnectionGateway {
         copy.setServerId(effectiveServerId);
         remapChannelMembership(copy);
 
-        removeConflictingRemoteSessions(copy);
+        boolean conflictsRemoved = removeConflictingRemoteSessions(copy);
 
-        knownRemoteServers.add(effectiveServerId);
+        boolean knownChanged = knownRemoteServers.add(effectiveServerId);
 
         String key = remoteKey(effectiveServerId, copy.getSessionId());
         RemoteSessionSnapshot current = remoteSessions.get(key);
         if (snapshotsEquivalent(current, copy)) {
-            return false;
+            boolean changed = knownChanged || conflictsRemoved;
+            if (changed && notify) {
+                publishClusterStateUpdate();
+            }
+            return changed;
         }
         remoteSessions.put(key, copy);
+        if (notify) {
+            publishClusterStateUpdate();
+        }
         return true;
     }
 
-    private void removeConflictingRemoteSessions(RemoteSessionSnapshot snapshot) {
+    private boolean removeConflictingRemoteSessions(RemoteSessionSnapshot snapshot) {
         if (snapshot == null) {
-            return;
+            return false;
         }
         String effectiveServerId = snapshot.getServerId();
         String effectiveBase = baseServerId(effectiveServerId);
         Long clienteId = snapshot.getClienteId();
         String sessionId = snapshot.getSessionId();
+        final boolean[] removed = {false};
         remoteSessions.entrySet().removeIf(entry -> {
             RemoteSessionSnapshot current = entry.getValue();
             if (current == null) {
@@ -457,23 +497,28 @@ public class ConnectionRegistry implements ConnectionGateway {
                 return false;
             }
             String currentBase = baseServerId(current.getServerId());
-            return currentBase != null && currentBase.equalsIgnoreCase(effectiveBase);
+            boolean shouldRemove = currentBase != null && currentBase.equalsIgnoreCase(effectiveBase);
+            if (shouldRemove) {
+                removed[0] = true;
+            }
+            return shouldRemove;
         });
+        return removed[0];
     }
 
     public boolean removeRemoteSession(String serverId, String sessionId, Long clienteId) {
         boolean removed = false;
         if (serverId != null && sessionId != null) {
             removed = remoteSessions.remove(remoteKey(serverId, sessionId)) != null;
-            if (removed) {
-                return true;
-            }
         }
-        if (serverId != null && clienteId != null) {
+        if (!removed && serverId != null && clienteId != null) {
             removed = remoteSessions.entrySet().removeIf(entry -> {
                 RemoteSessionSnapshot snapshot = entry.getValue();
                 return serverId.equals(snapshot.getServerId()) && clienteId.equals(snapshot.getClienteId());
             });
+        }
+        if (removed) {
+            publishClusterStateUpdate();
         }
         return removed;
     }
@@ -486,13 +531,23 @@ public class ConnectionRegistry implements ConnectionGateway {
         if (snapshot == null) {
             return false;
         }
+        boolean changed;
         if (joined) {
-            return snapshot.getCanales().add(canalId);
+            changed = snapshot.getCanales().add(canalId);
+        } else {
+            changed = snapshot.getCanales().remove(canalId);
         }
-        return snapshot.getCanales().remove(canalId);
+        if (changed) {
+            publishClusterStateUpdate();
+        }
+        return changed;
     }
 
     public List<RemoteSessionSnapshot> drainRemoteSessions(String serverId) {
+        return drainRemoteSessions(serverId, false);
+    }
+
+    public List<RemoteSessionSnapshot> drainRemoteSessions(String serverId, boolean silent) {
         if (serverId == null) {
             return List.of();
         }
@@ -505,6 +560,9 @@ public class ConnectionRegistry implements ConnectionGateway {
             }
             return false;
         });
+        if (!silent && !removed.isEmpty()) {
+            publishClusterStateUpdate();
+        }
         return removed;
     }
 
@@ -516,7 +574,9 @@ public class ConnectionRegistry implements ConnectionGateway {
         if (serverId == null) {
             return;
         }
-        knownRemoteServers.remove(serverId);
+        if (knownRemoteServers.remove(serverId)) {
+            publishClusterStateUpdate();
+        }
     }
 
     private RemoteSessionSnapshot copySnapshot(RemoteSessionSnapshot snapshot) {
@@ -715,6 +775,10 @@ public class ConnectionRegistry implements ConnectionGateway {
             canales);
         populateChannelMetadata(snapshot);
         return snapshot;
+    }
+
+    private void publishClusterStateUpdate() {
+        eventBus.publish(new SessionEvent(SessionEventType.CLUSTER_STATE_UPDATED, null, null, knownServersSnapshot()));
     }
 
     private RemoteSessionSnapshot findRemoteSessionByCompositeId(String sessionId) {
