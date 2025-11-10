@@ -31,6 +31,7 @@ import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 public class ServidorController implements SessionObserver, ServerPeerManager.PeerStatusListener {
 
@@ -309,7 +310,8 @@ public class ServidorController implements SessionObserver, ServerPeerManager.Pe
     private void refreshServidores() {
         SwingUtilities.invokeLater(() -> {
             servidoresModel.clear();
-            for (String serverId : peerManager.connectedPeerIds()) {
+            Set<String> serverIds = peerManager.knownClusterServerIds();
+            for (String serverId : serverIds) {
                 servidoresModel.addElement(serverId);
             }
         });
@@ -432,11 +434,16 @@ public class ServidorController implements SessionObserver, ServerPeerManager.Pe
         // - Se cierra una conexión TCP
         // - Un usuario hace LOGIN
         // - Un usuario hace LOGOUT
-        if (event.getType() == SessionEventType.LOGIN ||
-            event.getType() == SessionEventType.LOGOUT ||
-            event.getType() == SessionEventType.TCP_CONNECTED ||
-            event.getType() == SessionEventType.TCP_DISCONNECTED) {
+        SessionEventType type = event.getType();
+        if (type == SessionEventType.LOGIN ||
+            type == SessionEventType.LOGOUT ||
+            type == SessionEventType.TCP_CONNECTED ||
+            type == SessionEventType.TCP_DISCONNECTED ||
+            type == SessionEventType.CLUSTER_STATE_UPDATED) {
             refreshConexiones();
+        }
+        if (type == SessionEventType.CLUSTER_STATE_UPDATED) {
+            refreshServidores();
         }
     }
 

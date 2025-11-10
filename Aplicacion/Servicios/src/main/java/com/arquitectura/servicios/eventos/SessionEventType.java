@@ -13,5 +13,6 @@ public enum SessionEventType {
     INVITE_SENT,
     INVITE_ACCEPTED,
     INVITE_REJECTED,
-    AUDIO_SENT
+    AUDIO_SENT,
+    CLUSTER_STATE_UPDATED
 }

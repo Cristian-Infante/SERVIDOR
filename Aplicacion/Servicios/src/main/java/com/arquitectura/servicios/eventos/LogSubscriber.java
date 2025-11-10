@@ -2,6 +2,7 @@ package com.arquitectura.servicios.eventos;
 
 import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
 import java.util.logging.Logger;
 
 import com.arquitectura.entidades.ArchivoMensaje;
@@ -58,8 +59,16 @@ public class LogSubscriber implements SessionObserver {
             case INVITE_ACCEPTED -> describirInvitacionAceptada(event);
             case INVITE_REJECTED -> describirInvitacionRechazada(event);
             case AUDIO_SENT -> describirAudio(event);
+            case CLUSTER_STATE_UPDATED -> describirActualizacionCluster(event);
             default -> describirDesconocido(event);
         };
+    }
+
+    private String describirActualizacionCluster(SessionEvent event) {
+        if (event.getPayload() instanceof Set<?> servidores) {
+            return String.format("Estado del clúster actualizado - %d servidores conocidos", servidores.size());
+        }
+        return "Estado del clúster actualizado";
     }
 
     private String describirDesconocido(SessionEvent event) {
