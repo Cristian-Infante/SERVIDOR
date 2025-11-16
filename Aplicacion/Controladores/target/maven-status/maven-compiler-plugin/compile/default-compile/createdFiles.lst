@@ -1,7 +1,0 @@
-com\arquitectura\controladores\conexion\ConnectionRegistry$ConnectionContext.class
-com\arquitectura\controladores\conexion\ConnectionRegistry.class
-com\arquitectura\controladores\ServidorController.class
-com\arquitectura\controladores\LogSubscriber.class
-com\arquitectura\controladores\conexion\ConnectionHandlerPool.class
-com\arquitectura\controladores\ServidorView.class
-com\arquitectura\controladores\conexion\ConnectionHandler.class
