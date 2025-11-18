@@ -43,6 +43,8 @@ import com.arquitectura.servicios.impl.RegistroServiceImpl;
 import com.arquitectura.servicios.impl.ReporteServiceImpl;
 import com.arquitectura.servicios.security.PasswordHasher;
 import com.arquitectura.servicios.security.Sha256PasswordHasher;
+import com.arquitectura.servicios.metrics.MetricsSessionObserver;
+import com.arquitectura.servicios.metrics.ServerMetrics;
 
 import javax.sql.DataSource;
 
@@ -81,6 +83,10 @@ public final class ServidorApplication {
         clienteRepository.disconnectAll();
 
         this.eventBus = new SessionEventBus();
+        // Observabilidad / métricas
+        ServerMetrics.startMetricsServer(serverConfig.getMetricsPort());
+        new MetricsSessionObserver(eventBus);
+
         this.connectionRegistry = new ConnectionRegistry(eventBus, serverConfig.getServerId(), canalRepository);
         DatabaseSyncCoordinator databaseSyncCoordinator = new DatabaseSyncCoordinator(
             clienteRepository,
@@ -133,7 +139,9 @@ public final class ServidorApplication {
     }
 
     public ServidorController createServidorController(ServidorView view) {
-        return new ServidorController(view, registroService, reporteService, conexionService, eventBus, peerManager);
+        ServerConfig serverConfig = ServerConfig.getInstance();
+        String grafanaUrl = serverConfig.getGrafanaUrl();
+        return new ServidorController(view, registroService, reporteService, conexionService, eventBus, peerManager, grafanaUrl);
     }
 
     public ConnectionRegistry getConnectionRegistry() {

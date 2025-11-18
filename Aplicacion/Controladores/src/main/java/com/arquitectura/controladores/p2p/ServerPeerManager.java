@@ -6,6 +6,7 @@ import com.arquitectura.dto.ConnectionStatusUpdateDto;
 import com.arquitectura.entidades.Canal;
 import com.arquitectura.repositorios.CanalRepository;
 import com.arquitectura.repositorios.ClienteRepository;
+import com.arquitectura.servicios.metrics.ServerMetrics;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;

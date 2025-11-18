@@ -23,6 +23,7 @@ public interface ServidorView {
     JButton getBtnGenerarCanales();
     JButton getBtnGenerarConectados();
     JButton getBtnGenerarLogs();
+    JButton getBtnGrafana();
     JButton getBtnApagarServidor();
     void setVisible(boolean visible);
     

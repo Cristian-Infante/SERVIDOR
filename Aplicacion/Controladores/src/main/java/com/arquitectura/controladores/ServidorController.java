@@ -18,6 +18,7 @@ import javax.swing.JFileChooser;
 import javax.swing.JOptionPane;
 import javax.swing.SwingUtilities;
 import javax.swing.filechooser.FileNameExtensionFilter;
+import java.awt.Desktop;
 import java.awt.event.ActionEvent;
 import java.io.File;
 import java.io.IOException;
@@ -44,19 +45,22 @@ public class ServidorController implements SessionObserver, ServerPeerManager.Pe
     private final DefaultListModel<String> servidoresModel;
     private final ServerPeerManager peerManager;
     private final Map<String, String> mapping = new HashMap<>();
+    private final String grafanaUrl;
 
     public ServidorController(ServidorView vista,
                               RegistroService registroService,
                               ReporteService reporteService,
                               ConexionService conexionService,
                               SessionEventBus eventBus,
-                              ServerPeerManager peerManager) {
+                              ServerPeerManager peerManager,
+                              String grafanaUrl) {
         this.vista = vista;
         this.registroService = registroService;
         this.reporteService = reporteService;
         this.conexionService = conexionService;
         this.eventBus = eventBus;
         this.peerManager = peerManager;
+        this.grafanaUrl = grafanaUrl;
         this.conexionesModel = (DefaultListModel<String>) vista.getLstConexiones().getModel();
         this.servidoresModel = (DefaultListModel<String>) vista.getLstServidores().getModel();
         wire();
@@ -76,6 +80,7 @@ public class ServidorController implements SessionObserver, ServerPeerManager.Pe
         vista.getBtnSeleccionarFoto().addActionListener(this::seleccionarFoto);
         vista.getBtnApagarServidor().addActionListener(this::apagarServidor);
         vista.getBtnConectarServidor().addActionListener(this::conectarServidor);
+        vista.getBtnGrafana().addActionListener(this::abrirGrafana);
     }
 
     private void mostrarUsuarios(ActionEvent e) {
@@ -386,6 +391,40 @@ public class ServidorController implements SessionObserver, ServerPeerManager.Pe
                 SwingUtilities.invokeLater(() -> vista.getBtnConectarServidor().setEnabled(true));
             }
         }, "PeerConnector-UI").start();
+    }
+
+    private void abrirGrafana(ActionEvent e) {
+        String url = grafanaUrl != null ? grafanaUrl.trim() : "";
+        if (url.isEmpty()) {
+            JOptionPane.showMessageDialog(
+                    vista.asComponent(),
+                    "La URL de Grafana no está configurada. Revisa la propiedad 'grafana.url' en server.properties.",
+                    "Grafana",
+                    JOptionPane.INFORMATION_MESSAGE
+            );
+            return;
+        }
+
+        try {
+            if (!Desktop.isDesktopSupported() || !Desktop.getDesktop().isSupported(Desktop.Action.BROWSE)) {
+                JOptionPane.showMessageDialog(
+                        vista.asComponent(),
+                        "El sistema no soporta abrir el navegador de forma automática.\n" +
+                        "Abre manualmente: " + url,
+                        "Grafana",
+                        JOptionPane.WARNING_MESSAGE
+                );
+                return;
+            }
+            Desktop.getDesktop().browse(new java.net.URI(url));
+        } catch (Exception ex) {
+            JOptionPane.showMessageDialog(
+                    vista.asComponent(),
+                    "No se pudo abrir Grafana: " + ex.getMessage(),
+                    "Error",
+                    JOptionPane.ERROR_MESSAGE
+            );
+        }
     }
 
     private void apagarServidor(ActionEvent e) {

@@ -58,6 +58,7 @@ public class ServidorVista extends JFrame {
     private final JButton btnGenerarCanales;
     private final JButton btnGenerarConectados;
     private final JButton btnGenerarLogs;
+    private final JButton btnGrafana;
 
     // Control del servidor
     private final JButton btnApagarServidor;
@@ -137,7 +138,10 @@ public class ServidorVista extends JFrame {
         
         btnGenerarLogs = new JButton("Generar");
         styleModernButton(btnGenerarLogs, ACCENT_BLUE, ACCENT_BLUE_HOVER);
-        
+
+        btnGrafana = new JButton("Panel Grafana");
+        styleModernButton(btnGrafana, ACCENT_BLUE, ACCENT_BLUE_HOVER);
+
         btnApagarServidor = new JButton("Apagar Servidor");
         styleDangerButton(btnApagarServidor);
 
@@ -340,6 +344,13 @@ public class ServidorVista extends JFrame {
         gbc.gridx = 1; gbc.weightx = 0; gbc.insets = new Insets(6, 12, 6, 0);
         btnGenerarLogs.setName("btnGenerarLogs");
         grid.add(btnGenerarLogs, gbc);
+
+        // Panel Grafana
+        gbc.gridx = 0; gbc.gridy = 4; gbc.weightx = 1.0; gbc.insets = new Insets(6, 0, 6, 0);
+        grid.add(createReportRow("Monitoreo en Grafana", "Abrir dashboards de métricas del servidor"), gbc);
+        gbc.gridx = 1; gbc.weightx = 0; gbc.insets = new Insets(6, 12, 6, 0);
+        btnGrafana.setName("btnGrafana");
+        grid.add(btnGrafana, gbc);
 
         card.add(grid, BorderLayout.CENTER);
         return card;
@@ -548,6 +559,7 @@ public class ServidorVista extends JFrame {
     public JButton getBtnGenerarCanales() { return btnGenerarCanales; }
     public JButton getBtnGenerarConectados() { return btnGenerarConectados; }
     public JButton getBtnGenerarLogs() { return btnGenerarLogs; }
+    public JButton getBtnGrafana() { return btnGrafana; }
     public JButton getBtnApagarServidor() { return btnApagarServidor; }
     
     /**

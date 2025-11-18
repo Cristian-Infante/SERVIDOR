@@ -37,6 +37,17 @@
             <artifactId>DTO</artifactId>
             <version>1.0-SNAPSHOT</version>
         </dependency>
+        <!-- Prometheus Java client (métricas / Grafana) -->
+        <dependency>
+            <groupId>io.prometheus</groupId>
+            <artifactId>simpleclient</artifactId>
+            <version>0.16.0</version>
+        </dependency>
+        <dependency>
+            <groupId>io.prometheus</groupId>
+            <artifactId>simpleclient_httpserver</artifactId>
+            <version>0.16.0</version>
+        </dependency>
     </dependencies>
 
     <properties>
@@ -80,3 +91,6 @@
         </plugins>
     </build>
 </project>
+
+
+

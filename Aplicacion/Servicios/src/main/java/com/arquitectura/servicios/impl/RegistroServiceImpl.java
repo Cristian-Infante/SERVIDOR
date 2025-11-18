@@ -9,6 +9,7 @@ import com.arquitectura.servicios.eventos.SessionEvent;
 import com.arquitectura.servicios.eventos.SessionEventBus;
 import com.arquitectura.servicios.eventos.SessionEventType;
 import com.arquitectura.servicios.eventos.SessionEventTypes;
+import com.arquitectura.servicios.metrics.ServerMetrics;
 
 import java.util.Objects;
 import java.util.logging.Logger;
@@ -86,6 +87,7 @@ public class RegistroServiceImpl implements RegistroService {
         }
 
         LOGGER.info(() -> "Cliente autenticado: " + cliente.getId());
+        ServerMetrics.recordLoginSuccess();
         return cliente;
     }
 

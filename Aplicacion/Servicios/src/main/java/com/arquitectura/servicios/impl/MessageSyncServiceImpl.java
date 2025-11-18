@@ -11,6 +11,7 @@ import com.arquitectura.repositorios.ClienteRepository;
 import com.arquitectura.repositorios.MensajeRepository;
 import com.arquitectura.servicios.AudioStorageService;
 import com.arquitectura.servicios.MessageSyncService;
+import com.arquitectura.servicios.metrics.ServerMetrics;
 
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -45,6 +46,7 @@ public class MessageSyncServiceImpl implements MessageSyncService {
     @Override
     public MessageSyncResponse sincronizarMensajes(Long usuarioId) {
         LOGGER.info(() -> "Sincronizando mensajes para usuario: " + usuarioId);
+        var timer = ServerMetrics.startMessageSyncTimer();
 
         try {
             // Obtener todos los mensajes del usuario (enviados y recibidos)
@@ -60,12 +62,16 @@ public class MessageSyncServiceImpl implements MessageSyncService {
                 mensajesDto.add(construirDto(mensaje, cacheUsuarios, cacheCanales));
             }
 
-            return new MessageSyncResponse(mensajesDto);
+            MessageSyncResponse response = new MessageSyncResponse(mensajesDto);
+            ServerMetrics.observeMessageSyncBacklog(response.getTotalMensajes());
+            return response;
 
         } catch (Exception e) {
             LOGGER.warning(() -> "Error sincronizando mensajes para usuario " + usuarioId + ": " + e.getMessage());
             // Retornar respuesta vacía en caso de error
             return new MessageSyncResponse(List.of());
+        } finally {
+            ServerMetrics.observeMessageSyncDuration(timer);
         }
     }
 
@@ -147,3 +153,4 @@ public class MessageSyncServiceImpl implements MessageSyncService {
                 .orElse("Desconocido"));
     }
 }
+

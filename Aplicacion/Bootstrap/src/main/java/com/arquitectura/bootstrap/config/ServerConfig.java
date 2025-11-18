@@ -74,6 +74,10 @@ public final class ServerConfig {
         return getIntProperty("server.peerPort", getServerPort() + 1000);
     }
 
+    public int getMetricsPort() {
+        return getIntProperty("metrics.port", getServerPort() + 100);
+    }
+
     public String getServerId() {
         return getProperty("server.id", "server-" + getServerPort());
     }
@@ -95,6 +99,10 @@ public final class ServerConfig {
 
     public String getSecuritySalt() {
         return getProperty("security.salt", "default-salt");
+    }
+
+    public String getGrafanaUrl() {
+        return getProperty("grafana.url", "http://localhost:3000");
     }
 
     public Level getLogLevel() {

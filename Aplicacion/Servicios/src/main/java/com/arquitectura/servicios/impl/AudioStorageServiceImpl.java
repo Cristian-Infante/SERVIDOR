@@ -1,6 +1,7 @@
 package com.arquitectura.servicios.impl;
 
 import com.arquitectura.servicios.AudioStorageService;
+import com.arquitectura.servicios.metrics.ServerMetrics;
 
 import java.io.File;
 import java.io.IOException;
@@ -49,7 +50,9 @@ public class AudioStorageServiceImpl implements AudioStorageService {
             String rutaRelativa = BASE_AUDIO_PATH + "/" + usuarioId + "/" + nombreArchivo;
             LOGGER.info(() -> "Audio guardado exitosamente en: " + rutaRelativa + 
                              " (" + audioBytes.length + " bytes)");
-            
+
+            // Métricas de carga de audio
+            ServerMetrics.recordAudioUpload(audioBytes.length);
             return rutaRelativa;
             
         } catch (IllegalArgumentException e) {
