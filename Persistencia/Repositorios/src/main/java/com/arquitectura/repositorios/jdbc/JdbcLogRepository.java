@@ -1,13 +1,19 @@
 package com.arquitectura.repositorios.jdbc;
 
-import com.arquitectura.entidades.Log;
-import com.arquitectura.repositorios.LogRepository;
-
-import javax.sql.DataSource;
-import java.sql.*;
+import java.sql.Connection;
+import java.sql.PreparedStatement;
+import java.sql.ResultSet;
+import java.sql.SQLException;
+import java.sql.Statement;
+import java.sql.Timestamp;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
+
+import javax.sql.DataSource;
+
+import com.arquitectura.entidades.Log;
+import com.arquitectura.repositorios.LogRepository;
 
 /**
  * Schema reference:
@@ -63,6 +69,30 @@ public class JdbcLogRepository extends JdbcSupport implements LogRepository {
             }
         } catch (SQLException e) {
             throw new IllegalStateException("Error retrieving logs", e);
+        }
+        return logs;
+    }
+
+    @Override
+    public List<Log> findByFechaHoraAfter(LocalDateTime fechaHora) {
+        String sql = "SELECT id, tipo, detalle, fecha_hora FROM logs WHERE fecha_hora > ? ORDER BY fecha_hora DESC LIMIT 100";
+        List<Log> logs = new ArrayList<>();
+        try (Connection conn = getConnection();
+             PreparedStatement ps = conn.prepareStatement(sql)) {
+            ps.setTimestamp(1, Timestamp.valueOf(fechaHora));
+            try (ResultSet rs = ps.executeQuery()) {
+                while (rs.next()) {
+                    Log log = new Log();
+                    log.setId(rs.getLong("id"));
+                    log.setTipo(rs.getBoolean("tipo"));
+                    log.setDetalle(rs.getString("detalle"));
+                    Timestamp ts = rs.getTimestamp("fecha_hora");
+                    log.setFechaHora(ts != null ? ts.toLocalDateTime() : LocalDateTime.now());
+                    logs.add(log);
+                }
+            }
+        } catch (SQLException e) {
+            throw new IllegalStateException("Error retrieving logs after timestamp", e);
         }
         return logs;
     }

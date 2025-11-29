@@ -1,17 +1,5 @@
 package com.arquitectura.controladores.p2p;
 
-import com.arquitectura.entidades.ArchivoMensaje;
-import com.arquitectura.entidades.AudioMensaje;
-import com.arquitectura.entidades.Canal;
-import com.arquitectura.entidades.Cliente;
-import com.arquitectura.entidades.Mensaje;
-import com.arquitectura.entidades.TextoMensaje;
-import com.arquitectura.repositorios.CanalRepository;
-import com.arquitectura.repositorios.ClienteRepository;
-import com.arquitectura.repositorios.MensajeRepository;
-import com.mysql.cj.jdbc.exceptions.PacketTooBigException;
-
-import javax.sql.DataSource;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
@@ -30,6 +18,18 @@ import java.util.Objects;
 import java.util.UUID;
 import java.util.logging.Level;
 import java.util.logging.Logger;
+
+import javax.sql.DataSource;
+
+import com.arquitectura.entidades.ArchivoMensaje;
+import com.arquitectura.entidades.AudioMensaje;
+import com.arquitectura.entidades.Canal;
+import com.arquitectura.entidades.Cliente;
+import com.arquitectura.entidades.Mensaje;
+import com.arquitectura.entidades.TextoMensaje;
+import com.arquitectura.repositorios.CanalRepository;
+import com.arquitectura.repositorios.ClienteRepository;
+import com.arquitectura.repositorios.MensajeRepository;
 
 /**
  * Coordina la captura y aplicación de estados de base de datos entre servidores pares.
@@ -368,10 +368,14 @@ public class DatabaseSyncCoordinator {
         try {
             bindClienteUpsert(ps, targetId, record, true);
             return ps.executeUpdate() > 0;
-        } catch (PacketTooBigException ex) {
-            logPacketTooBig(record, ex);
-            bindClienteUpsert(ps, targetId, record, false);
-            return ps.executeUpdate() > 0;
+        } catch (SQLException ex) {
+            // Verificar si es error de paquete muy grande (código 1153)
+            if (ex.getErrorCode() == 1153) {
+                logPacketTooBig(record, ex);
+                bindClienteUpsert(ps, targetId, record, false);
+                return ps.executeUpdate() > 0;
+            }
+            throw ex;
         }
     }
 
@@ -381,10 +385,15 @@ public class DatabaseSyncCoordinator {
         try {
             bindClienteInsert(ps, record, true);
             ps.executeUpdate();
-        } catch (PacketTooBigException ex) {
-            logPacketTooBig(record, ex);
-            bindClienteInsert(ps, record, false);
-            ps.executeUpdate();
+        } catch (SQLException ex) {
+            // Verificar si es error de paquete muy grande (código 1153)
+            if (ex.getErrorCode() == 1153) {
+                logPacketTooBig(record, ex);
+                bindClienteInsert(ps, record, false);
+                ps.executeUpdate();
+            } else {
+                throw ex;
+            }
         }
         try (ResultSet keys = ps.getGeneratedKeys()) {
             if (keys.next()) {
@@ -446,13 +455,20 @@ public class DatabaseSyncCoordinator {
         }
     }
 
-    private void logPacketTooBig(DatabaseSnapshot.ClienteRecord record, PacketTooBigException ex) {
+    private void logPacketTooBig(DatabaseSnapshot.ClienteRecord record, SQLException ex) {
         String identificador = record.getUsuario();
         if (identificador == null || identificador.isBlank()) {
             identificador = record.getEmail() != null ? record.getEmail() : String.valueOf(record.getId());
         }
         LOGGER.log(Level.WARNING,
             "Foto de perfil de " + identificador +
+                " excede el tamaño permitido por el servidor. Se omitirá durante la sincronización.",
+            ex);
+    }
+
+    private void logPacketTooBig(DatabaseSnapshot.MensajeRecord mensaje, SQLException ex) {
+        LOGGER.log(Level.WARNING,
+            "Mensaje con ID " + mensaje.getId() + 
                 " excede el tamaño permitido por el servidor. Se omitirá durante la sincronización.",
             ex);
     }

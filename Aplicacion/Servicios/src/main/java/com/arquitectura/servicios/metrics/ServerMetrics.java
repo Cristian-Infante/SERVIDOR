@@ -6,12 +6,16 @@ import io.prometheus.client.Histogram;
 import io.prometheus.client.exporter.HTTPServer;
 
 import java.io.IOException;
+import java.lang.management.ManagementFactory;
 import java.util.Locale;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.TimeUnit;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
 /**
- * Centraliza todas las métricas de observabilidad del servidor y expone
+ * Centraliza todas las metricas de observabilidad del servidor y expone
  * un endpoint HTTP en formato Prometheus para ser consumido por Prometheus/Grafana.
  */
 public final class ServerMetrics {
@@ -19,12 +23,13 @@ public final class ServerMetrics {
     private static final Logger LOGGER = Logger.getLogger(ServerMetrics.class.getName());
 
     private static volatile HTTPServer httpServer;
+    private static volatile ScheduledExecutorService systemMetricsExecutor;
 
     // --- TCP / comandos cliente ---
 
     private static final Gauge tcpActiveConnections = Gauge.build()
         .name("chat_tcp_active_connections")
-        .help("Número de conexiones TCP activas (sesiones registradas).")
+        .help("NÃºmero de conexiones TCP activas (sesiones registradas).")
         .register();
 
     private static final Counter tcpConnectionEvents = Counter.build()
@@ -53,23 +58,50 @@ public final class ServerMetrics {
 
     private static final Histogram commandLatency = Histogram.build()
         .name("chat_command_latency_seconds")
-        .help("Latencia de procesamiento de comandos (desde recepción hasta respuesta).")
+        .help("Latencia de procesamiento de comandos (desde recepciÃ³n hasta respuesta).")
         .labelNames("command")
         .buckets(0.001, 0.005, 0.01, 0.025, 0.05,
                  0.1, 0.25, 0.5, 1.0, 2.0, 5.0, 10.0)
         .register();
 
-    // --- Autenticación / sesiones ---
+    private static final Histogram serverResponseTime = Histogram.build()
+        .name("chat_server_response_time_seconds")
+        .help("Tiempo de respuesta del servidor (desde lectura del comando hasta envio de respuesta).")
+        .buckets(0.001, 0.005, 0.01, 0.025, 0.05,
+                 0.1, 0.25, 0.5, 1.0, 2.0, 5.0, 10.0)
+        .register();
+
+    public static Histogram.Timer startServerResponseTimer() {
+
+        return serverResponseTime.startTimer();
+
+    }
+
+
+
+    public static void observeServerResponse(Histogram.Timer timer) {
+
+        if (timer != null) {
+
+            timer.observeDuration();
+
+        }
+
+    }
+
+
+
+    // --- AutenticaciÃ³n / sesiones ---
 
     private static final Counter loginAttempts = Counter.build()
         .name("chat_login_attempts_total")
-        .help("Intentos de autenticación (LOGIN) por resultado.")
+        .help("Intentos de autenticaciÃ³n (LOGIN) por resultado.")
         .labelNames("result")
         .register();
 
     private static final Gauge authenticatedSessions = Gauge.build()
         .name("chat_authenticated_sessions")
-        .help("Número de sesiones autenticadas activas.")
+        .help("NÃºmero de sesiones autenticadas activas.")
         .register();
 
     private static final Counter businessErrors = Counter.build()
@@ -82,16 +114,16 @@ public final class ServerMetrics {
 
     private static final Counter audioUploads = Counter.build()
         .name("chat_audio_uploads_total")
-        .help("Número de comandos UPLOAD_AUDIO procesados exitosamente.")
+        .help("NÃºmero de comandos UPLOAD_AUDIO procesados exitosamente.")
         .register();
 
     private static final Histogram audioUploadSizeBytes = Histogram.build()
         .name("chat_audio_upload_size_bytes")
-        .help("Tamaño de los audios subidos en bytes.")
+        .help("TamaÃ±o de los audios subidos en bytes.")
         .buckets(1024, 4096, 16384, 65536, 262144, 1048576, 4194304)
         .register();
 
-    // --- Sincronización de mensajes ---
+    // --- SincronizaciÃ³n de mensajes ---
 
     private static final Histogram messageSyncBacklog = Histogram.build()
         .name("chat_message_sync_backlog_messages")
@@ -101,12 +133,12 @@ public final class ServerMetrics {
 
     private static final Histogram messageSyncDuration = Histogram.build()
         .name("chat_message_sync_duration_seconds")
-        .help("Tiempo dedicado a construir la respuesta de sincronización de mensajes.")
+        .help("Tiempo dedicado a construir la respuesta de sincronizaciÃ³n de mensajes.")
         .buckets(0.01, 0.05, 0.1, 0.25, 0.5,
                  1.0, 2.0, 5.0, 10.0, 20.0)
         .register();
 
-    // --- Eventos de mensajería tiempo real ---
+    // --- Eventos de mensajerÃ­a tiempo real ---
 
     private static final Counter realtimeEvents = Counter.build()
         .name("chat_realtime_events_total")
@@ -119,7 +151,7 @@ public final class ServerMetrics {
         .help("Mensajes de audio enviados (incluye directos y de canal).")
         .register();
 
-    // --- Métricas P2P entre servidores ---
+    // --- Metricas P2P entre servidores ---
 
     private static final Gauge p2pConnectedPeers = Gauge.build()
         .name("chat_p2p_connected_peers")
@@ -145,12 +177,29 @@ public final class ServerMetrics {
         .buckets(1, 2, 3, 4, 5, 8, 12, 16)
         .register();
 
+    // --- Recursos del sistema ---
+
+    private static final Gauge systemCpuUsagePercent = Gauge.build()
+        .name("chat_system_cpu_usage_percent")
+        .help("Uso de CPU del proceso del servidor (%) segun OperatingSystemMXBean.")
+        .register();
+
+    private static final Gauge systemMemoryUsagePercent = Gauge.build()
+        .name("chat_system_memory_usage_percent")
+        .help("Porcentaje de memoria fisica utilizada (best effort desde OperatingSystemMXBean).")
+        .register();
+
+    private static final Gauge systemMemoryUsedBytes = Gauge.build()
+        .name("chat_system_memory_used_bytes")
+        .help("Memoria fisica usada (bytes).")
+        .register();
+
     private ServerMetrics() {
     }
 
     /**
-     * Arranca el servidor HTTP de métricas Prometheus en el puerto indicado.
-     * Es idempotente: llamar múltiples veces reutiliza la misma instancia.
+     * Arranca el servidor HTTP de metricas Prometheus en el puerto indicado.
+     * Es idempotente: llamar mÃºltiples veces reutiliza la misma instancia.
      */
     public static synchronized void startMetricsServer(int port) {
         if (httpServer != null) {
@@ -158,9 +207,11 @@ public final class ServerMetrics {
         }
         try {
             httpServer = new HTTPServer(port);
-            LOGGER.info(() -> "Servidor de métricas Prometheus escuchando en puerto " + port);
+            startSystemMetricsCollector();
+
+            LOGGER.info(() -> "Servidor de metricas Prometheus escuchando en puerto " + port);
         } catch (IOException e) {
-            LOGGER.log(Level.WARNING, "No se pudo iniciar el servidor de métricas en el puerto " + port, e);
+            LOGGER.log(Level.WARNING, "No se pudo iniciar el servidor de metricas en el puerto " + port, e);
         }
     }
 
@@ -209,7 +260,7 @@ public final class ServerMetrics {
         commandErrors.labels(cmd, errorType).inc();
     }
 
-    // --- Autenticación / sesiones ---
+    // --- AutenticaciÃ³n / sesiones ---
 
     public static void recordLoginSuccess() {
         loginAttempts.labels("success").inc();
@@ -245,7 +296,7 @@ public final class ServerMetrics {
         audioMessages.inc();
     }
 
-    // --- Sincronización de mensajes ---
+    // --- SincronizaciÃ³n de mensajes ---
 
     public static Histogram.Timer startMessageSyncTimer() {
         return messageSyncDuration.startTimer();
@@ -315,7 +366,7 @@ public final class ServerMetrics {
             return "unknown";
         }
         String normalized = raw.trim().toLowerCase(Locale.ROOT);
-        // Reemplazar caracteres problemáticos para etiquetas
+        // Reemplazar caracteres problemÃ¡ticos para etiquetas
         normalized = normalized.replaceAll("[^a-z0-9_]+", "_");
         if (normalized.isEmpty()) {
             return "unknown";
@@ -325,4 +376,80 @@ public final class ServerMetrics {
         }
         return normalized;
     }
+
+    private static void startSystemMetricsCollector() {
+        if (systemMetricsExecutor != null) {
+            return;
+        }
+        systemMetricsExecutor = Executors.newSingleThreadScheduledExecutor(r -> {
+            Thread t = new Thread(r, "metrics-system-collector");
+            t.setDaemon(true);
+            return t;
+        });
+        systemMetricsExecutor.scheduleAtFixedRate(ServerMetrics::collectSystemMetrics, 0, 10, java.util.concurrent.TimeUnit.SECONDS);
+    }
+
+    private static void collectSystemMetrics() {
+        try {
+            double cpu = readCpuUsagePercent();
+            if (cpu >= 0) {
+                systemCpuUsagePercent.set(cpu);
+            }
+
+            MemoryStats stats = readMemoryStats();
+            if (stats.usedBytes >= 0) {
+                systemMemoryUsedBytes.set(stats.usedBytes);
+            }
+            if (stats.usagePercent >= 0) {
+                systemMemoryUsagePercent.set(stats.usagePercent);
+            }
+        } catch (Exception e) {
+            LOGGER.log(Level.FINE, "No se pudo recolectar metricas de sistema", e);
+        }
+    }
+
+    private static double readCpuUsagePercent() {
+        try {
+            var osBean = ManagementFactory.getOperatingSystemMXBean();
+            if (osBean instanceof com.sun.management.OperatingSystemMXBean sunOs) {
+                double processLoad = sunOs.getProcessCpuLoad();
+                if (processLoad >= 0) {
+                    return processLoad * 100.0;
+                }
+                double systemLoad = sunOs.getCpuLoad();
+                if (systemLoad >= 0) {
+                    return systemLoad * 100.0;
+                }
+            }
+        } catch (Exception ignored) {
+        }
+        return -1;
+    }
+
+    private static MemoryStats readMemoryStats() {
+        long used = -1;
+        double percent = -1;
+        try {
+            var osBean = ManagementFactory.getOperatingSystemMXBean();
+            if (osBean instanceof com.sun.management.OperatingSystemMXBean sunOs) {
+                long total = sunOs.getTotalMemorySize();
+                long free = sunOs.getFreeMemorySize();
+                if (total > 0) {
+                    used = total - free;
+                    percent = used * 100.0 / total;
+                }
+            } else {
+                Runtime rt = Runtime.getRuntime();
+                used = rt.totalMemory() - rt.freeMemory();
+                long total = rt.totalMemory();
+                if (total > 0) {
+                    percent = used * 100.0 / total;
+                }
+            }
+        } catch (Exception ignored) {
+        }
+        return new MemoryStats(used, percent);
+    }
+
+    private record MemoryStats(long usedBytes, double usagePercent) {}
 }

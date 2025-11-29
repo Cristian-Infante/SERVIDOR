@@ -15,7 +15,13 @@
     <packaging>jar</packaging>
     
     <dependencies>
-        <!-- Capa de Aplicación -->
+        <!-- Bootstrap (incluye todas las capas) -->
+        <dependency>
+            <groupId>com.arquitectura.bootstrap</groupId>
+            <artifactId>Bootstrap</artifactId>
+            <version>1.0-SNAPSHOT</version>
+        </dependency>
+        <!-- Dependencias explícitas para IntelliJ -->
         <dependency>
             <groupId>com.arquitectura.controladores</groupId>
             <artifactId>Controladores</artifactId>
@@ -27,8 +33,18 @@
             <version>1.0-SNAPSHOT</version>
         </dependency>
         <dependency>
-            <groupId>com.arquitectura.bootstrap</groupId>
-            <artifactId>Bootstrap</artifactId>
+            <groupId>com.arquitectura.repositorios</groupId>
+            <artifactId>Repositorios</artifactId>
+            <version>1.0-SNAPSHOT</version>
+        </dependency>
+        <dependency>
+            <groupId>com.arquitectura.entidades</groupId>
+            <artifactId>Entidades</artifactId>
+            <version>1.0-SNAPSHOT</version>
+        </dependency>
+        <dependency>
+            <groupId>com.arquitectura</groupId>
+            <artifactId>ConfigDB</artifactId>
             <version>1.0-SNAPSHOT</version>
         </dependency>
         <!-- DTOs -->
@@ -37,7 +53,7 @@
             <artifactId>DTO</artifactId>
             <version>1.0-SNAPSHOT</version>
         </dependency>
-        <!-- Prometheus Java client (m�tricas / Grafana) -->
+        <!-- Prometheus Java client (m�tricas / Grafana) -->
         <dependency>
             <groupId>io.prometheus</groupId>
             <artifactId>simpleclient</artifactId>

@@ -1,0 +1,26 @@
+# Archivos y directorios a ignorar en el build de Docker
+# NOTA: NO ignoramos target/ porque contiene los JARs compilados
+.git/
+.gitignore
+*.md
+README.md
+.vscode/
+.idea/
+*.log
+.DS_Store
+Thumbs.db
+
+# Archivos específicos del proyecto
+dependency_graph.html
+ENDPOINTS.md
+ENDPOINTSP2P.md
+
+# Archivos de Docker
+Dockerfile
+docker-compose*.yml
+.dockerignore
+
+# Archivos temporales
+*.tmp
+*.temp
+*~

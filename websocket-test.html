@@ -1,0 +1,467 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WebSocket Test - TCP Server API</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            margin-bottom: 20px;
+        }
+        h1, h2 {
+            color: #333;
+        }
+        .websocket-info {
+            background: #e8f4f8;
+            padding: 15px;
+            border-radius: 5px;
+            border-left: 4px solid #007cba;
+            margin: 10px 0;
+        }
+        .log-area {
+            background: #f8f8f8;
+            border: 1px solid #ddd;
+            padding: 10px;
+            height: 300px;
+            overflow-y: auto;
+            font-family: monospace;
+            font-size: 12px;
+        }
+        button {
+            background: #007cba;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 4px;
+            cursor: pointer;
+            margin: 5px;
+        }
+        button:hover {
+            background: #005a8b;
+        }
+        button:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+        }
+        .status {
+            padding: 5px 10px;
+            border-radius: 3px;
+            font-weight: bold;
+        }
+        .status.connected {
+            background: #d4edda;
+            color: #155724;
+        }
+        .status.disconnected {
+            background: #f8d7da;
+            color: #721c24;
+        }
+        pre {
+            background: #f4f4f4;
+            padding: 10px;
+            border-radius: 4px;
+            overflow-x: auto;
+        }
+        .flex-container {
+            display: flex;
+            gap: 20px;
+        }
+        .flex-item {
+            flex: 1;
+        }
+        @media (max-width: 768px) {
+            .flex-container {
+                flex-direction: column;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🔌 WebSocket Test - TCP Server API</h1>
+        <p>Esta página permite probar los WebSockets del API REST para recibir métricas y logs en tiempo real del servidor TCP.</p>
+    </div>
+
+    <div class="flex-container">
+        <!-- WebSocket de Métricas -->
+        <div class="flex-item container">
+            <h2>📊 WebSocket de Métricas</h2>
+            <div class="websocket-info">
+                <p><strong>Endpoint:</strong> ws://localhost:8089/ws/metrics</p>
+                <p><strong>SockJS:</strong> http://localhost:8089/ws/metrics</p>
+                <p><strong>Intervalo:</strong> 5 segundos</p>
+                <p><strong>Formato:</strong> JSON con métricas de Prometheus</p>
+            </div>
+            
+            <div>
+                <span id="metricsStatus" class="status disconnected">Desconectado</span>
+                <button id="connectMetrics" onclick="connectMetrics()">Conectar Métricas</button>
+                <button id="disconnectMetrics" onclick="disconnectMetrics()" disabled>Desconectar</button>
+            </div>
+            
+            <h3>Log de Métricas:</h3>
+            <div id="metricsLog" class="log-area">
+                Esperando conexión...
+            </div>
+        </div>
+
+        <!-- WebSocket de Logs -->
+        <div class="flex-item container">
+            <h2>📝 WebSocket de Logs</h2>
+            <div class="websocket-info">
+                <p><strong>Endpoint:</strong> ws://localhost:8089/ws/logs</p>
+                <p><strong>SockJS:</strong> http://localhost:8089/ws/logs</p>
+                <p><strong>Intervalo:</strong> 3 segundos</p>
+                <p><strong>Formato:</strong> JSON Array con logs de la BD</p>
+            </div>
+            
+            <div>
+                <span id="logsStatus" class="status disconnected">Desconectado</span>
+                <button id="connectLogs" onclick="connectLogs()">Conectar Logs</button>
+                <button id="disconnectLogs" onclick="disconnectLogs()" disabled>Desconectar</button>
+            </div>
+            
+            <h3>Log de Eventos:</h3>
+            <div id="logsLog" class="log-area">
+                Esperando conexión...
+            </div>
+        </div>
+    </div>
+
+    <!-- Información técnica -->
+    <div class="container">
+        <h2>📋 Información Técnica - Integración Java</h2>
+        
+        <h3>Código Java para Métricas:</h3>
+        <pre><code>@Component
+public class MetricsWebSocketClient {
+    
+    private WebSocketStompClient stompClient;
+    
+    @EventListener(ApplicationReadyEvent.class)
+    public void connectToMetrics() {
+        WebSocketClient client = new StandardWebSocketClient();
+        stompClient = new WebSocketStompClient(client);
+        
+        StompSessionHandler sessionHandler = new MyStompSessionHandler();
+        stompClient.connect("ws://localhost:8089/ws/metrics", sessionHandler);
+    }
+    
+    public class MyStompSessionHandler extends StompSessionHandlerAdapter {
+        @Override
+        public void afterConnected(StompSession session, StompHeaders connectedHeaders) {
+            System.out.println("Conectado a métricas");
+        }
+        
+        @Override
+        public void handleFrame(StompHeaders headers, Object payload) {
+            ObjectMapper mapper = new ObjectMapper();
+            JsonNode metrics = mapper.readTree((String) payload);
+            System.out.println("Métricas recibidas: " + metrics.toString());
+        }
+    }
+}</code></pre>
+
+        <h3>Código Java para Logs:</h3>
+        <pre><code>@Component
+public class LogsWebSocketClient {
+    
+    private WebSocketStompClient stompClient;
+    private final ObjectMapper objectMapper = new ObjectMapper();
+    
+    @EventListener(ApplicationReadyEvent.class)
+    public void connectToLogs() {
+        WebSocketClient client = new StandardWebSocketClient();
+        stompClient = new WebSocketStompClient(client);
+        
+        StompSessionHandler sessionHandler = new LogsStompSessionHandler();
+        stompClient.connect("ws://localhost:8089/ws/logs", sessionHandler);
+    }
+    
+    public class LogsStompSessionHandler extends StompSessionHandlerAdapter {
+        @Override
+        public void afterConnected(StompSession session, StompHeaders connectedHeaders) {
+            System.out.println("Conectado a logs");
+        }
+        
+        @Override
+        public void handleFrame(StompHeaders headers, Object payload) {
+            try {
+                JsonNode data = objectMapper.readTree((String) payload);
+                String type = data.get("type").asText();
+                
+                if ("existing_logs".equals(type) || "new_logs".equals(type)) {
+                    JsonNode logs = data.get("logs");
+                    for (JsonNode log : logs) {
+                        String detalle = log.get("detalle").asText();
+                        String fechaHora = log.get("fechaHora").asText();
+                        String tipo = log.get("tipo").asText();
+                        System.out.println(String.format("[%s] %s: %s", fechaHora, tipo, detalle));
+                    }
+                } else if ("info".equals(type)) {
+                    String message = data.get("message").asText();
+                    System.out.println("Info: " + message);
+                }
+            } catch (Exception e) {
+                System.err.println("Error procesando logs: " + e.getMessage());
+            }
+        }
+    }
+}</code></pre>
+
+        <h3>Dependencias Maven:</h3>
+        <pre><code>&lt;dependency&gt;
+    &lt;groupId&gt;org.springframework&lt;/groupId&gt;
+    &lt;artifactId&gt;spring-websocket&lt;/artifactId&gt;
+    &lt;version&gt;6.0.13&lt;/version&gt;
+&lt;/dependency&gt;
+&lt;dependency&gt;
+    &lt;groupId&gt;org.springframework&lt;/groupId&gt;
+    &lt;artifactId&gt;spring-messaging&lt;/artifactId&gt;
+    &lt;version&gt;6.0.13&lt;/version&gt;
+&lt;/dependency&gt;
+&lt;dependency&gt;
+    &lt;groupId&gt;com.fasterxml.jackson.core&lt;/groupId&gt;
+    &lt;artifactId&gt;jackson-databind&lt;/artifactId&gt;
+    &lt;version&gt;2.17.1&lt;/version&gt;
+&lt;/dependency&gt;</code></pre>
+        
+        <h3>Estructura de Datos:</h3>
+        
+        <h4>Métricas (ejemplo):</h4>
+        <pre><code>{
+    "timestamp": "2025-11-25T18:30:00Z",
+    "tcp_server_connections_active": 5,
+    "tcp_server_total_connections": 150,
+    "tcp_server_bytes_sent": 1024000,
+    "tcp_server_bytes_received": 2048000
+}</code></pre>
+
+        <h4>Logs (ejemplo):</h4>
+        <pre><code>{
+    "type": "existing_logs", // o "new_logs" para logs nuevos
+    "timestamp": 1732589478156,
+    "count": 2,
+    "logs": [
+        {
+            "id": 123,
+            "fechaHora": "2025-11-25T18:30:15",
+            "tipo": "INFO",
+            "detalle": "Nueva conexión establecida desde IP: 192.168.1.100"
+        },
+        {
+            "id": 124,
+            "fechaHora": "2025-11-25T18:30:20",
+            "tipo": "ERROR",
+            "detalle": "Error al procesar mensaje del cliente"
+        }
+    ]
+}</code></pre>
+    </div>
+
+    <!-- Incluir SockJS -->
+    <script src="https://cdn.jsdelivr.net/npm/sockjs-client@1.6.1/dist/sockjs.min.js"></script>
+    
+    <script>
+        let metricsSocket = null;
+        let logsSocket = null;
+
+        function addToLog(logId, message, type = 'info') {
+            const logArea = document.getElementById(logId);
+            const timestamp = new Date().toLocaleTimeString();
+            const logEntry = `[${timestamp}] ${type.toUpperCase()}: ${message}\n`;
+            logArea.innerHTML += logEntry;
+            logArea.scrollTop = logArea.scrollHeight;
+        }
+
+        function connectMetrics() {
+            if (metricsSocket) {
+                addToLog('metricsLog', 'Ya existe una conexión activa', 'warn');
+                return;
+            }
+
+            try {
+                addToLog('metricsLog', 'Intentando conectar a http://localhost:8089/ws/metrics (SockJS)...');
+                addToLog('metricsLog', 'Verificando SockJS disponible...');
+                
+                metricsSocket = new SockJS('http://localhost:8089/ws/metrics');
+                
+                metricsSocket.onopen = function() {
+                    addToLog('metricsLog', '✅ Conectado exitosamente al WebSocket de métricas', 'success');
+                    document.getElementById('metricsStatus').textContent = 'Conectado';
+                    document.getElementById('metricsStatus').className = 'status connected';
+                    document.getElementById('connectMetrics').disabled = true;
+                    document.getElementById('disconnectMetrics').disabled = false;
+                };
+                
+                metricsSocket.onmessage = function(event) {
+                    try {
+                        const data = JSON.parse(event.data);
+                        addToLog('metricsLog', `📊 Métricas recibidas: ${JSON.stringify(data, null, 2)}`, 'data');
+                    } catch (e) {
+                        addToLog('metricsLog', `📊 Datos recibidos (texto): ${event.data}`, 'data');
+                    }
+                };
+                
+                metricsSocket.onclose = function(event) {
+                    addToLog('metricsLog', `🔌 Conexión cerrada - Código: ${event.code}, Razón: ${event.reason}`, 'warn');
+                    resetMetricsConnection();
+                };
+                
+                metricsSocket.onerror = function(error) {
+                    addToLog('metricsLog', `❌ Error de conexión: ${JSON.stringify(error)}`, 'error');
+                    resetMetricsConnection();
+                };
+                
+                // Timeout de 10 segundos para la conexión
+                setTimeout(() => {
+                    if (metricsSocket && metricsSocket.readyState === SockJS.CONNECTING) {
+                        addToLog('metricsLog', '⏱️ Timeout de conexión - intentando cerrar...', 'warn');
+                        metricsSocket.close();
+                    }
+                }, 10000);
+                
+            } catch (error) {
+                addToLog('metricsLog', `❌ Error creando conexión: ${error.message}`, 'error');
+                resetMetricsConnection();
+            }
+        }
+
+        function disconnectMetrics() {
+            if (metricsSocket) {
+                metricsSocket.close();
+                metricsSocket = null;
+                addToLog('metricsLog', '🔌 Desconectado manualmente');
+            }
+            resetMetricsConnection();
+        }
+
+        function resetMetricsConnection() {
+            document.getElementById('metricsStatus').textContent = 'Desconectado';
+            document.getElementById('metricsStatus').className = 'status disconnected';
+            document.getElementById('connectMetrics').disabled = false;
+            document.getElementById('disconnectMetrics').disabled = true;
+            metricsSocket = null;
+        }
+
+        function connectLogs() {
+            if (logsSocket) {
+                addToLog('logsLog', 'Ya existe una conexión activa', 'warn');
+                return;
+            }
+
+            try {
+                addToLog('logsLog', 'Intentando conectar a http://localhost:8089/ws/logs (SockJS)...');
+                addToLog('logsLog', 'Verificando SockJS disponible...');
+                
+                logsSocket = new SockJS('http://localhost:8089/ws/logs');
+                
+                logsSocket.onopen = function() {
+                    addToLog('logsLog', '✅ Conectado exitosamente al WebSocket de logs', 'success');
+                    document.getElementById('logsStatus').textContent = 'Conectado';
+                    document.getElementById('logsStatus').className = 'status connected';
+                    document.getElementById('connectLogs').disabled = true;
+                    document.getElementById('disconnectLogs').disabled = false;
+                };
+                
+                logsSocket.onmessage = function(event) {
+                    try {
+                        const data = JSON.parse(event.data);
+                        
+                        // Verificar si es un mensaje informativo
+                        if (data.type === 'info') {
+                            addToLog('logsLog', `ℹ️ ${data.message}`, 'info');
+                            return;
+                        }
+                        
+                        // Verificar si es un mensaje de logs
+                        if (data.type === 'existing_logs' || data.type === 'new_logs') {
+                            const logs = data.logs || [];
+                            const messageType = data.type === 'existing_logs' ? 'EXISTENTES' : 'NUEVOS';
+                            
+                            if (logs.length > 0) {
+                                addToLog('logsLog', `📦 Recibidos ${logs.length} logs ${messageType}:`, 'success');
+                                
+                                // Mostrar solo los primeros 10 logs para no saturar la pantalla
+                                const logsToShow = logs.slice(0, 10);
+                                logsToShow.forEach((log, index) => {
+                                    const tipoLog = log.tipo === 'INFO' ? '✅' : '❌';
+                                    const timestamp = log.fechaHora ? new Date(log.fechaHora).toLocaleTimeString() : 'N/A';
+                                    addToLog('logsLog', `  ${tipoLog} [${timestamp}] ${log.detalle}`, 'data');
+                                });
+                                
+                                if (logs.length > 10) {
+                                    addToLog('logsLog', `  ... y ${logs.length - 10} logs más`, 'info');
+                                }
+                            } else {
+                                addToLog('logsLog', `📝 No hay logs ${messageType.toLowerCase()}`, 'info');
+                            }
+                        } else {
+                            // Mensaje no reconocido, mostrar completo
+                            addToLog('logsLog', `📝 Datos recibidos: ${JSON.stringify(data, null, 2)}`, 'data');
+                        }
+                    } catch (e) {
+                        addToLog('logsLog', `📝 Datos recibidos (texto): ${event.data}`, 'data');
+                    }
+                };
+                
+                logsSocket.onclose = function(event) {
+                    addToLog('logsLog', `🔌 Conexión cerrada - Código: ${event.code}, Razón: ${event.reason}`, 'warn');
+                    resetLogsConnection();
+                };
+                
+                logsSocket.onerror = function(error) {
+                    addToLog('logsLog', `❌ Error de conexión: ${JSON.stringify(error)}`, 'error');
+                    resetLogsConnection();
+                };
+                
+                // Timeout de 10 segundos para la conexión
+                setTimeout(() => {
+                    if (logsSocket && logsSocket.readyState === SockJS.CONNECTING) {
+                        addToLog('logsLog', '⏱️ Timeout de conexión - intentando cerrar...', 'warn');
+                        logsSocket.close();
+                    }
+                }, 10000);
+                
+            } catch (error) {
+                addToLog('logsLog', `❌ Error creando conexión: ${error.message}`, 'error');
+                resetLogsConnection();
+            }
+        }
+
+        function disconnectLogs() {
+            if (logsSocket) {
+                logsSocket.close();
+                logsSocket = null;
+                addToLog('logsLog', '🔌 Desconectado manualmente');
+            }
+            resetLogsConnection();
+        }
+
+        function resetLogsConnection() {
+            document.getElementById('logsStatus').textContent = 'Desconectado';
+            document.getElementById('logsStatus').className = 'status disconnected';
+            document.getElementById('connectLogs').disabled = false;
+            document.getElementById('disconnectLogs').disabled = true;
+            logsSocket = null;
+        }
+
+        // Limpiar conexiones al cerrar la página
+        window.onbeforeunload = function() {
+            if (metricsSocket) metricsSocket.close();
+            if (logsSocket) logsSocket.close();
+        };
+    </script>
+</body>
+</html>

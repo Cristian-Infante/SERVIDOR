@@ -1,0 +1,521 @@
+2025-11-25 18:28:29 [main] INFO  c.a.restapi.RestApiApplication - Starting RestApiApplication v1.0-SNAPSHOT using Java 22.0.1 with PID 44332 (C:\Users\USUARIO\OneDrive\Escritorio\Servidor\Aplicacion\RestAPI\target\RestAPI-1.0-SNAPSHOT.jar started by USUARIO in C:\Users\USUARIO\OneDrive\Escritorio\Servidor)
+2025-11-25 18:28:29 [main] INFO  c.a.restapi.RestApiApplication - No active profile set, falling back to 1 default profile: "default"
+2025-11-25 18:28:32 [main] INFO  o.s.b.w.e.tomcat.TomcatWebServer - Tomcat initialized with port 8089 (http)
+2025-11-25 18:28:32 [main] INFO  o.s.b.w.s.c.ServletWebServerApplicationContext - Root WebApplicationContext: initialization completed in 3124 ms
+2025-11-25 18:28:34 [main] INFO  o.s.b.a.e.web.EndpointLinksResolver - Exposing 3 endpoint(s) beneath base path '/actuator'
+2025-11-25 18:28:36 [main] INFO  o.s.b.w.e.tomcat.TomcatWebServer - Tomcat started on port 8089 (http) with context path ''
+2025-11-25 18:28:36 [main] INFO  c.a.restapi.RestApiApplication - Started RestApiApplication in 8.499 seconds (process running for 9.871)
+2025-11-25 18:28:44 [http-nio-8089-exec-1] INFO  o.s.web.servlet.DispatcherServlet - Initializing Servlet 'dispatcherServlet'
+2025-11-25 18:28:44 [http-nio-8089-exec-1] INFO  o.s.web.servlet.DispatcherServlet - Completed initialization in 2 ms
+2025-11-25 18:29:57 [http-nio-8089-exec-10] ERROR o.a.c.c.C.[.[.[.[dispatcherServlet] - Servlet.service() for servlet [dispatcherServlet] in context with path [] threw exception [Request processing failed: java.lang.IllegalArgumentException: When allowCredentials is true, allowedOrigins cannot contain the special value "*" since that cannot be set on the "Access-Control-Allow-Origin" response header. To allow credentials to a set of origins, list them explicitly or consider using "allowedOriginPatterns" instead.] with root cause
+java.lang.IllegalArgumentException: When allowCredentials is true, allowedOrigins cannot contain the special value "*" since that cannot be set on the "Access-Control-Allow-Origin" response header. To allow credentials to a set of origins, list them explicitly or consider using "allowedOriginPatterns" instead.
+	at org.springframework.web.cors.CorsConfiguration.validateAllowCredentials(CorsConfiguration.java:538)
+	at org.springframework.web.servlet.handler.AbstractHandlerMapping.getHandler(AbstractHandlerMapping.java:542)
+	at org.springframework.web.servlet.DispatcherServlet.getHandler(DispatcherServlet.java:1283)
+	at org.springframework.web.servlet.DispatcherServlet.doDispatch(DispatcherServlet.java:1065)
+	at org.springframework.web.servlet.DispatcherServlet.doService(DispatcherServlet.java:979)
+	at org.springframework.web.servlet.FrameworkServlet.processRequest(FrameworkServlet.java:1014)
+	at org.springframework.web.servlet.FrameworkServlet.doGet(FrameworkServlet.java:903)
+	at jakarta.servlet.http.HttpServlet.service(HttpServlet.java:564)
+	at org.springframework.web.servlet.FrameworkServlet.service(FrameworkServlet.java:885)
+	at jakarta.servlet.http.HttpServlet.service(HttpServlet.java:658)
+	at org.apache.catalina.core.ApplicationFilterChain.internalDoFilter(ApplicationFilterChain.java:205)
+	at org.apache.catalina.core.ApplicationFilterChain.doFilter(ApplicationFilterChain.java:149)
+	at org.apache.tomcat.websocket.server.WsFilter.doFilter(WsFilter.java:51)
+	at org.apache.catalina.core.ApplicationFilterChain.internalDoFilter(ApplicationFilterChain.java:174)
+	at org.apache.catalina.core.ApplicationFilterChain.doFilter(ApplicationFilterChain.java:149)
+	at org.springframework.web.filter.RequestContextFilter.doFilterInternal(RequestContextFilter.java:100)
+	at org.springframework.web.filter.OncePerRequestFilter.doFilter(OncePerRequestFilter.java:116)
+	at org.apache.catalina.core.ApplicationFilterChain.internalDoFilter(ApplicationFilterChain.java:174)
+	at org.apache.catalina.core.ApplicationFilterChain.doFilter(ApplicationFilterChain.java:149)
+	at org.springframework.web.filter.FormContentFilter.doFilterInternal(FormContentFilter.java:93)
+	at org.springframework.web.filter.OncePerRequestFilter.doFilter(OncePerRequestFilter.java:116)
+	at org.apache.catalina.core.ApplicationFilterChain.internalDoFilter(ApplicationFilterChain.java:174)
+	at org.apache.catalina.core.ApplicationFilterChain.doFilter(ApplicationFilterChain.java:149)
+	at org.springframework.web.filter.ServerHttpObservationFilter.doFilterInternal(ServerHttpObservationFilter.java:109)
+	at org.springframework.web.filter.OncePerRequestFilter.doFilter(OncePerRequestFilter.java:116)
+	at org.apache.catalina.core.ApplicationFilterChain.internalDoFilter(ApplicationFilterChain.java:174)
+	at org.apache.catalina.core.ApplicationFilterChain.doFilter(ApplicationFilterChain.java:149)
+	at org.springframework.web.filter.CharacterEncodingFilter.doFilterInternal(CharacterEncodingFilter.java:201)
+	at org.springframework.web.filter.OncePerRequestFilter.doFilter(OncePerRequestFilter.java:116)
+	at org.apache.catalina.core.ApplicationFilterChain.internalDoFilter(ApplicationFilterChain.java:174)
+	at org.apache.catalina.core.ApplicationFilterChain.doFilter(ApplicationFilterChain.java:149)
+	at org.apache.catalina.core.StandardWrapperValve.invoke(StandardWrapperValve.java:167)
+	at org.apache.catalina.core.StandardContextValve.invoke(StandardContextValve.java:90)
+	at org.apache.catalina.authenticator.AuthenticatorBase.invoke(AuthenticatorBase.java:482)
+	at org.apache.catalina.core.StandardHostValve.invoke(StandardHostValve.java:115)
+	at org.apache.catalina.valves.ErrorReportValve.invoke(ErrorReportValve.java:93)
+	at org.apache.catalina.core.StandardEngineValve.invoke(StandardEngineValve.java:74)
+	at org.apache.catalina.connector.CoyoteAdapter.service(CoyoteAdapter.java:340)
+	at org.apache.coyote.http11.Http11Processor.service(Http11Processor.java:391)
+	at org.apache.coyote.AbstractProcessorLight.process(AbstractProcessorLight.java:63)
+	at org.apache.coyote.AbstractProtocol$ConnectionHandler.process(AbstractProtocol.java:896)
+	at org.apache.tomcat.util.net.NioEndpoint$SocketProcessor.doRun(NioEndpoint.java:1744)
+	at org.apache.tomcat.util.net.SocketProcessorBase.run(SocketProcessorBase.java:52)
+	at org.apache.tomcat.util.threads.ThreadPoolExecutor.runWorker(ThreadPoolExecutor.java:1191)
+	at org.apache.tomcat.util.threads.ThreadPoolExecutor$Worker.run(ThreadPoolExecutor.java:659)
+	at org.apache.tomcat.util.threads.TaskThread$WrappingRunnable.run(TaskThread.java:61)
+	at java.base/java.lang.Thread.run(Thread.java:1570)
+2025-11-25 18:30:02 [http-nio-8089-exec-7] ERROR o.a.c.c.C.[.[.[.[dispatcherServlet] - Servlet.service() for servlet [dispatcherServlet] in context with path [] threw exception [Request processing failed: java.lang.IllegalArgumentException: When allowCredentials is true, allowedOrigins cannot contain the special value "*" since that cannot be set on the "Access-Control-Allow-Origin" response header. To allow credentials to a set of origins, list them explicitly or consider using "allowedOriginPatterns" instead.] with root cause
+java.lang.IllegalArgumentException: When allowCredentials is true, allowedOrigins cannot contain the special value "*" since that cannot be set on the "Access-Control-Allow-Origin" response header. To allow credentials to a set of origins, list them explicitly or consider using "allowedOriginPatterns" instead.
+	at org.springframework.web.cors.CorsConfiguration.validateAllowCredentials(CorsConfiguration.java:538)
+	at org.springframework.web.servlet.handler.AbstractHandlerMapping.getHandler(AbstractHandlerMapping.java:542)
+	at org.springframework.web.servlet.DispatcherServlet.getHandler(DispatcherServlet.java:1283)
+	at org.springframework.web.servlet.DispatcherServlet.doDispatch(DispatcherServlet.java:1065)
+	at org.springframework.web.servlet.DispatcherServlet.doService(DispatcherServlet.java:979)
+	at org.springframework.web.servlet.FrameworkServlet.processRequest(FrameworkServlet.java:1014)
+	at org.springframework.web.servlet.FrameworkServlet.doGet(FrameworkServlet.java:903)
+	at jakarta.servlet.http.HttpServlet.service(HttpServlet.java:564)
+	at org.springframework.web.servlet.FrameworkServlet.service(FrameworkServlet.java:885)
+	at jakarta.servlet.http.HttpServlet.service(HttpServlet.java:658)
+	at org.apache.catalina.core.ApplicationFilterChain.internalDoFilter(ApplicationFilterChain.java:205)
+	at org.apache.catalina.core.ApplicationFilterChain.doFilter(ApplicationFilterChain.java:149)
+	at org.apache.tomcat.websocket.server.WsFilter.doFilter(WsFilter.java:51)
+	at org.apache.catalina.core.ApplicationFilterChain.internalDoFilter(ApplicationFilterChain.java:174)
+	at org.apache.catalina.core.ApplicationFilterChain.doFilter(ApplicationFilterChain.java:149)
+	at org.springframework.web.filter.RequestContextFilter.doFilterInternal(RequestContextFilter.java:100)
+	at org.springframework.web.filter.OncePerRequestFilter.doFilter(OncePerRequestFilter.java:116)
+	at org.apache.catalina.core.ApplicationFilterChain.internalDoFilter(ApplicationFilterChain.java:174)
+	at org.apache.catalina.core.ApplicationFilterChain.doFilter(ApplicationFilterChain.java:149)
+	at org.springframework.web.filter.FormContentFilter.doFilterInternal(FormContentFilter.java:93)
+	at org.springframework.web.filter.OncePerRequestFilter.doFilter(OncePerRequestFilter.java:116)
+	at org.apache.catalina.core.ApplicationFilterChain.internalDoFilter(ApplicationFilterChain.java:174)
+	at org.apache.catalina.core.ApplicationFilterChain.doFilter(ApplicationFilterChain.java:149)
+	at org.springframework.web.filter.ServerHttpObservationFilter.doFilterInternal(ServerHttpObservationFilter.java:109)
+	at org.springframework.web.filter.OncePerRequestFilter.doFilter(OncePerRequestFilter.java:116)
+	at org.apache.catalina.core.ApplicationFilterChain.internalDoFilter(ApplicationFilterChain.java:174)
+	at org.apache.catalina.core.ApplicationFilterChain.doFilter(ApplicationFilterChain.java:149)
+	at org.springframework.web.filter.CharacterEncodingFilter.doFilterInternal(CharacterEncodingFilter.java:201)
+	at org.springframework.web.filter.OncePerRequestFilter.doFilter(OncePerRequestFilter.java:116)
+	at org.apache.catalina.core.ApplicationFilterChain.internalDoFilter(ApplicationFilterChain.java:174)
+	at org.apache.catalina.core.ApplicationFilterChain.doFilter(ApplicationFilterChain.java:149)
+	at org.apache.catalina.core.StandardWrapperValve.invoke(StandardWrapperValve.java:167)
+	at org.apache.catalina.core.StandardContextValve.invoke(StandardContextValve.java:90)
+	at org.apache.catalina.authenticator.AuthenticatorBase.invoke(AuthenticatorBase.java:482)
+	at org.apache.catalina.core.StandardHostValve.invoke(StandardHostValve.java:115)
+	at org.apache.catalina.valves.ErrorReportValve.invoke(ErrorReportValve.java:93)
+	at org.apache.catalina.core.StandardEngineValve.invoke(StandardEngineValve.java:74)
+	at org.apache.catalina.connector.CoyoteAdapter.service(CoyoteAdapter.java:340)
+	at org.apache.coyote.http11.Http11Processor.service(Http11Processor.java:391)
+	at org.apache.coyote.AbstractProcessorLight.process(AbstractProcessorLight.java:63)
+	at org.apache.coyote.AbstractProtocol$ConnectionHandler.process(AbstractProtocol.java:896)
+	at org.apache.tomcat.util.net.NioEndpoint$SocketProcessor.doRun(NioEndpoint.java:1744)
+	at org.apache.tomcat.util.net.SocketProcessorBase.run(SocketProcessorBase.java:52)
+	at org.apache.tomcat.util.threads.ThreadPoolExecutor.runWorker(ThreadPoolExecutor.java:1191)
+	at org.apache.tomcat.util.threads.ThreadPoolExecutor$Worker.run(ThreadPoolExecutor.java:659)
+	at org.apache.tomcat.util.threads.TaskThread$WrappingRunnable.run(TaskThread.java:61)
+	at java.base/java.lang.Thread.run(Thread.java:1570)
+2025-11-25 18:30:19 [http-nio-8089-exec-8] ERROR o.a.c.c.C.[.[.[.[dispatcherServlet] - Servlet.service() for servlet [dispatcherServlet] in context with path [] threw exception [Request processing failed: java.lang.IllegalArgumentException: When allowCredentials is true, allowedOrigins cannot contain the special value "*" since that cannot be set on the "Access-Control-Allow-Origin" response header. To allow credentials to a set of origins, list them explicitly or consider using "allowedOriginPatterns" instead.] with root cause
+java.lang.IllegalArgumentException: When allowCredentials is true, allowedOrigins cannot contain the special value "*" since that cannot be set on the "Access-Control-Allow-Origin" response header. To allow credentials to a set of origins, list them explicitly or consider using "allowedOriginPatterns" instead.
+	at org.springframework.web.cors.CorsConfiguration.validateAllowCredentials(CorsConfiguration.java:538)
+	at org.springframework.web.servlet.handler.AbstractHandlerMapping.getHandler(AbstractHandlerMapping.java:542)
+	at org.springframework.web.servlet.DispatcherServlet.getHandler(DispatcherServlet.java:1283)
+	at org.springframework.web.servlet.DispatcherServlet.doDispatch(DispatcherServlet.java:1065)
+	at org.springframework.web.servlet.DispatcherServlet.doService(DispatcherServlet.java:979)
+	at org.springframework.web.servlet.FrameworkServlet.processRequest(FrameworkServlet.java:1014)
+	at org.springframework.web.servlet.FrameworkServlet.doGet(FrameworkServlet.java:903)
+	at jakarta.servlet.http.HttpServlet.service(HttpServlet.java:564)
+	at org.springframework.web.servlet.FrameworkServlet.service(FrameworkServlet.java:885)
+	at jakarta.servlet.http.HttpServlet.service(HttpServlet.java:658)
+	at org.apache.catalina.core.ApplicationFilterChain.internalDoFilter(ApplicationFilterChain.java:205)
+	at org.apache.catalina.core.ApplicationFilterChain.doFilter(ApplicationFilterChain.java:149)
+	at org.apache.tomcat.websocket.server.WsFilter.doFilter(WsFilter.java:51)
+	at org.apache.catalina.core.ApplicationFilterChain.internalDoFilter(ApplicationFilterChain.java:174)
+	at org.apache.catalina.core.ApplicationFilterChain.doFilter(ApplicationFilterChain.java:149)
+	at org.springframework.web.filter.RequestContextFilter.doFilterInternal(RequestContextFilter.java:100)
+	at org.springframework.web.filter.OncePerRequestFilter.doFilter(OncePerRequestFilter.java:116)
+	at org.apache.catalina.core.ApplicationFilterChain.internalDoFilter(ApplicationFilterChain.java:174)
+	at org.apache.catalina.core.ApplicationFilterChain.doFilter(ApplicationFilterChain.java:149)
+	at org.springframework.web.filter.FormContentFilter.doFilterInternal(FormContentFilter.java:93)
+	at org.springframework.web.filter.OncePerRequestFilter.doFilter(OncePerRequestFilter.java:116)
+	at org.apache.catalina.core.ApplicationFilterChain.internalDoFilter(ApplicationFilterChain.java:174)
+	at org.apache.catalina.core.ApplicationFilterChain.doFilter(ApplicationFilterChain.java:149)
+	at org.springframework.web.filter.ServerHttpObservationFilter.doFilterInternal(ServerHttpObservationFilter.java:109)
+	at org.springframework.web.filter.OncePerRequestFilter.doFilter(OncePerRequestFilter.java:116)
+	at org.apache.catalina.core.ApplicationFilterChain.internalDoFilter(ApplicationFilterChain.java:174)
+	at org.apache.catalina.core.ApplicationFilterChain.doFilter(ApplicationFilterChain.java:149)
+	at org.springframework.web.filter.CharacterEncodingFilter.doFilterInternal(CharacterEncodingFilter.java:201)
+	at org.springframework.web.filter.OncePerRequestFilter.doFilter(OncePerRequestFilter.java:116)
+	at org.apache.catalina.core.ApplicationFilterChain.internalDoFilter(ApplicationFilterChain.java:174)
+	at org.apache.catalina.core.ApplicationFilterChain.doFilter(ApplicationFilterChain.java:149)
+	at org.apache.catalina.core.StandardWrapperValve.invoke(StandardWrapperValve.java:167)
+	at org.apache.catalina.core.StandardContextValve.invoke(StandardContextValve.java:90)
+	at org.apache.catalina.authenticator.AuthenticatorBase.invoke(AuthenticatorBase.java:482)
+	at org.apache.catalina.core.StandardHostValve.invoke(StandardHostValve.java:115)
+	at org.apache.catalina.valves.ErrorReportValve.invoke(ErrorReportValve.java:93)
+	at org.apache.catalina.core.StandardEngineValve.invoke(StandardEngineValve.java:74)
+	at org.apache.catalina.connector.CoyoteAdapter.service(CoyoteAdapter.java:340)
+	at org.apache.coyote.http11.Http11Processor.service(Http11Processor.java:391)
+	at org.apache.coyote.AbstractProcessorLight.process(AbstractProcessorLight.java:63)
+	at org.apache.coyote.AbstractProtocol$ConnectionHandler.process(AbstractProtocol.java:896)
+	at org.apache.tomcat.util.net.NioEndpoint$SocketProcessor.doRun(NioEndpoint.java:1744)
+	at org.apache.tomcat.util.net.SocketProcessorBase.run(SocketProcessorBase.java:52)
+	at org.apache.tomcat.util.threads.ThreadPoolExecutor.runWorker(ThreadPoolExecutor.java:1191)
+	at org.apache.tomcat.util.threads.ThreadPoolExecutor$Worker.run(ThreadPoolExecutor.java:659)
+	at org.apache.tomcat.util.threads.TaskThread$WrappingRunnable.run(TaskThread.java:61)
+	at java.base/java.lang.Thread.run(Thread.java:1570)
+2025-11-25 18:33:53 [main] INFO  c.a.restapi.RestApiApplication - Starting RestApiApplication v1.0-SNAPSHOT using Java 22.0.1 with PID 51676 (C:\Users\USUARIO\OneDrive\Escritorio\Servidor\Aplicacion\RestAPI\target\RestAPI-1.0-SNAPSHOT.jar started by USUARIO in C:\Users\USUARIO\OneDrive\Escritorio\Servidor)
+2025-11-25 18:33:53 [main] INFO  c.a.restapi.RestApiApplication - No active profile set, falling back to 1 default profile: "default"
+2025-11-25 18:33:56 [main] INFO  o.s.b.w.e.tomcat.TomcatWebServer - Tomcat initialized with port 8089 (http)
+2025-11-25 18:33:57 [main] INFO  o.s.b.w.s.c.ServletWebServerApplicationContext - Root WebApplicationContext: initialization completed in 3014 ms
+2025-11-25 18:33:58 [main] INFO  o.s.b.a.e.web.EndpointLinksResolver - Exposing 3 endpoint(s) beneath base path '/actuator'
+2025-11-25 18:34:00 [main] INFO  o.s.b.w.e.tomcat.TomcatWebServer - Tomcat started on port 8089 (http) with context path ''
+2025-11-25 18:34:00 [main] INFO  c.a.restapi.RestApiApplication - Started RestApiApplication in 8.508 seconds (process running for 9.936)
+2025-11-25 18:36:48 [main] INFO  c.a.restapi.RestApiApplication - Starting RestApiApplication v1.0-SNAPSHOT using Java 22.0.1 with PID 39588 (C:\Users\USUARIO\OneDrive\Escritorio\Servidor\Aplicacion\RestAPI\target\RestAPI-1.0-SNAPSHOT.jar started by USUARIO in C:\Users\USUARIO\OneDrive\Escritorio\Servidor)
+2025-11-25 18:36:48 [main] INFO  c.a.restapi.RestApiApplication - No active profile set, falling back to 1 default profile: "default"
+2025-11-25 18:36:51 [main] INFO  o.s.b.w.e.tomcat.TomcatWebServer - Tomcat initialized with port 8089 (http)
+2025-11-25 18:36:51 [main] INFO  o.s.b.w.s.c.ServletWebServerApplicationContext - Root WebApplicationContext: initialization completed in 3058 ms
+2025-11-25 18:36:53 [main] INFO  o.s.b.a.e.web.EndpointLinksResolver - Exposing 3 endpoint(s) beneath base path '/actuator'
+2025-11-25 18:36:54 [main] INFO  o.s.b.w.e.tomcat.TomcatWebServer - Tomcat started on port 8089 (http) with context path ''
+2025-11-25 18:36:54 [main] INFO  c.a.restapi.RestApiApplication - Started RestApiApplication in 7.779 seconds (process running for 9.18)
+2025-11-25 18:36:59 [http-nio-8089-exec-1] INFO  o.s.web.servlet.DispatcherServlet - Initializing Servlet 'dispatcherServlet'
+2025-11-25 18:36:59 [http-nio-8089-exec-1] INFO  o.s.web.servlet.DispatcherServlet - Completed initialization in 2 ms
+2025-11-25 18:37:13 [http-nio-8089-exec-4] ERROR o.a.c.c.C.[.[.[.[dispatcherServlet] - Servlet.service() for servlet [dispatcherServlet] in context with path [] threw exception [Request processing failed: java.lang.IllegalArgumentException: When allowCredentials is true, allowedOrigins cannot contain the special value "*" since that cannot be set on the "Access-Control-Allow-Origin" response header. To allow credentials to a set of origins, list them explicitly or consider using "allowedOriginPatterns" instead.] with root cause
+java.lang.IllegalArgumentException: When allowCredentials is true, allowedOrigins cannot contain the special value "*" since that cannot be set on the "Access-Control-Allow-Origin" response header. To allow credentials to a set of origins, list them explicitly or consider using "allowedOriginPatterns" instead.
+	at org.springframework.web.cors.CorsConfiguration.validateAllowCredentials(CorsConfiguration.java:538)
+	at org.springframework.web.servlet.handler.AbstractHandlerMapping.getHandler(AbstractHandlerMapping.java:542)
+	at org.springframework.web.servlet.DispatcherServlet.getHandler(DispatcherServlet.java:1283)
+	at org.springframework.web.servlet.DispatcherServlet.doDispatch(DispatcherServlet.java:1065)
+	at org.springframework.web.servlet.DispatcherServlet.doService(DispatcherServlet.java:979)
+	at org.springframework.web.servlet.FrameworkServlet.processRequest(FrameworkServlet.java:1014)
+	at org.springframework.web.servlet.FrameworkServlet.doGet(FrameworkServlet.java:903)
+	at jakarta.servlet.http.HttpServlet.service(HttpServlet.java:564)
+	at org.springframework.web.servlet.FrameworkServlet.service(FrameworkServlet.java:885)
+	at jakarta.servlet.http.HttpServlet.service(HttpServlet.java:658)
+	at org.apache.catalina.core.ApplicationFilterChain.internalDoFilter(ApplicationFilterChain.java:205)
+	at org.apache.catalina.core.ApplicationFilterChain.doFilter(ApplicationFilterChain.java:149)
+	at org.apache.tomcat.websocket.server.WsFilter.doFilter(WsFilter.java:51)
+	at org.apache.catalina.core.ApplicationFilterChain.internalDoFilter(ApplicationFilterChain.java:174)
+	at org.apache.catalina.core.ApplicationFilterChain.doFilter(ApplicationFilterChain.java:149)
+	at org.springframework.web.filter.RequestContextFilter.doFilterInternal(RequestContextFilter.java:100)
+	at org.springframework.web.filter.OncePerRequestFilter.doFilter(OncePerRequestFilter.java:116)
+	at org.apache.catalina.core.ApplicationFilterChain.internalDoFilter(ApplicationFilterChain.java:174)
+	at org.apache.catalina.core.ApplicationFilterChain.doFilter(ApplicationFilterChain.java:149)
+	at org.springframework.web.filter.FormContentFilter.doFilterInternal(FormContentFilter.java:93)
+	at org.springframework.web.filter.OncePerRequestFilter.doFilter(OncePerRequestFilter.java:116)
+	at org.apache.catalina.core.ApplicationFilterChain.internalDoFilter(ApplicationFilterChain.java:174)
+	at org.apache.catalina.core.ApplicationFilterChain.doFilter(ApplicationFilterChain.java:149)
+	at org.springframework.web.filter.ServerHttpObservationFilter.doFilterInternal(ServerHttpObservationFilter.java:109)
+	at org.springframework.web.filter.OncePerRequestFilter.doFilter(OncePerRequestFilter.java:116)
+	at org.apache.catalina.core.ApplicationFilterChain.internalDoFilter(ApplicationFilterChain.java:174)
+	at org.apache.catalina.core.ApplicationFilterChain.doFilter(ApplicationFilterChain.java:149)
+	at org.springframework.web.filter.CharacterEncodingFilter.doFilterInternal(CharacterEncodingFilter.java:201)
+	at org.springframework.web.filter.OncePerRequestFilter.doFilter(OncePerRequestFilter.java:116)
+	at org.apache.catalina.core.ApplicationFilterChain.internalDoFilter(ApplicationFilterChain.java:174)
+	at org.apache.catalina.core.ApplicationFilterChain.doFilter(ApplicationFilterChain.java:149)
+	at org.apache.catalina.core.StandardWrapperValve.invoke(StandardWrapperValve.java:167)
+	at org.apache.catalina.core.StandardContextValve.invoke(StandardContextValve.java:90)
+	at org.apache.catalina.authenticator.AuthenticatorBase.invoke(AuthenticatorBase.java:482)
+	at org.apache.catalina.core.StandardHostValve.invoke(StandardHostValve.java:115)
+	at org.apache.catalina.valves.ErrorReportValve.invoke(ErrorReportValve.java:93)
+	at org.apache.catalina.core.StandardEngineValve.invoke(StandardEngineValve.java:74)
+	at org.apache.catalina.connector.CoyoteAdapter.service(CoyoteAdapter.java:340)
+	at org.apache.coyote.http11.Http11Processor.service(Http11Processor.java:391)
+	at org.apache.coyote.AbstractProcessorLight.process(AbstractProcessorLight.java:63)
+	at org.apache.coyote.AbstractProtocol$ConnectionHandler.process(AbstractProtocol.java:896)
+	at org.apache.tomcat.util.net.NioEndpoint$SocketProcessor.doRun(NioEndpoint.java:1744)
+	at org.apache.tomcat.util.net.SocketProcessorBase.run(SocketProcessorBase.java:52)
+	at org.apache.tomcat.util.threads.ThreadPoolExecutor.runWorker(ThreadPoolExecutor.java:1191)
+	at org.apache.tomcat.util.threads.ThreadPoolExecutor$Worker.run(ThreadPoolExecutor.java:659)
+	at org.apache.tomcat.util.threads.TaskThread$WrappingRunnable.run(TaskThread.java:61)
+	at java.base/java.lang.Thread.run(Thread.java:1570)
+2025-11-25 18:38:29 [http-nio-8089-exec-4] ERROR o.a.c.c.C.[.[.[.[dispatcherServlet] - Servlet.service() for servlet [dispatcherServlet] in context with path [] threw exception [Request processing failed: java.lang.IllegalArgumentException: When allowCredentials is true, allowedOrigins cannot contain the special value "*" since that cannot be set on the "Access-Control-Allow-Origin" response header. To allow credentials to a set of origins, list them explicitly or consider using "allowedOriginPatterns" instead.] with root cause
+java.lang.IllegalArgumentException: When allowCredentials is true, allowedOrigins cannot contain the special value "*" since that cannot be set on the "Access-Control-Allow-Origin" response header. To allow credentials to a set of origins, list them explicitly or consider using "allowedOriginPatterns" instead.
+	at org.springframework.web.cors.CorsConfiguration.validateAllowCredentials(CorsConfiguration.java:538)
+	at org.springframework.web.servlet.handler.AbstractHandlerMapping.getHandler(AbstractHandlerMapping.java:542)
+	at org.springframework.web.servlet.DispatcherServlet.getHandler(DispatcherServlet.java:1283)
+	at org.springframework.web.servlet.DispatcherServlet.doDispatch(DispatcherServlet.java:1065)
+	at org.springframework.web.servlet.DispatcherServlet.doService(DispatcherServlet.java:979)
+	at org.springframework.web.servlet.FrameworkServlet.processRequest(FrameworkServlet.java:1014)
+	at org.springframework.web.servlet.FrameworkServlet.doGet(FrameworkServlet.java:903)
+	at jakarta.servlet.http.HttpServlet.service(HttpServlet.java:564)
+	at org.springframework.web.servlet.FrameworkServlet.service(FrameworkServlet.java:885)
+	at jakarta.servlet.http.HttpServlet.service(HttpServlet.java:658)
+	at org.apache.catalina.core.ApplicationFilterChain.internalDoFilter(ApplicationFilterChain.java:205)
+	at org.apache.catalina.core.ApplicationFilterChain.doFilter(ApplicationFilterChain.java:149)
+	at org.apache.tomcat.websocket.server.WsFilter.doFilter(WsFilter.java:51)
+	at org.apache.catalina.core.ApplicationFilterChain.internalDoFilter(ApplicationFilterChain.java:174)
+	at org.apache.catalina.core.ApplicationFilterChain.doFilter(ApplicationFilterChain.java:149)
+	at org.springframework.web.filter.RequestContextFilter.doFilterInternal(RequestContextFilter.java:100)
+	at org.springframework.web.filter.OncePerRequestFilter.doFilter(OncePerRequestFilter.java:116)
+	at org.apache.catalina.core.ApplicationFilterChain.internalDoFilter(ApplicationFilterChain.java:174)
+	at org.apache.catalina.core.ApplicationFilterChain.doFilter(ApplicationFilterChain.java:149)
+	at org.springframework.web.filter.FormContentFilter.doFilterInternal(FormContentFilter.java:93)
+	at org.springframework.web.filter.OncePerRequestFilter.doFilter(OncePerRequestFilter.java:116)
+	at org.apache.catalina.core.ApplicationFilterChain.internalDoFilter(ApplicationFilterChain.java:174)
+	at org.apache.catalina.core.ApplicationFilterChain.doFilter(ApplicationFilterChain.java:149)
+	at org.springframework.web.filter.ServerHttpObservationFilter.doFilterInternal(ServerHttpObservationFilter.java:109)
+	at org.springframework.web.filter.OncePerRequestFilter.doFilter(OncePerRequestFilter.java:116)
+	at org.apache.catalina.core.ApplicationFilterChain.internalDoFilter(ApplicationFilterChain.java:174)
+	at org.apache.catalina.core.ApplicationFilterChain.doFilter(ApplicationFilterChain.java:149)
+	at org.springframework.web.filter.CharacterEncodingFilter.doFilterInternal(CharacterEncodingFilter.java:201)
+	at org.springframework.web.filter.OncePerRequestFilter.doFilter(OncePerRequestFilter.java:116)
+	at org.apache.catalina.core.ApplicationFilterChain.internalDoFilter(ApplicationFilterChain.java:174)
+	at org.apache.catalina.core.ApplicationFilterChain.doFilter(ApplicationFilterChain.java:149)
+	at org.apache.catalina.core.StandardWrapperValve.invoke(StandardWrapperValve.java:167)
+	at org.apache.catalina.core.StandardContextValve.invoke(StandardContextValve.java:90)
+	at org.apache.catalina.authenticator.AuthenticatorBase.invoke(AuthenticatorBase.java:482)
+	at org.apache.catalina.core.StandardHostValve.invoke(StandardHostValve.java:115)
+	at org.apache.catalina.valves.ErrorReportValve.invoke(ErrorReportValve.java:93)
+	at org.apache.catalina.core.StandardEngineValve.invoke(StandardEngineValve.java:74)
+	at org.apache.catalina.connector.CoyoteAdapter.service(CoyoteAdapter.java:340)
+	at org.apache.coyote.http11.Http11Processor.service(Http11Processor.java:391)
+	at org.apache.coyote.AbstractProcessorLight.process(AbstractProcessorLight.java:63)
+	at org.apache.coyote.AbstractProtocol$ConnectionHandler.process(AbstractProtocol.java:896)
+	at org.apache.tomcat.util.net.NioEndpoint$SocketProcessor.doRun(NioEndpoint.java:1744)
+	at org.apache.tomcat.util.net.SocketProcessorBase.run(SocketProcessorBase.java:52)
+	at org.apache.tomcat.util.threads.ThreadPoolExecutor.runWorker(ThreadPoolExecutor.java:1191)
+	at org.apache.tomcat.util.threads.ThreadPoolExecutor$Worker.run(ThreadPoolExecutor.java:659)
+	at org.apache.tomcat.util.threads.TaskThread$WrappingRunnable.run(TaskThread.java:61)
+	at java.base/java.lang.Thread.run(Thread.java:1570)
+2025-11-25 18:38:31 [http-nio-8089-exec-5] ERROR o.a.c.c.C.[.[.[.[dispatcherServlet] - Servlet.service() for servlet [dispatcherServlet] in context with path [] threw exception [Request processing failed: java.lang.IllegalArgumentException: When allowCredentials is true, allowedOrigins cannot contain the special value "*" since that cannot be set on the "Access-Control-Allow-Origin" response header. To allow credentials to a set of origins, list them explicitly or consider using "allowedOriginPatterns" instead.] with root cause
+java.lang.IllegalArgumentException: When allowCredentials is true, allowedOrigins cannot contain the special value "*" since that cannot be set on the "Access-Control-Allow-Origin" response header. To allow credentials to a set of origins, list them explicitly or consider using "allowedOriginPatterns" instead.
+	at org.springframework.web.cors.CorsConfiguration.validateAllowCredentials(CorsConfiguration.java:538)
+	at org.springframework.web.servlet.handler.AbstractHandlerMapping.getHandler(AbstractHandlerMapping.java:542)
+	at org.springframework.web.servlet.DispatcherServlet.getHandler(DispatcherServlet.java:1283)
+	at org.springframework.web.servlet.DispatcherServlet.doDispatch(DispatcherServlet.java:1065)
+	at org.springframework.web.servlet.DispatcherServlet.doService(DispatcherServlet.java:979)
+	at org.springframework.web.servlet.FrameworkServlet.processRequest(FrameworkServlet.java:1014)
+	at org.springframework.web.servlet.FrameworkServlet.doGet(FrameworkServlet.java:903)
+	at jakarta.servlet.http.HttpServlet.service(HttpServlet.java:564)
+	at org.springframework.web.servlet.FrameworkServlet.service(FrameworkServlet.java:885)
+	at jakarta.servlet.http.HttpServlet.service(HttpServlet.java:658)
+	at org.apache.catalina.core.ApplicationFilterChain.internalDoFilter(ApplicationFilterChain.java:205)
+	at org.apache.catalina.core.ApplicationFilterChain.doFilter(ApplicationFilterChain.java:149)
+	at org.apache.tomcat.websocket.server.WsFilter.doFilter(WsFilter.java:51)
+	at org.apache.catalina.core.ApplicationFilterChain.internalDoFilter(ApplicationFilterChain.java:174)
+	at org.apache.catalina.core.ApplicationFilterChain.doFilter(ApplicationFilterChain.java:149)
+	at org.springframework.web.filter.RequestContextFilter.doFilterInternal(RequestContextFilter.java:100)
+	at org.springframework.web.filter.OncePerRequestFilter.doFilter(OncePerRequestFilter.java:116)
+	at org.apache.catalina.core.ApplicationFilterChain.internalDoFilter(ApplicationFilterChain.java:174)
+	at org.apache.catalina.core.ApplicationFilterChain.doFilter(ApplicationFilterChain.java:149)
+	at org.springframework.web.filter.FormContentFilter.doFilterInternal(FormContentFilter.java:93)
+	at org.springframework.web.filter.OncePerRequestFilter.doFilter(OncePerRequestFilter.java:116)
+	at org.apache.catalina.core.ApplicationFilterChain.internalDoFilter(ApplicationFilterChain.java:174)
+	at org.apache.catalina.core.ApplicationFilterChain.doFilter(ApplicationFilterChain.java:149)
+	at org.springframework.web.filter.ServerHttpObservationFilter.doFilterInternal(ServerHttpObservationFilter.java:109)
+	at org.springframework.web.filter.OncePerRequestFilter.doFilter(OncePerRequestFilter.java:116)
+	at org.apache.catalina.core.ApplicationFilterChain.internalDoFilter(ApplicationFilterChain.java:174)
+	at org.apache.catalina.core.ApplicationFilterChain.doFilter(ApplicationFilterChain.java:149)
+	at org.springframework.web.filter.CharacterEncodingFilter.doFilterInternal(CharacterEncodingFilter.java:201)
+	at org.springframework.web.filter.OncePerRequestFilter.doFilter(OncePerRequestFilter.java:116)
+	at org.apache.catalina.core.ApplicationFilterChain.internalDoFilter(ApplicationFilterChain.java:174)
+	at org.apache.catalina.core.ApplicationFilterChain.doFilter(ApplicationFilterChain.java:149)
+	at org.apache.catalina.core.StandardWrapperValve.invoke(StandardWrapperValve.java:167)
+	at org.apache.catalina.core.StandardContextValve.invoke(StandardContextValve.java:90)
+	at org.apache.catalina.authenticator.AuthenticatorBase.invoke(AuthenticatorBase.java:482)
+	at org.apache.catalina.core.StandardHostValve.invoke(StandardHostValve.java:115)
+	at org.apache.catalina.valves.ErrorReportValve.invoke(ErrorReportValve.java:93)
+	at org.apache.catalina.core.StandardEngineValve.invoke(StandardEngineValve.java:74)
+	at org.apache.catalina.connector.CoyoteAdapter.service(CoyoteAdapter.java:340)
+	at org.apache.coyote.http11.Http11Processor.service(Http11Processor.java:391)
+	at org.apache.coyote.AbstractProcessorLight.process(AbstractProcessorLight.java:63)
+	at org.apache.coyote.AbstractProtocol$ConnectionHandler.process(AbstractProtocol.java:896)
+	at org.apache.tomcat.util.net.NioEndpoint$SocketProcessor.doRun(NioEndpoint.java:1744)
+	at org.apache.tomcat.util.net.SocketProcessorBase.run(SocketProcessorBase.java:52)
+	at org.apache.tomcat.util.threads.ThreadPoolExecutor.runWorker(ThreadPoolExecutor.java:1191)
+	at org.apache.tomcat.util.threads.ThreadPoolExecutor$Worker.run(ThreadPoolExecutor.java:659)
+	at org.apache.tomcat.util.threads.TaskThread$WrappingRunnable.run(TaskThread.java:61)
+	at java.base/java.lang.Thread.run(Thread.java:1570)
+2025-11-25 18:41:57 [main] INFO  c.a.restapi.RestApiApplication - Starting RestApiApplication v1.0-SNAPSHOT using Java 22.0.1 with PID 33012 (C:\Users\USUARIO\OneDrive\Escritorio\Servidor\Aplicacion\RestAPI\target\RestAPI-1.0-SNAPSHOT.jar started by USUARIO in C:\Users\USUARIO\OneDrive\Escritorio\Servidor)
+2025-11-25 18:41:57 [main] INFO  c.a.restapi.RestApiApplication - No active profile set, falling back to 1 default profile: "default"
+2025-11-25 18:42:00 [main] INFO  o.s.b.w.e.tomcat.TomcatWebServer - Tomcat initialized with port 8089 (http)
+2025-11-25 18:42:00 [main] INFO  o.s.b.w.s.c.ServletWebServerApplicationContext - Root WebApplicationContext: initialization completed in 3360 ms
+2025-11-25 18:42:02 [main] INFO  o.s.b.a.e.web.EndpointLinksResolver - Exposing 3 endpoint(s) beneath base path '/actuator'
+2025-11-25 18:42:03 [main] INFO  o.s.b.w.e.tomcat.TomcatWebServer - Tomcat started on port 8089 (http) with context path ''
+2025-11-25 18:42:03 [main] INFO  c.a.restapi.RestApiApplication - Started RestApiApplication in 8.832 seconds (process running for 10.378)
+2025-11-25 18:42:11 [http-nio-8089-exec-1] INFO  o.s.web.servlet.DispatcherServlet - Initializing Servlet 'dispatcherServlet'
+2025-11-25 18:42:11 [http-nio-8089-exec-1] INFO  o.s.web.servlet.DispatcherServlet - Completed initialization in 2 ms
+2025-11-25 18:42:39 [main] INFO  c.a.restapi.RestApiApplication - Starting RestApiApplication v1.0-SNAPSHOT using Java 22.0.1 with PID 51564 (C:\Users\USUARIO\OneDrive\Escritorio\Servidor\Aplicacion\RestAPI\target\RestAPI-1.0-SNAPSHOT.jar started by USUARIO in C:\Users\USUARIO\OneDrive\Escritorio\Servidor)
+2025-11-25 18:42:39 [main] INFO  c.a.restapi.RestApiApplication - No active profile set, falling back to 1 default profile: "default"
+2025-11-25 18:42:42 [main] INFO  o.s.b.w.e.tomcat.TomcatWebServer - Tomcat initialized with port 8089 (http)
+2025-11-25 18:42:42 [main] INFO  o.s.b.w.s.c.ServletWebServerApplicationContext - Root WebApplicationContext: initialization completed in 3076 ms
+2025-11-25 18:42:44 [main] INFO  o.s.b.a.e.web.EndpointLinksResolver - Exposing 3 endpoint(s) beneath base path '/actuator'
+2025-11-25 18:42:45 [main] INFO  o.s.b.w.e.tomcat.TomcatWebServer - Tomcat started on port 8089 (http) with context path ''
+2025-11-25 18:42:45 [main] INFO  c.a.restapi.RestApiApplication - Started RestApiApplication in 8.416 seconds (process running for 9.98)
+2025-11-25 18:42:51 [http-nio-8089-exec-1] INFO  o.s.web.servlet.DispatcherServlet - Initializing Servlet 'dispatcherServlet'
+2025-11-25 18:42:51 [http-nio-8089-exec-1] INFO  o.s.web.servlet.DispatcherServlet - Completed initialization in 2 ms
+2025-11-25 18:43:23 [http-nio-8089-exec-8] INFO  c.a.r.w.MetricsWebSocketHandler - Cliente conectado a WebSocket de métricas. Total clientes: 1
+2025-11-25 18:43:26 [http-nio-8089-exec-10] INFO  c.a.r.websocket.LogsWebSocketHandler - Cliente conectado a WebSocket de logs. Total clientes: 1
+2025-11-25 18:43:34 [http-nio-8089-exec-3] INFO  c.a.r.w.MetricsWebSocketHandler - Cliente conectado a WebSocket de métricas. Total clientes: 2
+2025-11-25 18:43:38 [http-nio-8089-exec-9] INFO  c.a.r.websocket.LogsWebSocketHandler - Cliente conectado a WebSocket de logs. Total clientes: 2
+2025-11-25 18:43:39 [http-nio-8089-exec-6] INFO  c.a.r.w.MetricsWebSocketHandler - Cliente desconectado de WebSocket de métricas. Total clientes: 1
+2025-11-25 18:43:41 [http-nio-8089-exec-7] INFO  c.a.r.websocket.LogsWebSocketHandler - Cliente desconectado de WebSocket de logs. Total clientes: 1
+2025-11-25 19:01:36 [main] INFO  c.a.restapi.RestApiApplication - Starting RestApiApplication v1.0-SNAPSHOT using Java 22.0.1 with PID 41292 (C:\Users\USUARIO\OneDrive\Escritorio\Servidor\Aplicacion\RestAPI\target\RestAPI-1.0-SNAPSHOT.jar started by USUARIO in C:\Users\USUARIO\OneDrive\Escritorio\Servidor)
+2025-11-25 19:01:36 [main] INFO  c.a.restapi.RestApiApplication - No active profile set, falling back to 1 default profile: "default"
+2025-11-25 19:01:38 [main] WARN  o.s.b.w.s.c.AnnotationConfigServletWebServerApplicationContext - Exception encountered during context initialization - cancelling refresh attempt: java.lang.IllegalStateException: Unable to load cache item
+2025-11-25 19:01:38 [main] INFO  o.s.b.a.l.ConditionEvaluationReportLogger - 
+
+Error starting ApplicationContext. To display the condition evaluation report re-run your application with 'debug' enabled.
+2025-11-25 19:01:38 [main] ERROR o.s.boot.SpringApplication - Application run failed
+java.lang.IllegalStateException: Unable to load cache item
+	at org.springframework.cglib.core.internal.LoadingCache.createEntry(LoadingCache.java:75)
+	at org.springframework.cglib.core.internal.LoadingCache.get(LoadingCache.java:34)
+	at org.springframework.cglib.core.AbstractClassGenerator$ClassLoaderData.get(AbstractClassGenerator.java:130)
+	at org.springframework.cglib.core.AbstractClassGenerator.create(AbstractClassGenerator.java:317)
+	at org.springframework.cglib.proxy.Enhancer.createHelper(Enhancer.java:562)
+	at org.springframework.cglib.proxy.Enhancer.createClass(Enhancer.java:407)
+	at org.springframework.context.annotation.ConfigurationClassEnhancer.createClass(ConfigurationClassEnhancer.java:138)
+	at org.springframework.context.annotation.ConfigurationClassEnhancer.enhance(ConfigurationClassEnhancer.java:109)
+	at org.springframework.context.annotation.ConfigurationClassPostProcessor.enhanceConfigurationClasses(ConfigurationClassPostProcessor.java:533)
+	at org.springframework.context.annotation.ConfigurationClassPostProcessor.postProcessBeanFactory(ConfigurationClassPostProcessor.java:310)
+	at org.springframework.context.support.PostProcessorRegistrationDelegate.invokeBeanFactoryPostProcessors(PostProcessorRegistrationDelegate.java:363)
+	at org.springframework.context.support.PostProcessorRegistrationDelegate.invokeBeanFactoryPostProcessors(PostProcessorRegistrationDelegate.java:153)
+	at org.springframework.context.support.AbstractApplicationContext.invokeBeanFactoryPostProcessors(AbstractApplicationContext.java:775)
+	at org.springframework.context.support.AbstractApplicationContext.refresh(AbstractApplicationContext.java:597)
+	at org.springframework.boot.web.servlet.context.ServletWebServerApplicationContext.refresh(ServletWebServerApplicationContext.java:146)
+	at org.springframework.boot.SpringApplication.refresh(SpringApplication.java:753)
+	at org.springframework.boot.SpringApplication.refreshContext(SpringApplication.java:455)
+	at org.springframework.boot.SpringApplication.run(SpringApplication.java:323)
+	at org.springframework.boot.SpringApplication.run(SpringApplication.java:1342)
+	at org.springframework.boot.SpringApplication.run(SpringApplication.java:1331)
+	at com.arquitectura.restapi.RestApiApplication.main(RestApiApplication.java:70)
+	at java.base/jdk.internal.reflect.DirectMethodHandleAccessor.invoke(DirectMethodHandleAccessor.java:103)
+	at java.base/java.lang.reflect.Method.invoke(Method.java:580)
+	at org.springframework.boot.loader.launch.Launcher.launch(Launcher.java:91)
+	at org.springframework.boot.loader.launch.Launcher.launch(Launcher.java:53)
+	at org.springframework.boot.loader.launch.JarLauncher.main(JarLauncher.java:58)
+Caused by: java.lang.NoClassDefFoundError: LogsWebSocketHandler
+	at java.base/java.lang.Class.getDeclaredConstructors0(Native Method)
+	at java.base/java.lang.Class.privateGetDeclaredConstructors(Class.java:3572)
+	at java.base/java.lang.Class.getDeclaredConstructors(Class.java:2737)
+	at org.springframework.cglib.proxy.Enhancer.generateClass(Enhancer.java:655)
+	at org.springframework.cglib.transform.TransformingClassGenerator.generateClass(TransformingClassGenerator.java:35)
+	at org.springframework.cglib.core.DefaultGeneratorStrategy.generate(DefaultGeneratorStrategy.java:26)
+	at org.springframework.cglib.core.ClassLoaderAwareGeneratorStrategy.generate(ClassLoaderAwareGeneratorStrategy.java:57)
+	at org.springframework.cglib.core.AbstractClassGenerator.generate(AbstractClassGenerator.java:366)
+	at org.springframework.cglib.proxy.Enhancer.generate(Enhancer.java:575)
+	at org.springframework.cglib.core.AbstractClassGenerator$ClassLoaderData.lambda$new$1(AbstractClassGenerator.java:107)
+	at org.springframework.cglib.core.internal.LoadingCache.lambda$createEntry$1(LoadingCache.java:52)
+	at java.base/java.util.concurrent.FutureTask.run(FutureTask.java:317)
+	at org.springframework.cglib.core.internal.LoadingCache.createEntry(LoadingCache.java:57)
+	... 25 common frames omitted
+Caused by: java.lang.ClassNotFoundException: LogsWebSocketHandler
+	at java.base/java.net.URLClassLoader.findClass(URLClassLoader.java:445)
+	at java.base/java.lang.ClassLoader.loadClass(ClassLoader.java:592)
+	at org.springframework.boot.loader.net.protocol.jar.JarUrlClassLoader.loadClass(JarUrlClassLoader.java:104)
+	at org.springframework.boot.loader.launch.LaunchedClassLoader.loadClass(LaunchedClassLoader.java:91)
+	at java.base/java.lang.ClassLoader.loadClass(ClassLoader.java:525)
+	... 38 common frames omitted
+2025-11-25 19:08:43 [main] INFO  c.a.restapi.RestApiApplication - Starting RestApiApplication v1.0-SNAPSHOT using Java 22.0.1 with PID 40416 (C:\Users\USUARIO\OneDrive\Escritorio\Servidor\Aplicacion\RestAPI\target\RestAPI-1.0-SNAPSHOT.jar started by USUARIO in C:\Users\USUARIO\OneDrive\Escritorio\Servidor)
+2025-11-25 19:08:43 [main] INFO  c.a.restapi.RestApiApplication - No active profile set, falling back to 1 default profile: "default"
+2025-11-25 19:08:47 [main] INFO  o.s.b.w.e.tomcat.TomcatWebServer - Tomcat initialized with port 8089 (http)
+2025-11-25 19:08:47 [main] INFO  o.s.b.w.s.c.ServletWebServerApplicationContext - Root WebApplicationContext: initialization completed in 3583 ms
+2025-11-25 19:08:49 [main] INFO  o.s.b.a.e.web.EndpointLinksResolver - Exposing 3 endpoint(s) beneath base path '/actuator'
+2025-11-25 19:08:51 [main] INFO  o.s.b.w.e.tomcat.TomcatWebServer - Tomcat started on port 8089 (http) with context path ''
+2025-11-25 19:08:51 [main] INFO  c.a.restapi.RestApiApplication - Started RestApiApplication in 10.057 seconds (process running for 11.615)
+2025-11-25 19:08:57 [http-nio-8089-exec-1] INFO  o.s.web.servlet.DispatcherServlet - Initializing Servlet 'dispatcherServlet'
+2025-11-25 19:08:57 [http-nio-8089-exec-1] INFO  o.s.web.servlet.DispatcherServlet - Completed initialization in 1 ms
+2025-11-25 19:09:47 [main] INFO  c.a.restapi.RestApiApplication - Starting RestApiApplication v1.0-SNAPSHOT using Java 22.0.1 with PID 42476 (C:\Users\USUARIO\OneDrive\Escritorio\Servidor\Aplicacion\RestAPI\target\RestAPI-1.0-SNAPSHOT.jar started by USUARIO in C:\Users\USUARIO\OneDrive\Escritorio\Servidor)
+2025-11-25 19:09:47 [main] INFO  c.a.restapi.RestApiApplication - No active profile set, falling back to 1 default profile: "default"
+2025-11-25 19:09:51 [main] INFO  o.s.b.w.e.tomcat.TomcatWebServer - Tomcat initialized with port 8089 (http)
+2025-11-25 19:09:51 [main] INFO  o.s.b.w.s.c.ServletWebServerApplicationContext - Root WebApplicationContext: initialization completed in 3633 ms
+2025-11-25 19:09:53 [main] INFO  o.s.b.a.e.web.EndpointLinksResolver - Exposing 3 endpoint(s) beneath base path '/actuator'
+2025-11-25 19:09:55 [main] INFO  o.s.b.w.e.tomcat.TomcatWebServer - Tomcat started on port 8089 (http) with context path ''
+2025-11-25 19:09:55 [main] INFO  c.a.restapi.RestApiApplication - Started RestApiApplication in 9.917 seconds (process running for 11.615)
+2025-11-25 19:09:57 [http-nio-8089-exec-1] INFO  o.s.web.servlet.DispatcherServlet - Initializing Servlet 'dispatcherServlet'
+2025-11-25 19:09:57 [http-nio-8089-exec-1] INFO  o.s.web.servlet.DispatcherServlet - Completed initialization in 1 ms
+2025-11-25 19:10:19 [http-nio-8089-exec-5] INFO  c.a.r.w.MetricsWebSocketHandler - Cliente conectado a WebSocket de métricas. Total clientes: 1
+2025-11-25 19:10:19 [http-nio-8089-exec-5] WARN  c.a.r.w.MetricsWebSocketHandler - No se pudo conectar al servidor TCP en puerto 5100: null
+2025-11-25 19:10:21 [pool-2-thread-1] WARN  c.a.r.w.MetricsWebSocketHandler - No se pudo conectar al servidor TCP en puerto 5100: null
+2025-11-25 19:10:26 [pool-2-thread-1] WARN  c.a.r.w.MetricsWebSocketHandler - No se pudo conectar al servidor TCP en puerto 5100: null
+2025-11-25 19:10:31 [pool-2-thread-1] WARN  c.a.r.w.MetricsWebSocketHandler - No se pudo conectar al servidor TCP en puerto 5100: null
+2025-11-25 19:10:36 [pool-2-thread-1] WARN  c.a.r.w.MetricsWebSocketHandler - No se pudo conectar al servidor TCP en puerto 5100: null
+2025-11-25 19:11:37 [main] INFO  c.a.restapi.RestApiApplication - Starting RestApiApplication v1.0-SNAPSHOT using Java 22.0.1 with PID 51968 (C:\Users\USUARIO\OneDrive\Escritorio\Servidor\Aplicacion\RestAPI\target\RestAPI-1.0-SNAPSHOT.jar started by USUARIO in C:\Users\USUARIO\OneDrive\Escritorio\Servidor)
+2025-11-25 19:11:37 [main] INFO  c.a.restapi.RestApiApplication - No active profile set, falling back to 1 default profile: "default"
+2025-11-25 19:11:40 [main] INFO  o.s.b.w.e.tomcat.TomcatWebServer - Tomcat initialized with port 8089 (http)
+2025-11-25 19:11:41 [main] INFO  o.s.b.w.s.c.ServletWebServerApplicationContext - Root WebApplicationContext: initialization completed in 3536 ms
+2025-11-25 19:11:43 [main] INFO  o.s.b.a.e.web.EndpointLinksResolver - Exposing 3 endpoint(s) beneath base path '/actuator'
+2025-11-25 19:11:46 [main] INFO  o.s.b.w.e.tomcat.TomcatWebServer - Tomcat started on port 8089 (http) with context path ''
+2025-11-25 19:11:46 [main] INFO  c.a.restapi.RestApiApplication - Started RestApiApplication in 10.941 seconds (process running for 12.418)
+2025-11-25 19:11:48 [http-nio-8089-exec-1] INFO  o.s.web.servlet.DispatcherServlet - Initializing Servlet 'dispatcherServlet'
+2025-11-25 19:11:48 [http-nio-8089-exec-1] INFO  o.s.web.servlet.DispatcherServlet - Completed initialization in 0 ms
+2025-11-25 19:11:51 [http-nio-8089-exec-3] INFO  c.a.r.w.MetricsWebSocketHandler - Cliente conectado a WebSocket de métricas. Total clientes: 1
+2025-11-25 19:12:16 [http-nio-8089-exec-7] INFO  c.a.r.websocket.LogsWebSocketHandler - Cliente conectado a WebSocket de logs. Total clientes: 1
+2025-11-25 19:15:30 [main] INFO  c.a.restapi.RestApiApplication - Starting RestApiApplication v1.0-SNAPSHOT using Java 22.0.1 with PID 50224 (C:\Users\USUARIO\OneDrive\Escritorio\Servidor\Aplicacion\RestAPI\target\RestAPI-1.0-SNAPSHOT.jar started by USUARIO in C:\Users\USUARIO\OneDrive\Escritorio\Servidor)
+2025-11-25 19:15:30 [main] INFO  c.a.restapi.RestApiApplication - No active profile set, falling back to 1 default profile: "default"
+2025-11-25 19:15:34 [main] INFO  o.s.b.w.e.tomcat.TomcatWebServer - Tomcat initialized with port 8089 (http)
+2025-11-25 19:15:34 [main] INFO  o.s.b.w.s.c.ServletWebServerApplicationContext - Root WebApplicationContext: initialization completed in 3159 ms
+2025-11-25 19:15:36 [main] INFO  o.s.b.a.e.web.EndpointLinksResolver - Exposing 3 endpoint(s) beneath base path '/actuator'
+2025-11-25 19:15:38 [main] INFO  o.s.b.w.e.tomcat.TomcatWebServer - Tomcat started on port 8089 (http) with context path ''
+2025-11-25 19:15:38 [main] INFO  c.a.restapi.RestApiApplication - Started RestApiApplication in 9.671 seconds (process running for 11.05)
+2025-11-25 19:15:47 [http-nio-8089-exec-1] INFO  o.s.web.servlet.DispatcherServlet - Initializing Servlet 'dispatcherServlet'
+2025-11-25 19:15:47 [http-nio-8089-exec-1] INFO  o.s.web.servlet.DispatcherServlet - Completed initialization in 3 ms
+2025-11-25 19:19:02 [main] INFO  c.a.restapi.RestApiApplication - Starting RestApiApplication v1.0-SNAPSHOT using Java 22.0.1 with PID 25836 (C:\Users\USUARIO\OneDrive\Escritorio\Servidor\Aplicacion\RestAPI\target\RestAPI-1.0-SNAPSHOT.jar started by USUARIO in C:\Users\USUARIO\OneDrive\Escritorio\Servidor)
+2025-11-25 19:19:02 [main] INFO  c.a.restapi.RestApiApplication - No active profile set, falling back to 1 default profile: "default"
+2025-11-25 19:19:06 [main] INFO  o.s.b.w.e.tomcat.TomcatWebServer - Tomcat initialized with port 8089 (http)
+2025-11-25 19:19:06 [main] INFO  o.s.b.w.s.c.ServletWebServerApplicationContext - Root WebApplicationContext: initialization completed in 3317 ms
+2025-11-25 19:19:07 [main] INFO  c.a.r.websocket.LogsWebSocketHandler - LogsWebSocketHandler inicializado. Buscará logs después de: 2025-11-25T19:14:07.287770800
+2025-11-25 19:19:08 [main] INFO  o.s.b.a.e.web.EndpointLinksResolver - Exposing 3 endpoint(s) beneath base path '/actuator'
+2025-11-25 19:19:10 [main] INFO  o.s.b.w.e.tomcat.TomcatWebServer - Tomcat started on port 8089 (http) with context path ''
+2025-11-25 19:19:10 [main] INFO  c.a.restapi.RestApiApplication - Started RestApiApplication in 9.45 seconds (process running for 10.9)
+2025-11-25 19:19:16 [http-nio-8089-exec-1] INFO  o.s.web.servlet.DispatcherServlet - Initializing Servlet 'dispatcherServlet'
+2025-11-25 19:19:16 [http-nio-8089-exec-1] INFO  o.s.web.servlet.DispatcherServlet - Completed initialization in 0 ms
+2025-11-25 19:19:33 [http-nio-8089-exec-4] INFO  c.a.r.websocket.LogsWebSocketHandler - Cliente conectado a WebSocket de logs. Total clientes: 1
+2025-11-25 19:19:34 [pool-3-thread-1] INFO  c.a.r.websocket.LogsWebSocketHandler - Buscando logs después de: 2025-11-25T19:14:07.287770800
+2025-11-25 19:19:34 [pool-3-thread-1] INFO  c.a.r.websocket.LogsWebSocketHandler - Logs encontrados: 0
+2025-11-25 19:19:34 [pool-3-thread-1] INFO  c.a.r.websocket.LogsWebSocketHandler - DB tiene 920 logs totales, pero ninguno después de 2025-11-25T19:14:07.287770800
+2025-11-25 19:19:37 [pool-3-thread-1] INFO  c.a.r.websocket.LogsWebSocketHandler - Buscando logs después de: 2025-11-25T19:14:07.287770800
+2025-11-25 19:19:37 [pool-3-thread-1] INFO  c.a.r.websocket.LogsWebSocketHandler - Logs encontrados: 0
+2025-11-25 19:19:37 [pool-3-thread-1] INFO  c.a.r.websocket.LogsWebSocketHandler - DB tiene 920 logs totales, pero ninguno después de 2025-11-25T19:14:07.287770800
+2025-11-25 19:19:40 [pool-3-thread-1] INFO  c.a.r.websocket.LogsWebSocketHandler - Buscando logs después de: 2025-11-25T19:14:07.287770800
+2025-11-25 19:19:40 [pool-3-thread-1] INFO  c.a.r.websocket.LogsWebSocketHandler - Logs encontrados: 0
+2025-11-25 19:19:40 [pool-3-thread-1] INFO  c.a.r.websocket.LogsWebSocketHandler - DB tiene 920 logs totales, pero ninguno después de 2025-11-25T19:14:07.287770800
+2025-11-25 19:19:43 [pool-3-thread-1] INFO  c.a.r.websocket.LogsWebSocketHandler - Buscando logs después de: 2025-11-25T19:14:07.287770800
+2025-11-25 19:19:43 [pool-3-thread-1] INFO  c.a.r.websocket.LogsWebSocketHandler - Logs encontrados: 0
+2025-11-25 19:19:43 [pool-3-thread-1] INFO  c.a.r.websocket.LogsWebSocketHandler - DB tiene 920 logs totales, pero ninguno después de 2025-11-25T19:14:07.287770800
+2025-11-25 19:19:46 [pool-3-thread-1] INFO  c.a.r.websocket.LogsWebSocketHandler - Buscando logs después de: 2025-11-25T19:14:07.287770800
+2025-11-25 19:19:46 [pool-3-thread-1] INFO  c.a.r.websocket.LogsWebSocketHandler - Logs encontrados: 0
+2025-11-25 19:19:46 [pool-3-thread-1] INFO  c.a.r.websocket.LogsWebSocketHandler - DB tiene 920 logs totales, pero ninguno después de 2025-11-25T19:14:07.287770800
+2025-11-25 19:19:49 [pool-3-thread-1] INFO  c.a.r.websocket.LogsWebSocketHandler - Buscando logs después de: 2025-11-25T19:14:07.287770800
+2025-11-25 19:19:49 [pool-3-thread-1] INFO  c.a.r.websocket.LogsWebSocketHandler - Logs encontrados: 0
+2025-11-25 19:19:49 [pool-3-thread-1] INFO  c.a.r.websocket.LogsWebSocketHandler - DB tiene 920 logs totales, pero ninguno después de 2025-11-25T19:14:07.287770800
+2025-11-25 19:19:52 [pool-3-thread-1] INFO  c.a.r.websocket.LogsWebSocketHandler - Buscando logs después de: 2025-11-25T19:14:07.287770800
+2025-11-25 19:19:52 [pool-3-thread-1] INFO  c.a.r.websocket.LogsWebSocketHandler - Logs encontrados: 0
+2025-11-25 19:19:52 [pool-3-thread-1] INFO  c.a.r.websocket.LogsWebSocketHandler - DB tiene 920 logs totales, pero ninguno después de 2025-11-25T19:14:07.287770800
+2025-11-25 19:19:55 [pool-3-thread-1] INFO  c.a.r.websocket.LogsWebSocketHandler - Buscando logs después de: 2025-11-25T19:14:07.287770800
+2025-11-25 19:19:55 [pool-3-thread-1] INFO  c.a.r.websocket.LogsWebSocketHandler - Logs encontrados: 0
+2025-11-25 19:19:55 [pool-3-thread-1] INFO  c.a.r.websocket.LogsWebSocketHandler - DB tiene 920 logs totales, pero ninguno después de 2025-11-25T19:14:07.287770800
+2025-11-25 19:19:58 [pool-3-thread-1] INFO  c.a.r.websocket.LogsWebSocketHandler - Buscando logs después de: 2025-11-25T19:14:07.287770800
+2025-11-25 19:19:58 [pool-3-thread-1] INFO  c.a.r.websocket.LogsWebSocketHandler - Logs encontrados: 0
+2025-11-25 19:19:58 [pool-3-thread-1] INFO  c.a.r.websocket.LogsWebSocketHandler - DB tiene 920 logs totales, pero ninguno después de 2025-11-25T19:14:07.287770800
+2025-11-25 19:20:01 [pool-3-thread-1] INFO  c.a.r.websocket.LogsWebSocketHandler - Buscando logs después de: 2025-11-25T19:14:07.287770800
+2025-11-25 19:20:01 [pool-3-thread-1] INFO  c.a.r.websocket.LogsWebSocketHandler - Logs encontrados: 0
+2025-11-25 19:20:01 [pool-3-thread-1] INFO  c.a.r.websocket.LogsWebSocketHandler - DB tiene 920 logs totales, pero ninguno después de 2025-11-25T19:14:07.287770800
+2025-11-25 19:20:04 [pool-3-thread-1] INFO  c.a.r.websocket.LogsWebSocketHandler - Buscando logs después de: 2025-11-25T19:14:07.287770800
+2025-11-25 19:20:04 [pool-3-thread-1] INFO  c.a.r.websocket.LogsWebSocketHandler - Logs encontrados: 0
+2025-11-25 19:20:04 [pool-3-thread-1] INFO  c.a.r.websocket.LogsWebSocketHandler - DB tiene 920 logs totales, pero ninguno después de 2025-11-25T19:14:07.287770800
+2025-11-25 19:20:07 [pool-3-thread-1] INFO  c.a.r.websocket.LogsWebSocketHandler - Buscando logs después de: 2025-11-25T19:14:07.287770800
+2025-11-25 19:20:07 [pool-3-thread-1] INFO  c.a.r.websocket.LogsWebSocketHandler - Logs encontrados: 0
+2025-11-25 19:20:07 [pool-3-thread-1] INFO  c.a.r.websocket.LogsWebSocketHandler - DB tiene 920 logs totales, pero ninguno después de 2025-11-25T19:14:07.287770800
+2025-11-25 19:20:10 [pool-3-thread-1] INFO  c.a.r.websocket.LogsWebSocketHandler - Buscando logs después de: 2025-11-25T19:14:07.287770800
+2025-11-25 19:20:10 [pool-3-thread-1] INFO  c.a.r.websocket.LogsWebSocketHandler - Logs encontrados: 0
+2025-11-25 19:20:10 [pool-3-thread-1] INFO  c.a.r.websocket.LogsWebSocketHandler - DB tiene 920 logs totales, pero ninguno después de 2025-11-25T19:14:07.287770800
+2025-11-25 19:25:43 [main] INFO  c.a.restapi.RestApiApplication - Starting RestApiApplication v1.0-SNAPSHOT using Java 22.0.1 with PID 51268 (C:\Users\USUARIO\OneDrive\Escritorio\Servidor\Aplicacion\RestAPI\target\RestAPI-1.0-SNAPSHOT.jar started by USUARIO in C:\Users\USUARIO\OneDrive\Escritorio\Servidor)
+2025-11-25 19:25:43 [main] INFO  c.a.restapi.RestApiApplication - No active profile set, falling back to 1 default profile: "default"
+2025-11-25 19:25:47 [main] INFO  o.s.b.w.e.tomcat.TomcatWebServer - Tomcat initialized with port 8089 (http)
+2025-11-25 19:25:47 [main] INFO  o.s.b.w.s.c.ServletWebServerApplicationContext - Root WebApplicationContext: initialization completed in 3348 ms
+2025-11-25 19:25:48 [main] INFO  c.a.r.websocket.LogsWebSocketHandler - LogsWebSocketHandler inicializado. Buscará logs después de: 2025-11-24T19:25:48.018242600
+2025-11-25 19:25:49 [main] INFO  o.s.b.a.e.web.EndpointLinksResolver - Exposing 3 endpoint(s) beneath base path '/actuator'
+2025-11-25 19:25:51 [main] INFO  o.s.b.w.e.tomcat.TomcatWebServer - Tomcat started on port 8089 (http) with context path ''
+2025-11-25 19:25:51 [main] INFO  c.a.restapi.RestApiApplication - Started RestApiApplication in 9.283 seconds (process running for 10.586)
+2025-11-25 19:25:55 [http-nio-8089-exec-1] INFO  o.s.web.servlet.DispatcherServlet - Initializing Servlet 'dispatcherServlet'
+2025-11-25 19:25:55 [http-nio-8089-exec-1] INFO  o.s.web.servlet.DispatcherServlet - Completed initialization in 1 ms
+2025-11-25 19:25:57 [http-nio-8089-exec-3] INFO  c.a.r.websocket.LogsWebSocketHandler - Cliente conectado a WebSocket de logs. Total clientes: 1
+2025-11-25 19:25:58 [http-nio-8089-exec-3] INFO  c.a.r.websocket.LogsWebSocketHandler - Enviados 920 logs existentes al cliente recién conectado
+2025-11-25 19:25:58 [http-nio-8089-exec-3] INFO  c.a.r.websocket.LogsWebSocketHandler - Actualizado lastLogTime a: 2025-11-25T19:12:57
+2025-11-25 19:30:13 [http-nio-8089-exec-10] INFO  c.a.r.websocket.LogsWebSocketHandler - Cliente desconectado de WebSocket de logs. Total clientes: 0
+2025-11-25 19:30:17 [http-nio-8089-exec-3] INFO  c.a.r.websocket.LogsWebSocketHandler - Cliente conectado a WebSocket de logs. Total clientes: 1
+2025-11-25 19:30:17 [http-nio-8089-exec-3] INFO  c.a.r.websocket.LogsWebSocketHandler - Enviados 920 logs existentes al cliente recién conectado
+2025-11-25 19:31:07 [http-nio-8089-exec-10] INFO  c.a.r.w.MetricsWebSocketHandler - Cliente conectado a WebSocket de métricas. Total clientes: 1
+2025-11-25 21:51:52 [pool-2-thread-1] WARN  c.a.r.w.MetricsWebSocketHandler - No se pudo conectar al servidor TCP en puerto 5100: null
+2025-11-25 23:54:52 [main] INFO  c.a.restapi.RestApiApplication - Starting RestApiApplication v1.0-SNAPSHOT using Java 22.0.1 with PID 51112 (C:\Users\USUARIO\OneDrive\Escritorio\Servidor\Aplicacion\RestAPI\target\RestAPI-1.0-SNAPSHOT.jar started by USUARIO in C:\Users\USUARIO\OneDrive\Escritorio\Servidor)
+2025-11-25 23:54:52 [main] INFO  c.a.restapi.RestApiApplication - No active profile set, falling back to 1 default profile: "default"
+2025-11-25 23:54:56 [main] INFO  o.s.b.w.e.tomcat.TomcatWebServer - Tomcat initialized with port 8089 (http)
+2025-11-25 23:54:56 [main] INFO  o.s.b.w.s.c.ServletWebServerApplicationContext - Root WebApplicationContext: initialization completed in 3463 ms
+2025-11-25 23:54:57 [main] INFO  c.a.r.websocket.LogsWebSocketHandler - LogsWebSocketHandler inicializado. Buscará logs después de: 2025-11-24T23:54:57.112051900
+2025-11-25 23:54:58 [main] INFO  o.s.b.a.e.web.EndpointLinksResolver - Exposing 3 endpoint(s) beneath base path '/actuator'
+2025-11-25 23:54:59 [main] INFO  o.s.b.w.e.tomcat.TomcatWebServer - Tomcat started on port 8089 (http) with context path ''
+2025-11-25 23:54:59 [main] INFO  c.a.restapi.RestApiApplication - Started RestApiApplication in 9.369 seconds (process running for 11.403)
+2025-11-25 23:55:01 [http-nio-8089-exec-1] INFO  o.s.web.servlet.DispatcherServlet - Initializing Servlet 'dispatcherServlet'
+2025-11-25 23:55:01 [http-nio-8089-exec-1] INFO  o.s.web.servlet.DispatcherServlet - Completed initialization in 3 ms

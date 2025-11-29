@@ -1,0 +1,16 @@
+2025-11-25 19:04:00 [main] INFO  c.a.restapi.RestApiApplication - Starting RestApiApplication v1.0-SNAPSHOT using Java 22.0.1 with PID 40228 (C:\Users\USUARIO\OneDrive\Escritorio\Servidor\Aplicacion\RestAPI\target\RestAPI-1.0-SNAPSHOT.jar started by USUARIO in C:\Users\USUARIO\OneDrive\Escritorio\Servidor\Aplicacion\RestAPI)
+2025-11-25 19:04:00 [main] INFO  c.a.restapi.RestApiApplication - No active profile set, falling back to 1 default profile: "default"
+2025-11-25 19:04:03 [main] INFO  o.s.b.w.e.tomcat.TomcatWebServer - Tomcat initialized with port 8089 (http)
+2025-11-25 19:04:03 [main] INFO  o.s.b.w.s.c.ServletWebServerApplicationContext - Root WebApplicationContext: initialization completed in 3098 ms
+2025-11-25 19:04:05 [main] INFO  o.s.b.a.e.web.EndpointLinksResolver - Exposing 3 endpoint(s) beneath base path '/actuator'
+2025-11-25 19:04:06 [main] INFO  o.s.b.w.e.tomcat.TomcatWebServer - Tomcat started on port 8089 (http) with context path ''
+2025-11-25 19:04:06 [main] INFO  c.a.restapi.RestApiApplication - Started RestApiApplication in 8.754 seconds (process running for 10.273)
+2025-11-25 19:04:08 [http-nio-8089-exec-1] INFO  o.s.web.servlet.DispatcherServlet - Initializing Servlet 'dispatcherServlet'
+2025-11-25 19:04:08 [http-nio-8089-exec-1] INFO  o.s.web.servlet.DispatcherServlet - Completed initialization in 1 ms
+2025-11-25 19:04:28 [http-nio-8089-exec-8] INFO  c.a.r.w.MetricsWebSocketHandler - Cliente conectado a WebSocket de métricas. Total clientes: 1
+2025-11-25 19:04:28 [http-nio-8089-exec-8] WARN  c.a.r.w.MetricsWebSocketHandler - No se pudo conectar al servidor TCP en puerto 5100: null
+2025-11-25 19:04:28 [pool-2-thread-1] WARN  c.a.r.w.MetricsWebSocketHandler - No se pudo conectar al servidor TCP en puerto 5100: null
+2025-11-25 19:04:33 [pool-2-thread-1] WARN  c.a.r.w.MetricsWebSocketHandler - No se pudo conectar al servidor TCP en puerto 5100: null
+2025-11-25 19:04:38 [pool-2-thread-1] WARN  c.a.r.w.MetricsWebSocketHandler - No se pudo conectar al servidor TCP en puerto 5100: null
+2025-11-25 19:04:43 [pool-2-thread-1] WARN  c.a.r.w.MetricsWebSocketHandler - No se pudo conectar al servidor TCP en puerto 5100: null
+2025-11-25 19:04:48 [pool-2-thread-1] WARN  c.a.r.w.MetricsWebSocketHandler - No se pudo conectar al servidor TCP en puerto 5100: null

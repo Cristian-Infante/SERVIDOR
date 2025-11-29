@@ -1,10 +1,5 @@
 package com.arquitectura.bootstrap;
-import com.arquitectura.servicios.AudioStorageService;
-import com.arquitectura.servicios.AudioTranscriptionService;
-import com.arquitectura.servicios.MessageSyncService;
-import com.arquitectura.servicios.impl.AudioStorageServiceImpl;
-import com.arquitectura.servicios.impl.MessageSyncServiceImpl;
-import com.arquitectura.servicios.impl.VoskTranscriptionService;
+import javax.sql.DataSource;
 
 import com.arquitectura.bootstrap.config.ServerConfig;
 import com.arquitectura.configdb.DBConfig;
@@ -28,25 +23,29 @@ import com.arquitectura.repositorios.jdbc.JdbcCanalRepository;
 import com.arquitectura.repositorios.jdbc.JdbcClienteRepository;
 import com.arquitectura.repositorios.jdbc.JdbcLogRepository;
 import com.arquitectura.repositorios.jdbc.JdbcMensajeRepository;
+import com.arquitectura.servicios.AudioStorageService;
+import com.arquitectura.servicios.AudioTranscriptionService;
 import com.arquitectura.servicios.CanalService;
 import com.arquitectura.servicios.ConexionService;
 import com.arquitectura.servicios.MensajeriaService;
+import com.arquitectura.servicios.MessageSyncService;
 import com.arquitectura.servicios.RegistroService;
 import com.arquitectura.servicios.ReporteService;
 import com.arquitectura.servicios.eventos.InvitationNotificationService;
 import com.arquitectura.servicios.eventos.MessageNotificationService;
 import com.arquitectura.servicios.eventos.SessionEventBus;
+import com.arquitectura.servicios.impl.AudioStorageServiceImpl;
 import com.arquitectura.servicios.impl.CanalServiceImpl;
 import com.arquitectura.servicios.impl.ConexionServiceImpl;
 import com.arquitectura.servicios.impl.MensajeriaServiceImpl;
+import com.arquitectura.servicios.impl.MessageSyncServiceImpl;
 import com.arquitectura.servicios.impl.RegistroServiceImpl;
 import com.arquitectura.servicios.impl.ReporteServiceImpl;
-import com.arquitectura.servicios.security.PasswordHasher;
-import com.arquitectura.servicios.security.Sha256PasswordHasher;
+import com.arquitectura.servicios.impl.VoskTranscriptionService;
 import com.arquitectura.servicios.metrics.MetricsSessionObserver;
 import com.arquitectura.servicios.metrics.ServerMetrics;
-
-import javax.sql.DataSource;
+import com.arquitectura.servicios.security.PasswordHasher;
+import com.arquitectura.servicios.security.Sha256PasswordHasher;
 
 /**
  * Manual dependency injection helper for the Swing application. It wires the
@@ -55,6 +54,7 @@ import javax.sql.DataSource;
  */
 public final class ServidorApplication {
 
+    private final DataSource dataSource;
     private final SessionEventBus eventBus;
     private final RegistroService registroService;
     private final ReporteService reporteService;
@@ -70,7 +70,7 @@ public final class ServidorApplication {
     public ServidorApplication() {
         ServerConfig serverConfig = ServerConfig.getInstance();
         DBConfig config = DBConfig.getInstance();
-        DataSource dataSource = config.getMySqlDataSource();
+        this.dataSource = config.getMySqlDataSource();
         DatabaseInitializer.ensureSchema(dataSource);
 
         ClienteRepository clienteRepository = new JdbcClienteRepository(dataSource);

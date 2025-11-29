@@ -105,6 +105,16 @@ public final class ServerConfig {
         return getProperty("grafana.url", "http://localhost:3000");
     }
 
+    public String getLokiUrl() {
+        return getProperty("loki.url", "http://localhost:3100");
+    }
+
+    public int getRestApiPort() {
+        // El puerto se configura en application.properties del módulo RestAPI
+        // Este método se mantiene por compatibilidad pero no se usa para configurar el puerto real
+        return 8089; // Valor por defecto, el real se toma de application.properties
+    }
+
     public Level getLogLevel() {
         String level = properties.getProperty("log.level");
         if (Objects.isNull(level)) {

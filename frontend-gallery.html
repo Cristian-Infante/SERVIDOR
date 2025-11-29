@@ -1,0 +1,1352 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>API Gateway Dashboard</title>
+    
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- Font Awesome -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    
+    <style>
+        @keyframes slideIn {
+            from { transform: translateY(20px); opacity: 0; }
+            to { transform: translateY(0); opacity: 1; }
+        }
+        
+        .slide-in {
+            animation: slideIn 0.4s ease-out;
+        }
+        
+        .server-card {
+            transition: all 0.3s ease;
+        }
+        
+        .server-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 25px rgba(59, 130, 246, 0.15);
+        }
+
+        /* Animaciones para el Gateway */
+        .animate-fade-in {
+            animation: fadeIn 0.3s ease-out;
+        }
+        
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        
+        .pulse-glow {
+            animation: pulseGlow 2s ease-in-out infinite;
+        }
+        
+        @keyframes pulseGlow {
+            0%, 100% { box-shadow: 0 0 5px rgba(59, 130, 246, 0.3); }
+            50% { box-shadow: 0 0 15px rgba(59, 130, 246, 0.6); }
+        }
+
+    </style>
+</head>
+<body class="bg-gradient-to-br from-blue-50 to-blue-100 min-h-screen">
+    <div class="container mx-auto px-4 py-6">
+        <!-- Header -->
+        <div class="bg-white rounded-xl shadow-lg p-6 mb-6 border-t-4 border-blue-500">
+            <div class="text-center">
+                <h1 class="text-3xl font-bold text-blue-900 mb-2">
+                    <i class="fas fa-network-wired text-blue-600 mr-2"></i>
+                    API Gateway Dashboard
+                </h1>
+                <p class="text-blue-700 text-sm">
+                    <strong>Arquitectura:</strong> Frontend <i class="fas fa-arrows-alt-h text-xs mx-1"></i> Gateway (REST + WebSocket) <i class="fas fa-arrows-alt-h text-xs mx-1"></i> Servidores REST
+                </p>
+                <p class="text-blue-500 text-xs mt-1">
+                    Cada servidor conectado genera modales flotantes para métricas y logs
+                </p>
+            </div>
+        </div>
+
+        <!-- Gateway Status - Diseño mejorado y más claro -->
+        <div class="mb-6">
+            <div class="bg-white rounded-xl shadow-lg border border-blue-200 overflow-hidden max-w-4xl mx-auto">
+                
+                <!-- Header del Gateway -->
+                <div class="bg-gradient-to-r from-blue-600 to-blue-700 px-6 py-4">
+                    <div class="flex items-center justify-between">
+                        <div>
+                            <h3 class="text-lg font-semibold text-white flex items-center">
+                                <i class="fas fa-wifi mr-3"></i>
+                                API Gateway Monitor
+                            </h3>
+                            <p class="text-blue-100 text-sm">
+                                <span id="gatewayHostDisplay">localhost</span>:8091 • WebSocket/STOMP
+                                <button onclick="gateway.configureGatewayHost()" 
+                                        class="ml-2 px-2 py-1 bg-blue-500 hover:bg-blue-600 rounded text-xs transition-colors">
+                                    <i class="fas fa-cog"></i>
+                                </button>
+                            </p>
+                        </div>
+                        <div class="text-right">
+                            <span id="connectionStatus" 
+                                  class="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-red-100 text-red-800">
+                                <i class="fas fa-circle mr-2"></i>Desconectado
+                            </span>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Sección de Acciones -->
+                <div class="px-6 py-6">
+                    <div class="grid md:grid-cols-3 gap-4 items-center">
+                        
+                        <!-- Verificación del Gateway -->
+                        <div class="text-center">
+                            <p class="text-sm font-medium text-gray-700 mb-2">1. Verificar Gateway</p>
+                            <button id="checkGatewayBtn" 
+                                    class="w-full px-4 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-all duration-200 font-medium shadow-sm hover:shadow-md">
+                                <i class="fas fa-search mr-2"></i>Verificar Estado
+                            </button>
+                        </div>
+                        
+                        <!-- Conexión WebSocket -->
+                        <div class="text-center">
+                            <p class="text-sm font-medium text-gray-700 mb-2">2. Conectar WebSocket</p>
+                            <button id="connectBtn" 
+                                    class="w-full px-4 py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:bg-gray-300 disabled:cursor-not-allowed transition-all duration-200 font-medium shadow-sm hover:shadow-md disabled:shadow-none" 
+                                    disabled>
+                                <i class="fas fa-play mr-2"></i>Conectar
+                            </button>
+                        </div>
+                        
+                        <!-- Desconexión -->
+                        <div class="text-center">
+                            <p class="text-sm font-medium text-gray-700 mb-2">3. Desconectar</p>
+                            <button id="disconnectBtn" 
+                                    class="w-full px-4 py-3 bg-red-600 text-white rounded-lg hover:bg-red-700 disabled:bg-gray-300 disabled:cursor-not-allowed transition-all duration-200 font-medium shadow-sm hover:shadow-md disabled:shadow-none" 
+                                    disabled>
+                                <i class="fas fa-stop mr-2"></i>Desconectar
+                            </button>
+                        </div>
+                        
+                    </div>
+                </div>
+                
+                <!-- Sección de Mensajes del Sistema -->
+                <div class="px-6 py-4 bg-gray-50 border-t">
+                    <p class="text-sm font-medium text-gray-700 mb-2">Estado del Sistema</p>
+                    <div id="messages" class="space-y-1 max-h-20 overflow-y-auto">
+                        <div class="text-sm text-blue-600 flex items-center">
+                            <i class="fas fa-info-circle mr-2"></i>
+                            Haz clic en "Verificar Estado" para comprobar disponibilidad del Gateway
+                        </div>
+                    </div>
+                </div>
+                
+            </div>
+        </div>
+
+        <!-- Connected Servers List -->
+        <div class="bg-white rounded-xl shadow-lg p-6 border-l-4 border-blue-300">
+            <h3 class="text-lg font-semibold text-blue-900 mb-4 flex items-center">
+                <i class="fas fa-list text-blue-600 mr-2"></i>
+                Servidores Conectados
+            </h3>
+            <div id="serversList">
+                <div class="text-center py-8 text-blue-500">
+                    <i class="fas fa-server text-4xl mb-3 text-blue-300"></i>
+                    <p>No hay servidores conectados</p>
+                    <p class="text-sm">Agrega un servidor para ver su monitoreo en tiempo real</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Monitoring Gallery -->
+        <div class="mt-6">
+            <div class="bg-white rounded-xl shadow-lg p-6 border-l-4 border-blue-400">
+                <h3 class="text-lg font-semibold text-blue-900 mb-4 flex items-center">
+                    <i class="fas fa-chart-line text-blue-600 mr-2"></i>
+                    Galería de Monitoreo
+                </h3>
+                <div id="modalsGallery" class="space-y-6">
+                    <div class="text-center py-12 text-blue-400 col-span-full">
+                        <i class="fas fa-chart-bar text-5xl mb-4 text-blue-300"></i>
+                        <p class="text-lg">Galería de Monitoreo Vacía</p>
+                        <p class="text-sm">Los servidores conectados aparecerán aquí con sus métricas y logs</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- WebSocket Libraries -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/sockjs-client/1.6.1/sockjs.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/stomp.js/2.3.3/stomp.min.js"></script>
+    
+    <script>
+        /**
+         * API Gateway Client con Galería de Modales
+         * Cada servidor conectado genera 2 modales flotantes: Métricas y Logs
+         */
+        class ApiGatewayClient {
+            constructor() {
+                this.socket = null;
+                this.stompClient = null;
+                this.connected = false;
+                this.serverModals = new Map();
+                this.connectedServers = [];
+                
+                this.initializeElements();
+                this.bindEvents();
+            }
+
+            initializeElements() {
+                this.connectionStatus = document.getElementById('connectionStatus');
+                this.messages = document.getElementById('messages');
+                // this.serverConfigInfo = document.getElementById('serverConfigInfo'); // Elemento eliminado
+                this.serversList = document.getElementById('serversList');
+                this.modalsGallery = document.getElementById('modalsGallery');
+                this.checkGatewayBtn = document.getElementById('checkGatewayBtn');
+                this.connectBtn = document.getElementById('connectBtn');
+                this.disconnectBtn = document.getElementById('disconnectBtn');
+                this.gatewayAvailable = false;
+                
+                // Estado de datos para health checks
+                this.lastMetricsData = null;
+            }
+
+            get baseUrl() {
+                // Detectar automáticamente la IP del Gateway o usar configuración manual
+                const gatewayHost = this.getGatewayHost();
+                return `http://${gatewayHost}:8091/gateway`;
+            }
+            
+            getGatewayHost() {
+                // Verificar si hay una IP configurada manualmente
+                const savedHost = localStorage.getItem('gatewayHost');
+                if (savedHost) {
+                    return savedHost;
+                }
+                
+                // Detectar automáticamente basado en la URL actual
+                const currentHost = window.location.hostname;
+                if (currentHost && currentHost !== 'localhost' && currentHost !== '127.0.0.1') {
+                    return currentHost;
+                }
+                
+                // Fallback a localhost por defecto
+                return 'localhost';
+            }
+
+            bindEvents() {
+                this.checkGatewayBtn.addEventListener('click', () => this.checkGatewayAvailability());
+                this.connectBtn.addEventListener('click', () => this.connectWebSocket());
+                this.disconnectBtn.addEventListener('click', () => this.disconnectWebSocket());
+                
+                // Actualizar display de IP
+                this.updateGatewayHostDisplay();
+                
+                // Verificar disponibilidad del Gateway al cargar
+                setTimeout(() => {
+                    this.checkGatewayAvailability();
+                }, 500);
+            }
+
+            // Verificar si el Gateway está disponible
+            async checkGatewayAvailability() {
+                this.updateStatus('checking', 'Verificando Gateway...');
+                this.checkGatewayBtn.disabled = true;
+                this.checkGatewayBtn.innerHTML = '<i class="fas fa-spinner fa-spin mr-1"></i>Verificando...';
+
+                try {
+                    const controller = new AbortController();
+                    const timeoutId = setTimeout(() => controller.abort(), 5000); // 5 segundos timeout
+
+                    const response = await fetch(`${this.baseUrl}/api/servers`, {
+                        signal: controller.signal,
+                        method: 'GET',
+                        mode: 'cors'
+                    });
+
+                    clearTimeout(timeoutId);
+
+                    if (response.ok) {
+                        const data = await response.json();
+                        
+                        if (data.success !== false) { // API responde con estructura válida
+                            this.gatewayAvailable = true;
+                            this.updateStatus('gateway-available', 'Gateway disponible');
+                            this.connectBtn.disabled = false;
+                            
+                            // Información de servidores configurados (sección eliminada)
+                            // this.displayServersConfiguration(data);
+
+                            this.addMessage('success', `Gateway disponible - ${data.totalServers} servidor(es) configurado(s)`);
+                        } else {
+                            throw new Error(data.message || 'Gateway responde pero con error');
+                        }
+                    } else {
+                        throw new Error(`HTTP ${response.status} - ${response.statusText}`);
+                    }
+                } catch (error) {
+                    console.error('Error verificando Gateway:', error);
+                    this.gatewayAvailable = false;
+                    this.updateStatus('gateway-unavailable', 'Gateway no disponible');
+                    this.connectBtn.disabled = true;
+                    this.disconnectBtn.disabled = true;
+
+                    if (error.name === 'AbortError') {
+                        this.addMessage('error', 'Timeout: Gateway no responde después de 5 segundos');
+                    } else if (error.name === 'TypeError' && error.message.includes('fetch')) {
+                        this.addMessage('error', 'Error de conexión: Verifica que el Gateway esté ejecutándose en localhost:8091');
+                    } else {
+                        this.addMessage('error', `Gateway no disponible: ${error.message}`);
+                    }
+                    
+                    // Limpiar información de configuración (elemento eliminado)
+                    // this.serverConfigInfo.innerHTML = `...`;
+                } finally {
+                    this.checkGatewayBtn.disabled = false;
+                    this.checkGatewayBtn.innerHTML = '<i class="fas fa-search mr-1"></i>Verificar Gateway';
+                }
+            }
+
+            // Cargar configuración de servidores del Gateway
+            async loadServersConfiguration() {
+                try {
+                    const response = await fetch(`${this.baseUrl}/api/servers`);
+                    const data = await response.json();
+                    
+                    if (data.success) {
+                        // this.displayServersConfiguration(data); // Sección eliminada
+                    } else {
+                        throw new Error(data.message || 'Error cargando configuración');
+                    }
+                } catch (error) {
+                    console.error('Error cargando configuración de servidores:', error);
+                    // this.serverConfigInfo.innerHTML = `...`; // Elemento eliminado
+                }
+            }
+
+            // displayServersConfiguration(data) - Método eliminado ya que la sección fue removida
+            // {
+            //     this.serverConfigInfo.innerHTML = `...`;
+            // }
+
+            // WebSocket Connection
+            connectWebSocket() {
+                if (this.connected) return;
+                
+                if (!this.gatewayAvailable) {
+                    this.addMessage('error', 'Gateway no está disponible. Verifica primero la conexión.');
+                    return;
+                }
+
+                this.updateStatus('connecting', 'Conectando WebSocket...');
+                this.addMessage('info', 'Conectando al API Gateway via WebSocket...');
+                
+                try {
+                    // Cargar servidores en paralelo mientras se conecta WebSocket
+                    this.loadAvailableServersAsync();
+                    
+                    this.socket = new SockJS(`${this.baseUrl}/ws`);
+                    this.stompClient = window.Stomp.over(this.socket);
+                    
+                    // Deshabilitar debug para mejor rendimiento
+                    this.stompClient.debug = null;
+                    
+                    // Configuración optimizada de conexión
+                    this.stompClient.connect({}, 
+                        (frame) => {
+                            console.log('Conexión WebSocket exitosa');
+                            this.connected = true;
+                            this.updateStatus('connected', 'Conectado via WebSocket');
+                            this.addMessage('success', 'Conectado al API Gateway exitosamente');
+                            
+                            // Suscribirse inmediatamente para recibir datos
+                            this.subscribeToUpdates();
+                            
+                            // Iniciar colección en el backend (no esperar respuesta)
+                            this.startDataCollectionAsync();
+                        }, 
+                        (error) => {
+                            console.error('Error de conexión WebSocket:', error);
+                            this.connected = false;
+                            this.updateStatus('error', 'Error de conexión WebSocket');
+                            this.addMessage('error', `Error conectando WebSocket: ${error}`);
+                        }
+                    );
+                } catch (error) {
+                    console.error('Error creando WebSocket:', error);
+                    this.addMessage('error', `Error: ${error.message}`);
+                }
+            }
+
+            disconnectWebSocket() {
+                if (this.stompClient && this.connected) {
+                    this.stompClient.disconnect();
+                }
+                this.connected = false;
+                this.updateStatus('disconnected', 'Desconectado');
+                this.addMessage('info', 'Desconectado del API Gateway');
+                this.clearAllModals();
+            }
+
+            // Iniciar recolección de datos en el Gateway
+            async startDataCollection() {
+                try {
+                    this.addMessage('info', 'Iniciando recolección de datos en el Gateway...');
+                    
+                    const response = await fetch(`${this.baseUrl}/api/servers/start-collection`, {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json'
+                        }
+                    });
+
+                    const data = await response.json();
+                    
+                    if (data.success) {
+                        this.addMessage('success', `Recolección iniciada para ${data.serversStarted} servidor(es)`);
+                        this.loadConnectedServers(); // Cargar servidores configurados
+                    } else {
+                        this.addMessage('warning', `Error iniciando recolección: ${data.message}`);
+                    }
+                } catch (error) {
+                    console.error('Error iniciando recolección:', error);
+                    this.addMessage('error', 'Error iniciando recolección de datos');
+                }
+            }
+
+            // Métodos asíncronos optimizados para mejor rendimiento
+            async loadAvailableServersAsync() {
+                try {
+                    const controller = new AbortController();
+                    setTimeout(() => controller.abort(), 2000); // Timeout corto
+                    
+                    const response = await fetch(`${this.baseUrl}/api/servers`, {
+                        signal: controller.signal
+                    });
+                    
+                    const result = await response.json();
+                    
+                    if (result.success) {
+                        this.connectedServers = result.servers;
+                        this.displayServersList(result.servers);
+                        
+                        // Crear cards de forma no bloqueante
+                        setTimeout(() => {
+                            result.servers.forEach(server => {
+                                if (!this.serverModals.has(server.id)) {
+                                    this.createServerModals(server);
+                                    this.hideServerCard(server.id); // Inicialmente ocultas
+                                }
+                            });
+                        }, 50);
+                        
+                        this.addMessage('success', `${result.configuredServers} servidores configurados`);
+                    }
+                } catch (error) {
+                    console.log('Carga de servidores en segundo plano:', error.message);
+                }
+            }
+
+            async startDataCollectionAsync() {
+                try {
+                    // No esperar respuesta para no bloquear UI
+                    fetch(`${this.baseUrl}/api/servers/start-collection`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' }
+                    }).then(response => response.json()).then(data => {
+                        if (data.success) {
+                            this.addMessage('success', `Recolección iniciada para ${data.serversStarted} servidor(es)`);
+                        }
+                    }).catch(error => {
+                        console.log('Error iniciando recolección (no crítico):', error);
+                    });
+                } catch (error) {
+                    console.log('Error en inicio de recolección:', error);
+                }
+            }
+
+            subscribeToUpdates() {
+                // Suscribirse a métricas globales
+                this.stompClient.subscribe('/topic/metrics', (message) => {
+                    const data = JSON.parse(message.body);
+                    this.handleMetricsUpdate(data);
+                });
+                
+                // Suscribirse a logs globales
+                this.stompClient.subscribe('/topic/logs', (message) => {
+                    const data = JSON.parse(message.body);
+                    this.handleLogsUpdate(data);
+                });
+            }
+
+            // Server Management
+            async addServer() {
+                if (!this.connected) {
+                    this.addMessage('Primero conecta al Gateway', 'error');
+                    return;
+                }
+
+                const host = this.serverHost.value.trim();
+                const port = parseInt(this.serverPort.value);
+                
+                if (!host || !port) {
+                    this.addMessage('Por favor ingresa host y puerto válidos del servidor', 'error');
+                    return;
+                }
+
+                try {
+                    const response = await fetch(`${this.baseUrl}/api/servers/connect`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ host, port })
+                    });
+
+                    const result = await response.json();
+                    
+                    if (result.success) {
+                        this.addMessage(`Servidor ${host}:${port} conectado exitosamente`, 'success');
+                        this.createServerModals(result.server);
+                        this.refreshServersList();
+                    } else {
+                        this.addMessage(`Error conectando servidor: ${result.error}`, 'error');
+                    }
+                } catch (error) {
+                    this.addMessage(`Error de red: ${error.message}`, 'error');
+                }
+            }
+
+            async removeServer(host, port) {
+                try {
+                    const response = await fetch(`${this.baseUrl}/api/servers/disconnect`, {
+                        method: 'DELETE',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ host, port })
+                    });
+
+                    const result = await response.json();
+                    
+                    if (result.success) {
+                        const serverId = `${host}:${port}`;
+                        this.removeServerModals(serverId);
+                        this.addMessage(`Servidor ${serverId} desconectado`, 'info');
+                        this.refreshServersList();
+                    } else {
+                        this.addMessage(`Error desconectando servidor: ${result.error}`, 'error');
+                    }
+                } catch (error) {
+                    this.addMessage(`Error de red: ${error.message}`, 'error');
+                }
+            }
+
+            async loadConnectedServers() {
+                try {
+                    const response = await fetch(`${this.baseUrl}/api/servers`);
+                    const result = await response.json();
+                    
+                    if (result.success) {
+                        this.connectedServers = result.servers;
+                        this.displayServersList(result.servers);
+                        
+                        // Crear modales para todos los servidores configurados (inicialmente ocultos)
+                        result.servers.forEach(server => {
+                            if (!this.serverModals.has(server.id)) {
+                                // Crear card inicialmente oculta, solo mostrar si health check es exitoso
+                                const serverCard = this.createServerModals(server);
+                                this.hideServerCard(server.id); // Ocultar inicialmente
+                            }
+                        });
+                        
+                        this.addMessage(`${result.configuredServers} servidores configurados (health checks dinámicos)`, 'success');
+                    } else {
+                        this.addMessage(`Error obteniendo servidores: ${result.error}`, 'error');
+                    }
+                } catch (error) {
+                    this.addMessage(`Error de red: ${error.message}`, 'error');
+                }
+            }
+
+            // Server Cards Management
+            createServerModals(server) {
+                const serverId = server.id;
+                
+                // Limpiar mensaje vacío si existe (solo la primera vez)
+                if (this.serverModals.size === 0 && this.modalsGallery.querySelector('.col-span-full')) {
+                    this.modalsGallery.innerHTML = '';
+                }
+                
+                const serverCard = this.createServerCard(server);
+                
+                this.serverModals.set(serverId, {
+                    card: serverCard,
+                    server: server
+                });
+                
+                this.modalsGallery.appendChild(serverCard);
+                
+                console.log(`Card creado para: ${serverId}`);
+                return serverCard;
+            }
+
+            createServerCard(server) {
+                const serverId = server.id;
+                const card = document.createElement('div');
+                card.className = 'bg-white rounded-lg shadow-lg border border-blue-100 slide-in server-card w-full';
+                card.id = `server-card-${serverId}`;
+                
+                card.innerHTML = `
+                    <div class="p-6">
+                        <!-- Server Header -->
+                        <div class="flex items-center mb-6">
+                            <div class="flex items-center space-x-3">
+                                <i class="fas fa-server text-blue-600 text-xl"></i>
+                                <div>
+                                    <h4 class="font-semibold text-blue-900 text-lg">${server.name || serverId}</h4>
+                                    <p class="text-sm text-blue-600">${serverId} - ${server.host}:${server.port}</p>
+                                    <p class="text-xs text-gray-500"><i class="fas fa-heartbeat mr-1"></i>Health check dinámico</p>
+                                    <p class="text-xs text-gray-500">Estado determinado por health check dinámico</p>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <!-- Content Layout: Métricas (Left) y Logs (Right) -->
+                        <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                            <!-- Métricas Section -->
+                            <div class="lg:col-span-1">
+                                <h5 class="font-medium text-blue-900 mb-3 flex items-center">
+                                    <i class="fas fa-chart-bar text-blue-600 mr-2"></i>
+                                    Métricas en Tiempo Real
+                                </h5>
+                                <div id="content-${serverId}-metrics">
+                                    ${this.getEmptyMetricsHTML()}
+                                </div>
+                            </div>
+                            
+                            <!-- Logs Section -->
+                            <div class="lg:col-span-2">
+                                <h5 class="font-medium text-blue-900 mb-3 flex items-center">
+                                    <i class="fas fa-file-alt text-blue-600 mr-2"></i>
+                                    Logs del Sistema
+                                </h5>
+                                <div id="content-${serverId}-logs">
+                                    ${this.getEmptyLogsHTML()}
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                `;
+                
+                return card;
+            }
+
+            getEmptyMetricsHTML() {
+                return `
+                    <div class="space-y-3">
+                        <div class="grid grid-cols-2 gap-3">
+                            <div class="bg-gradient-to-r from-blue-50 to-blue-100 p-3 rounded-lg text-center">
+                                <div class="font-bold text-xl text-blue-700">-</div>
+                                <div class="text-xs text-blue-600 font-medium">Conexiones</div>
+                            </div>
+                            <div class="bg-gradient-to-r from-blue-50 to-blue-100 p-3 rounded-lg text-center">
+                                <div class="font-bold text-xl text-blue-700">-</div>
+                                <div class="text-xs text-blue-600 font-medium">Respuesta</div>
+                            </div>
+                        </div>
+                        <div class="grid grid-cols-2 gap-3">
+                            <div class="bg-gradient-to-r from-blue-50 to-blue-100 p-3 rounded-lg text-center">
+                                <div class="font-bold text-xl text-blue-700">-</div>
+                                <div class="text-xs text-blue-600 font-medium">CPU %</div>
+                            </div>
+                            <div class="bg-gradient-to-r from-blue-50 to-blue-100 p-3 rounded-lg text-center">
+                                <div class="font-bold text-xl text-blue-700">-</div>
+                                <div class="text-xs text-blue-600 font-medium">Memoria %</div>
+                            </div>
+                        </div>
+                        <div class="text-xs text-blue-500 text-center pt-2 border-t border-blue-100">
+                            <i class="fas fa-clock mr-1"></i>Esperando datos...
+                        </div>
+                    </div>
+                `;
+            }
+
+            getEmptyLogsHTML() {
+                return `
+                    <div class="bg-blue-50 rounded-lg p-4 h-64 flex flex-col items-center justify-center">
+                        <i class="fas fa-file-alt text-3xl text-blue-300 mb-2"></i>
+                        <p class="text-blue-500 text-sm">Esperando logs del servidor...</p>
+                        <p class="text-blue-400 text-xs mt-1">Los logs aparecerán aquí en tiempo real</p>
+                    </div>
+                `;
+            }
+
+            hideServerCard(serverId) {
+                const card = document.getElementById(`server-card-${serverId}`);
+                if (card) {
+                    card.style.display = 'none';
+                    console.log(`Card del servidor ${serverId} oculta por inactividad`);
+                }
+            }
+
+            showServerCard(serverId) {
+                const card = document.getElementById(`server-card-${serverId}`);
+                if (card) {
+                    card.style.display = 'block';
+                    console.log(`Card del servidor ${serverId} mostrada por actividad`);
+                }
+            }
+
+            updateMetricsModal(serverId, metrics) {
+                const content = document.getElementById(`content-${serverId}-metrics`);
+                if (!content) return;
+                
+                const getMetricColor = (value, type) => {
+                    if (type === 'cpu' || type === 'memory') {
+                        if (value > 80) return 'text-red-600';
+                        if (value > 60) return 'text-yellow-600';
+                        return 'text-blue-700';
+                    }
+                    if (type === 'response') {
+                        if (value > 1000) return 'text-red-600';
+                        if (value > 500) return 'text-yellow-600';
+                        return 'text-blue-700';
+                    }
+                    return 'text-blue-700';
+                };
+                
+                content.innerHTML = `
+                    <div class="space-y-3">
+                        <div class="grid grid-cols-2 gap-3">
+                            <div class="bg-gradient-to-r from-blue-50 to-blue-100 p-3 rounded-lg text-center hover:shadow-md transition-shadow">
+                                <div class="font-bold text-xl ${getMetricColor(metrics.connections, 'connections')}">${metrics.connections || 0}</div>
+                                <div class="text-xs text-blue-600 font-medium">Conexiones</div>
+                            </div>
+                            <div class="bg-gradient-to-r from-blue-50 to-blue-100 p-3 rounded-lg text-center hover:shadow-md transition-shadow">
+                                <div class="font-bold text-xl ${getMetricColor(metrics.response_time_ms, 'response')}">${metrics.response_time_ms || 0}ms</div>
+                                <div class="text-xs text-blue-600 font-medium">Respuesta</div>
+                            </div>
+                        </div>
+                        <div class="grid grid-cols-2 gap-3">
+                            <div class="bg-gradient-to-r from-blue-50 to-blue-100 p-3 rounded-lg text-center hover:shadow-md transition-shadow">
+                                <div class="font-bold text-xl ${getMetricColor(metrics.cpu_usage_percent, 'cpu')}">${metrics.cpu_usage_percent || 0}%</div>
+                                <div class="text-xs text-blue-600 font-medium">CPU</div>
+                            </div>
+                            <div class="bg-gradient-to-r from-blue-50 to-blue-100 p-3 rounded-lg text-center hover:shadow-md transition-shadow">
+                                <div class="font-bold text-xl ${getMetricColor(metrics.memory_usage_percent, 'memory')}">${metrics.memory_usage_percent || 0}%</div>
+                                <div class="text-xs text-blue-600 font-medium">Memoria</div>
+                            </div>
+                        </div>
+                        <div class="text-xs text-blue-500 text-center pt-2 border-t border-blue-100">
+                            <i class="fas fa-clock mr-1"></i>
+                            ${new Date().toLocaleTimeString()}
+                        </div>
+                    </div>
+                `;
+            }
+
+            updateLogsModal(serverId, logs) {
+                let content = document.getElementById(`content-${serverId}-logs`);
+                if (!content) return;
+                
+                // Si es la primera vez, limpiar el contenido vacío
+                if (content.querySelector('.fa-file-alt')) {
+                    content.innerHTML = '<div id="logs-container-${serverId}" class="h-64 overflow-y-auto bg-blue-50 rounded-lg p-3"><div class="space-y-2"></div></div>';
+                }
+                
+                // Obtener o crear el contenedor de logs
+                let logsWrapper = content.querySelector(`#logs-container-${serverId}`);
+                if (!logsWrapper) {
+                    content.innerHTML = `<div id="logs-container-${serverId}" class="h-64 overflow-y-auto bg-blue-50 rounded-lg p-3"><div class="space-y-2"></div></div>`;
+                    logsWrapper = content.querySelector(`#logs-container-${serverId}`);
+                }
+                
+                const logsContainer = logsWrapper.querySelector('.space-y-2');
+                if (!logsContainer) return;
+                
+                // Procesar logs y agregarlos al final (más recientes al final)
+                logs.forEach(log => {
+                    // Normalizar campos para soportar ambos formatos
+                    const normalizedLog = {
+                        level: log.level || (log.tipo === true ? 'INFO' : (log.tipo === false ? 'ERROR' : log.tipo)) || 'INFO',
+                        message: log.message || log.detalle || 'Sin mensaje',
+                        timestamp: log.timestamp || log.fechaHora || new Date().toISOString(),
+                        server_id: log.server_id || serverId
+                    };
+                    
+                    // Verificar si el log ya existe para evitar duplicados
+                    const logId = `log-${serverId}-${normalizedLog.timestamp}-${normalizedLog.level}`;
+                    if (document.getElementById(logId)) {
+                        return; // Log ya existe, no duplicar
+                    }
+                    
+                    const logEntry = document.createElement('div');
+                    logEntry.id = logId;
+                    const levelStyles = {
+                        'INFO': 'border-l-blue-400 bg-blue-50 text-blue-800',
+                        'WARN': 'border-l-yellow-400 bg-yellow-50 text-yellow-800',
+                        'ERROR': 'border-l-red-400 bg-red-50 text-red-800'
+                    };
+                    
+                    logEntry.className = `text-xs p-3 border-l-4 rounded-r ${levelStyles[normalizedLog.level] || 'border-l-blue-400 bg-blue-50 text-blue-800'}`;
+                    
+                    // Formatear fecha y hora completa
+                    const timestamp = new Date(normalizedLog.timestamp);
+                    const dateTimeString = timestamp.toLocaleDateString('es-ES', {
+                        year: 'numeric',
+                        month: '2-digit',
+                        day: '2-digit',
+                        hour: '2-digit',
+                        minute: '2-digit',
+                        second: '2-digit'
+                    });
+                    
+                    logEntry.innerHTML = `
+                        <div class="flex justify-between items-start">
+                            <span class="font-mono flex-1 pr-3">[${normalizedLog.level}] ${normalizedLog.message}</span>
+                            <span class="text-xs opacity-75 flex-shrink-0 font-mono">${dateTimeString}</span>
+                        </div>
+                    `;
+                    
+                    // Agregar al final para que los más recientes estén abajo
+                    logsContainer.appendChild(logEntry);
+                });
+                
+                // Mantener solo los últimos 50 logs (aumentado para mejor historial)
+                while (logsContainer.children.length > 50) {
+                    logsContainer.removeChild(logsContainer.firstChild);
+                }
+                
+                // Scroll al final para mostrar los logs más recientes
+                setTimeout(() => {
+                    logsWrapper.scrollTop = logsWrapper.scrollHeight;
+                }, 10);
+            }
+            
+            /**
+             * Reemplaza completamente los logs de un servidor (para logs históricos)
+             */
+            replaceLogsModal(serverId, logs) {
+                let content = document.getElementById(`content-${serverId}-logs`);
+                if (!content) return;
+                
+                // Limpiar completamente y crear nuevo contenedor
+                content.innerHTML = `<div id="logs-container-${serverId}" class="h-64 overflow-y-auto bg-blue-50 rounded-lg p-3"><div class="space-y-2"></div></div>`;
+                
+                const logsWrapper = content.querySelector(`#logs-container-${serverId}`);
+                const logsContainer = logsWrapper.querySelector('.space-y-2');
+                if (!logsContainer) return;
+                
+                // Agregar todos los logs históricos
+                logs.forEach(log => {
+                    const logEntry = this.createLogEntry(serverId, log);
+                    if (logEntry) {
+                        logsContainer.appendChild(logEntry);
+                    }
+                });
+                
+                // Scroll al final
+                setTimeout(() => {
+                    logsWrapper.scrollTop = logsWrapper.scrollHeight;
+                }, 10);
+                
+                console.log(`Logs históricos cargados para ${serverId}: ${logs.length} entradas`);
+            }
+            
+            /**
+             * Agrega logs nuevos incrementalmente (para logs en tiempo real)
+             */
+            appendLogsModal(serverId, logs) {
+                let content = document.getElementById(`content-${serverId}-logs`);
+                if (!content) return;
+                
+                // Si es la primera vez, limpiar el contenido vacío
+                if (content.querySelector('.fa-file-alt')) {
+                    content.innerHTML = `<div id="logs-container-${serverId}" class="h-64 overflow-y-auto bg-blue-50 rounded-lg p-3"><div class="space-y-2"></div></div>`;
+                }
+                
+                // Obtener o crear el contenedor de logs
+                let logsWrapper = content.querySelector(`#logs-container-${serverId}`);
+                if (!logsWrapper) {
+                    content.innerHTML = `<div id="logs-container-${serverId}" class="h-64 overflow-y-auto bg-blue-50 rounded-lg p-3"><div class="space-y-2"></div></div>`;
+                    logsWrapper = content.querySelector(`#logs-container-${serverId}`);
+                }
+                
+                const logsContainer = logsWrapper.querySelector('.space-y-2');
+                if (!logsContainer) return;
+                
+                // Agregar solo logs nuevos que no existen
+                let newLogsCount = 0;
+                logs.forEach(log => {
+                    const logEntry = this.createLogEntry(serverId, log);
+                    if (logEntry) {
+                        logsContainer.appendChild(logEntry);
+                        newLogsCount++;
+                    }
+                });
+                
+                // Mantener solo los últimos 100 logs (aumentado)
+                while (logsContainer.children.length > 100) {
+                    logsContainer.removeChild(logsContainer.firstChild);
+                }
+                
+                // Scroll al final solo si se agregaron logs nuevos
+                if (newLogsCount > 0) {
+                    setTimeout(() => {
+                        logsWrapper.scrollTop = logsWrapper.scrollHeight;
+                    }, 10);
+                }
+                
+                console.log(`Logs incrementales: ${newLogsCount}/${logs.length} nuevos para ${serverId}`);
+            }
+            
+            /**
+             * Crea un elemento de log individual
+             */
+            createLogEntry(serverId, log) {
+                // Normalizar campos para soportar ambos formatos
+                const normalizedLog = {
+                    level: log.level || (log.tipo === true ? 'INFO' : (log.tipo === false ? 'ERROR' : log.tipo)) || 'INFO',
+                    message: log.message || log.detalle || 'Sin mensaje',
+                    timestamp: log.timestamp || log.fechaHora || new Date().toISOString(),
+                    server_id: log.server_id || serverId
+                };
+                
+                // ID único más robusto para evitar duplicados
+                const logId = `log-${serverId}-${normalizedLog.timestamp}-${normalizedLog.level}-${btoa(normalizedLog.message).substring(0,10)}`;
+                if (document.getElementById(logId)) {
+                    return null; // Log ya existe, no duplicar
+                }
+                
+                const logEntry = document.createElement('div');
+                logEntry.id = logId;
+                const levelStyles = {
+                    'INFO': 'border-l-blue-400 bg-blue-50 text-blue-800',
+                    'WARN': 'border-l-yellow-400 bg-yellow-50 text-yellow-800',
+                    'ERROR': 'border-l-red-400 bg-red-50 text-red-800'
+                };
+                
+                logEntry.className = `text-xs p-3 border-l-4 rounded-r ${levelStyles[normalizedLog.level] || 'border-l-blue-400 bg-blue-50 text-blue-800'}`;
+                
+                // Formatear fecha y hora completa
+                const timestamp = new Date(normalizedLog.timestamp);
+                const dateTimeString = timestamp.toLocaleDateString('es-ES', {
+                    year: 'numeric',
+                    month: '2-digit',
+                    day: '2-digit',
+                    hour: '2-digit',
+                    minute: '2-digit',
+                    second: '2-digit'
+                });
+                
+                logEntry.innerHTML = `
+                    <div class="flex justify-between items-start">
+                        <span class="font-mono flex-1 pr-3">[${normalizedLog.level}] ${normalizedLog.message}</span>
+                        <span class="text-xs opacity-75 flex-shrink-0 font-mono">${dateTimeString}</span>
+                    </div>
+                `;
+                
+                return logEntry;
+            }
+
+            removeServerModals(serverId) {
+                const modalData = this.serverModals.get(serverId);
+                if (modalData && modalData.card && modalData.card.parentNode) {
+                    modalData.card.parentNode.removeChild(modalData.card);
+                    this.serverModals.delete(serverId);
+                }
+                
+                // Si no quedan servidores, mostrar mensaje vacío
+                if (this.serverModals.size === 0) {
+                    this.modalsGallery.innerHTML = `
+                        <div class="text-center py-12 text-blue-400 col-span-full">
+                            <i class="fas fa-chart-bar text-5xl mb-4 text-blue-300"></i>
+                            <p class="text-lg">Galería de Monitoreo Vacía</p>
+                            <p class="text-sm">Los servidores conectados aparecerán aquí con sus métricas y logs</p>
+                        </div>
+                    `;
+                }
+            }
+
+            removeServerCard(serverId) {
+                this.removeServerModals(serverId);
+            }
+
+            // Configuración de IP del Gateway
+            configureGatewayHost() {
+                const currentHost = this.getGatewayHost();
+                const newHost = prompt(`Configure la IP del Gateway:\n\nPara conexión local: localhost\nPara red local (tu IP): 192.168.1.2\nPara otro PC en red: [IP del PC que ejecuta Gateway]`, currentHost);
+                
+                if (newHost && newHost.trim() !== '') {
+                    const trimmedHost = newHost.trim();
+                    localStorage.setItem('gatewayHost', trimmedHost);
+                    this.updateGatewayHostDisplay();
+                    
+                    // Verificar nueva conexión
+                    this.addMessage('info', `IP del Gateway configurada: ${trimmedHost}`);
+                    this.gatewayAvailable = false;
+                    this.updateStatus('disconnected', 'IP actualizada - Verifica conexión');
+                    this.connectBtn.disabled = true;
+                    this.disconnectBtn.disabled = true;
+                }
+            }
+            
+            updateGatewayHostDisplay() {
+                const hostDisplay = document.getElementById('gatewayHostDisplay');
+                if (hostDisplay) {
+                    hostDisplay.textContent = this.getGatewayHost();
+                }
+            }
+
+
+
+            clearAllModals() {
+                this.modalsGallery.innerHTML = `
+                    <div class="text-center py-12 text-blue-400 col-span-full">
+                        <i class="fas fa-chart-bar text-5xl mb-4 text-blue-300"></i>
+                        <p class="text-lg">Galería de Monitoreo Vacía</p>
+                        <p class="text-sm">Los servidores conectados aparecerán aquí con sus métricas y logs</p>
+                    </div>
+                `;
+                this.serverModals.clear();
+            }
+
+            // Real-time Data Handlers
+            handleMetricsUpdate(data) {
+                console.log('Métricas recibidas:', data);
+                
+                // Guardar últimos datos para determinar estado real de servidores
+                if (data.data) {
+                    this.lastMetricsData = data.data;
+                }
+                
+                // El Gateway envía: { type: "metrics-update", data: AggregatedMetrics }
+                // AggregatedMetrics tiene: { serverMetrics: { serverId: ServerMetrics } }
+                if (data.data && data.data.serverMetrics && typeof data.data.serverMetrics === 'object') {
+                    Object.entries(data.data.serverMetrics).forEach(([serverId, serverMetrics]) => {
+                        if (serverMetrics && serverMetrics.metrics) {
+                            if (serverMetrics.status === 'ACTIVE') {
+                                // Mostrar y actualizar si el servidor está activo
+                                this.showServerCard(serverId);
+                                this.updateMetricsModal(serverId, serverMetrics.metrics);
+                                console.log(`Servidor ${serverId}: ACTIVO - Métricas actualizadas`);
+                            } else if (serverMetrics.status === 'INACTIVE') {
+                                // Ocultar card si el servidor está inactivo
+                                this.hideServerCard(serverId);
+                                console.log(`Servidor ${serverId}: INACTIVO - Card oculta`);
+                            }
+                        }
+                        
+                        // Actualizar lista de servidores para reflejar estado actual
+                        this.updateServersListDisplay();
+                    });
+                } else if (data.data && typeof data.data === 'object') {
+                    // Fallback por si la estructura cambia
+                    Object.entries(data.data).forEach(([serverId, metrics]) => {
+                        this.updateMetricsModal(serverId, metrics);
+                    });
+                }
+            }
+
+            handleLogsUpdate(data) {
+                console.log('Logs recibidos:', data);
+                
+                // Identificar tipo de actualización
+                const updateType = data.updateType || 'incremental';
+                
+                // Procesar todos los formatos de logs posibles
+                let allLogs = [];
+                
+                if (data.data && Array.isArray(data.data)) {
+                    allLogs = data.data;
+                } else if (data.entries && Array.isArray(data.entries)) {
+                    allLogs = data.entries;
+                } else if (Array.isArray(data)) {
+                    allLogs = data;
+                }
+                
+                // Agrupar logs por servidor
+                const logsByServer = {};
+                allLogs.forEach(logEntry => {
+                    if (logEntry.server_id) {
+                        if (!logsByServer[logEntry.server_id]) {
+                            logsByServer[logEntry.server_id] = [];
+                        }
+                        logsByServer[logEntry.server_id].push(logEntry);
+                    }
+                });
+                
+                // Procesar logs según el tipo de actualización
+                Object.entries(logsByServer).forEach(([serverId, logs]) => {
+                    // Ordenar logs por timestamp (más antiguos primero)
+                    logs.sort((a, b) => new Date(a.timestamp || a.fechaHora) - new Date(b.timestamp || b.fechaHora));
+                    
+                    if (updateType === 'historical') {
+                        // Logs históricos: reemplazar completamente
+                        this.replaceLogsModal(serverId, logs);
+                        console.log(`Logs históricos cargados para ${serverId}: ${logs.length} entradas`);
+                    } else {
+                        // Logs incrementales: agregar solo nuevos
+                        this.appendLogsModal(serverId, logs);
+                        console.log(`Logs incrementales para ${serverId}: ${logs.length} entradas`);
+                    }
+                });
+            }
+
+            updateServersListDisplay() {
+                // Actualización no bloqueante con debounce
+                if (this.updateTimeout) {
+                    clearTimeout(this.updateTimeout);
+                }
+                
+                this.updateTimeout = setTimeout(() => {
+                    if (this.connectedServers && this.connectedServers.length > 0) {
+                        this.displayServersList(this.connectedServers);
+                    }
+                }, 100); // Debounce de 100ms
+            }
+
+            // UI Helpers
+            updateStatus(status, text) {
+                const statusConfig = {
+                    'checking': {
+                        classes: 'bg-blue-100 text-blue-800 border-blue-200',
+                        dotClass: 'bg-blue-500 animate-pulse',
+                        icon: 'fas fa-spinner fa-spin text-blue-600',
+                        text: text || 'Verificando Gateway...'
+                    },
+                    'gateway-available': {
+                        classes: 'bg-green-100 text-green-800 border-green-200',
+                        dotClass: 'bg-green-500',
+                        icon: 'fas fa-check-circle text-green-600',
+                        text: text || 'Gateway Disponible'
+                    },
+                    'gateway-unavailable': {
+                        classes: 'bg-red-100 text-red-800 border-red-200',
+                        dotClass: 'bg-red-500',
+                        icon: 'fas fa-times-circle text-red-600',
+                        text: text || 'Gateway No Disponible'
+                    },
+                    'connected': {
+                        classes: 'bg-emerald-100 text-emerald-800 border-emerald-200',
+                        dotClass: 'bg-emerald-500 animate-pulse',
+                        icon: 'fas fa-wifi text-emerald-600',
+                        text: text || 'Conectado y Monitoreando'
+                    },
+                    'connecting': {
+                        classes: 'bg-amber-100 text-amber-800 border-amber-200',
+                        dotClass: 'bg-amber-500 animate-bounce',
+                        icon: 'fas fa-spinner fa-spin text-amber-600',
+                        text: text || 'Estableciendo Conexión...'
+                    },
+                    'disconnected': {
+                        classes: 'bg-gray-100 text-gray-800 border-gray-200',
+                        dotClass: 'bg-gray-400',
+                        icon: 'fas fa-unlink text-gray-600',
+                        text: text || 'Desconectado'
+                    },
+                    'error': {
+                        classes: 'bg-red-100 text-red-800 border-red-200',
+                        dotClass: 'bg-red-500',
+                        icon: 'fas fa-exclamation-triangle text-red-600',
+                        text: text || 'Error de Conexión'
+                    }
+                };
+                
+                const config = statusConfig[status] || statusConfig['error'];
+                
+                this.connectionStatus.innerHTML = `
+                    <div class="w-2 h-2 rounded-full ${config.dotClass} mr-2"></div>
+                    <span class="font-medium">${config.text}</span>
+                `;
+                this.connectionStatus.className = `inline-flex items-center px-4 py-2 rounded-full text-sm font-medium border ${config.classes} transition-all duration-300`;
+                
+                // Actualizar estado de botones
+                const canConnect = this.gatewayAvailable && !['connected', 'connecting'].includes(status);
+                const canDisconnect = ['connected'].includes(status);
+                
+                this.connectBtn.disabled = !canConnect;
+                this.disconnectBtn.disabled = !canDisconnect;
+                
+                this.updateButtonStyles(this.connectBtn);
+                this.updateButtonStyles(this.disconnectBtn);
+            }
+
+            updateButtonStyles(button) {
+                if (button.disabled) {
+                    button.classList.add('opacity-50', 'cursor-not-allowed');
+                } else {
+                    button.classList.remove('opacity-50', 'cursor-not-allowed');
+                }
+            }
+
+            addMessage(type, text) {
+                const messageConfig = {
+                    'success': {
+                        textClass: 'text-green-700',
+                        bgClass: 'bg-green-50 border-green-200',
+                        icon: 'fas fa-check-circle text-green-500'
+                    },
+                    'error': {
+                        textClass: 'text-red-700',
+                        bgClass: 'bg-red-50 border-red-200',
+                        icon: 'fas fa-exclamation-triangle text-red-500'
+                    },
+                    'info': {
+                        textClass: 'text-blue-700',
+                        bgClass: 'bg-blue-50 border-blue-200',
+                        icon: 'fas fa-info-circle text-blue-500'
+                    },
+                    'warning': {
+                        textClass: 'text-yellow-700',
+                        bgClass: 'bg-yellow-50 border-yellow-200',
+                        icon: 'fas fa-exclamation-circle text-yellow-500'
+                    }
+                };
+
+                const config = messageConfig[type] || messageConfig['info'];
+                const timestamp = new Date().toLocaleTimeString();
+                
+                const messageDiv = document.createElement('div');
+                messageDiv.className = `text-sm p-3 rounded-lg border ${config.bgClass} ${config.textClass} flex items-start space-x-2 animate-fade-in`;
+                messageDiv.innerHTML = `
+                    <i class="${config.icon} mt-0.5 flex-shrink-0"></i>
+                    <div class="flex-1">
+                        <div class="font-medium">${text}</div>
+                        <div class="text-xs opacity-75 mt-1">${timestamp}</div>
+                    </div>
+                `;
+                
+                this.messages.appendChild(messageDiv);
+                
+                // Auto scroll to bottom
+                this.messages.scrollTop = this.messages.scrollHeight;
+                
+                // Mantener solo los últimos 4 mensajes
+                while (this.messages.children.length > 4) {
+                    const firstChild = this.messages.firstChild;
+                    firstChild.style.opacity = '0';
+                    setTimeout(() => {
+                        if (firstChild.parentNode) {
+                            this.messages.removeChild(firstChild);
+                        }
+                    }, 300);
+                }
+            }
+
+            displayServersList(servers) {
+                if (servers.length === 0) {
+                    this.serversList.innerHTML = `
+                        <div class="text-center py-8 text-blue-500">
+                            <i class="fas fa-server text-4xl mb-3 text-blue-300"></i>
+                            <p>No hay servidores conectados</p>
+                            <p class="text-sm">Agrega un servidor para ver sus modales en tiempo real</p>
+                        </div>
+                    `;
+                    return;
+                }
+
+                let html = '<div class="space-y-3">';
+                servers.forEach(server => {
+                    // Determinar estado real basado en si hay métricas activas
+                    let isActive = false;
+                    let healthStatus = 'INACTIVE';
+                    
+                    // Verificar si existe una card visible para este servidor (indica que está recibiendo métricas)
+                    const serverCard = document.getElementById(`server-card-${server.id}`);
+                    if (serverCard && serverCard.style.display !== 'none') {
+                        isActive = true;
+                        healthStatus = 'ACTIVE';
+                    }
+                    
+                    // Alternativamente, verificar en lastMetricsData si está disponible
+                    if (this.lastMetricsData && this.lastMetricsData.serverMetrics && this.lastMetricsData.serverMetrics[server.id]) {
+                        const serverMetrics = this.lastMetricsData.serverMetrics[server.id];
+                        if (serverMetrics.status === 'ACTIVE') {
+                            isActive = true;
+                            healthStatus = 'ACTIVE';
+                        }
+                    }
+                    
+                    const statusColor = isActive ? 'text-green-600' : 'text-red-600';
+                    const statusText = isActive ? 'ENCENDIDO' : 'APAGADO';
+                    const statusBg = isActive ? 'bg-green-50' : 'bg-red-50';
+                    
+                    html += `
+                        <div class="flex items-center justify-between p-4 bg-blue-50 rounded-lg border border-blue-100">
+                            <div class="flex items-center space-x-3">
+                                <i class="fas fa-server text-blue-400"></i>
+                                <div>
+                                    <div class="font-medium text-blue-900">${server.name}</div>
+                                    <div class="text-sm text-blue-600">
+                                        ID: ${server.id} | Host: ${server.host}:${server.port}
+                                    </div>
+                                    <div class="text-xs text-gray-500">
+                                        Health check: ${healthStatus} | URL: ${server.baseUrl}
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="flex items-center space-x-3">
+                                <span class="px-3 py-1 text-xs font-medium rounded-full ${statusColor} ${statusBg}">
+                                    <i class="fas fa-circle text-xs mr-1"></i>${statusText}
+                                </span>
+                                <div class="text-xs text-gray-500">
+                                    <i class="fas fa-heartbeat mr-1"></i>Dinámico
+                                </div>
+                            </div>
+                        </div>
+                    `;
+                });
+                html += '</div>';
+                
+                this.serversList.innerHTML = html;
+            }
+
+            addMessage(message, type = 'info') {
+                const typeClasses = {
+                    'success': 'bg-blue-100 border-blue-400 text-blue-700',
+                    'error': 'bg-red-100 border-red-400 text-red-700',
+                    'info': 'bg-blue-50 border-blue-300 text-blue-600',
+                    'warning': 'bg-yellow-100 border-yellow-400 text-yellow-700'
+                };
+                
+                const icons = {
+                    'success': 'fas fa-check-circle',
+                    'error': 'fas fa-exclamation-circle',
+                    'info': 'fas fa-info-circle',
+                    'warning': 'fas fa-exclamation-triangle'
+                };
+                
+                const messageDiv = document.createElement('div');
+                messageDiv.className = `p-2 border-l-4 rounded text-sm ${typeClasses[type]}`;
+                messageDiv.innerHTML = `
+                    <div class="flex items-start">
+                        <i class="${icons[type]} mt-0.5 mr-2 text-xs"></i>
+                        <span class="flex-1">${message}</span>
+                    </div>
+                `;
+                
+                this.messages.appendChild(messageDiv);
+                
+                setTimeout(() => {
+                    if (messageDiv.parentNode) {
+                        messageDiv.parentNode.removeChild(messageDiv);
+                    }
+                }, 5000);
+                
+                while (this.messages.children.length > 3) {
+                    this.messages.removeChild(this.messages.firstChild);
+                }
+            }
+        }
+
+        // Initialize
+        const gateway = new ApiGatewayClient();
+        
+        console.log('API Gateway Client inicializado');
+    </script>
+</body>
+</html>

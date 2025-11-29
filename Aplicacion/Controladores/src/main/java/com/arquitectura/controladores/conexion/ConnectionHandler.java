@@ -24,6 +24,7 @@ import com.arquitectura.servicios.eventos.SessionEvent;
 import com.arquitectura.servicios.eventos.SessionEventBus;
 import com.arquitectura.servicios.eventos.SessionEventType;
 import com.arquitectura.servicios.metrics.ServerMetrics;
+import io.prometheus.client.Histogram;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
@@ -120,38 +121,99 @@ public class ConnectionHandler implements Runnable {
     }
 
     private void listen() throws IOException {
+
         String line;
+
         while ((line = reader.readLine()) != null) {
+
             if (line.isBlank()) {
+
                 continue;
+
             }
+
+            String rawCommand = "";
+
+            Histogram.Timer latencyTimer = null;
+
+            Histogram.Timer responseTimer = null;
+
             try {
+
                 JsonNode node = mapper.readTree(line);
-                String command = node.hasNonNull("command") ? node.get("command").asText() : "";
+
+                rawCommand = node.hasNonNull("command") ? node.get("command").asText() : "";
+
+                String command = rawCommand.toUpperCase(Locale.ROOT);
+
                 JsonNode payload = node.get("payload");
-                
-                // Logging del comando y payload
+
+
+
                 LOGGER.log(Level.INFO, "Comando recibido: {0}", command);
+
                 if (payload != null) {
+
                     LOGGER.log(Level.INFO, "Payload: {0}", sanitizePayload(command, payload));
+
                 }
-                
-                processCommand(command.toUpperCase(Locale.ROOT), payload);
+
+
+
+                responseTimer = ServerMetrics.startServerResponseTimer();
+
+                latencyTimer = ServerMetrics.startCommandTimer(command);
+
+                processCommand(command, payload);
+
+                ServerMetrics.finishCommand(command, "success", latencyTimer);
+
             } catch (IllegalArgumentException e) {
-                // Error de validación o credenciales inválidas
+
                 LOGGER.log(Level.INFO, "Error de validación: {0}", e.getMessage());
+
+                String cmd = normalizeCommandForMetrics(rawCommand);
+
+                ServerMetrics.recordCommandError(cmd, "validation_error");
+
+                ServerMetrics.finishCommand(cmd, "validation_error", latencyTimer);
+
                 send("ERROR", new ErrorResponse(e.getMessage()));
+
             } catch (com.fasterxml.jackson.core.JsonProcessingException e) {
-                // Error de parseo JSON
+
                 LOGGER.log(Level.WARNING, "JSON inválido: {0}", e.getMessage());
+
+                String cmd = normalizeCommandForMetrics(rawCommand);
+
+                ServerMetrics.recordCommandError(cmd, "json_error");
+
+                ServerMetrics.finishCommand(cmd, "json_error", latencyTimer);
+
                 send("ERROR", new ErrorResponse("Formato JSON inválido"));
+
             } catch (Exception e) {
-                // Otros errores inesperados
+
                 LOGGER.log(Level.WARNING, "Error procesando comando: {0}", e.getMessage());
+
+                String cmd = normalizeCommandForMetrics(rawCommand);
+
+                ServerMetrics.recordCommandError(cmd, "internal_error");
+
+                ServerMetrics.finishCommand(cmd, "internal_error", latencyTimer);
+
                 send("ERROR", new ErrorResponse("Error interno del servidor"));
+
+            } finally {
+
+                ServerMetrics.observeServerResponse(responseTimer);
+
             }
+
         }
+
     }
+
 
     private void processCommand(String command, JsonNode payload) throws IOException {
         switch (command) {
@@ -451,6 +513,20 @@ public class ConnectionHandler implements Runnable {
         String normalized = fieldName.toLowerCase(Locale.ROOT);
         return normalized.equals("audiobase64") || normalized.equals("fotobase64") || normalized.contains("fotoperfil");
     }
+
+    private String normalizeCommandForMetrics(String command) {
+
+        if (command == null || command.isBlank()) {
+
+            return "UNKNOWN";
+
+        }
+
+        return command.trim().toUpperCase(Locale.ROOT);
+
+    }
+
+
 
     private void cleanup() {
         if (sessionId != null) {

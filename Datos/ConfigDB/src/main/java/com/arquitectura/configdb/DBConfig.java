@@ -1,15 +1,15 @@
 package com.arquitectura.configdb;
 
-import com.mysql.cj.jdbc.MysqlDataSource;
-
-import javax.sql.DataSource;
 import java.io.IOException;
 import java.io.InputStream;
-import java.util.Objects;
 import java.util.Optional;
 import java.util.Properties;
 import java.util.logging.Level;
 import java.util.logging.Logger;
+
+import javax.sql.DataSource;
+
+import com.mysql.cj.jdbc.MysqlConnectionPoolDataSource;
 
 /**
  * Centralised configuration helper that reads the <code>properties/database.properties</code> file
@@ -45,7 +45,7 @@ public final class DBConfig {
     }
 
     private DataSource buildMySqlDataSource() {
-        MysqlDataSource ds = new MysqlDataSource();
+        MysqlConnectionPoolDataSource ds = new MysqlConnectionPoolDataSource();
         ds.setURL(require("mysql.url"));
         ds.setUser(require("mysql.user"));
         ds.setPassword(require("mysql.password"));
