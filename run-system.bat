@@ -328,11 +328,11 @@ if !errorlevel! equ 0 (
     echo [×] Puerto 9090 - Prometheus NO ACTIVO
 )
 
-netstat -ano | findstr ":3000" >nul 2>&1
+netstat -ano | findstr ":3001" >nul 2>&1
 if !errorlevel! equ 0 (
-    echo [✓] Puerto 3000 - Grafana ACTIVO
+    echo [✓] Puerto 3001 - Grafana ACTIVO
 ) else (
-    echo [×] Puerto 3000 - Grafana NO ACTIVO
+    echo [×] Puerto 3001 - Grafana NO ACTIVO
 )
 
 netstat -ano | findstr ":3100" >nul 2>&1

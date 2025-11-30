@@ -1,0 +1,54 @@
+apiVersion: 1
+
+datasources:
+  - name: Frontend-Prometheus
+    type: prometheus
+    access: proxy
+    url: http://prometheus:9090
+    isDefault: true
+    editable: true
+    jsonData:
+      httpMethod: POST
+      manageAlerts: true
+      prometheusType: Prometheus
+      prometheusVersion: 2.40.0
+      cacheLevel: 'High'
+      disableMetricsLookup: false
+      incrementalQueryOverlapWindow: 10m
+
+  - name: Frontend-Loki
+    type: loki
+    access: proxy
+    url: http://loki:3100
+    isDefault: false
+    editable: true
+    jsonData:
+      maxLines: 1000
+      derivedFields:
+        - datasourceUid: Frontend-Prometheus
+          matcherRegex: "traceID=(\\w+)"
+          name: TraceID
+          url: "$${__value.raw}"
+
+  - name: API-Gateway-Direct
+    type: prometheus  
+    access: proxy
+    url: http://host.docker.internal:8091/gateway/actuator/prometheus
+    isDefault: false
+    editable: true
+    basicAuth: false
+    jsonData:
+      httpMethod: GET
+      prometheusType: Prometheus
+      prometheusVersion: 2.40.0
+      
+  - name: Frontend-Prometheus-External  
+    type: prometheus
+    access: proxy
+    url: http://host.docker.internal:9092
+    isDefault: false
+    editable: true
+    jsonData:
+      httpMethod: POST
+      prometheusType: Prometheus
+      prometheusVersion: 2.40.0
