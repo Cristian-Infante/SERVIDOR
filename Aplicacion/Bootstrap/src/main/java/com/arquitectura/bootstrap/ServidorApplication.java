@@ -133,7 +133,7 @@ public final class ServidorApplication {
         this.mensajeriaService = new MensajeriaServiceImpl(mensajeRepository, logRepository, connectionRegistry, eventBus, transcriptionService, audioStorageService);
 
         // Iniciar servidor TCP
-        this.tcpServer = new TCPServer(registroService, canalService, mensajeriaService, reporteService, conexionService, audioStorageService, messageSyncService, eventBus, connectionRegistry);
+        this.tcpServer = new TCPServer(registroService, canalService, mensajeriaService, reporteService, conexionService, audioStorageService, messageSyncService, eventBus, connectionRegistry, this.peerManager);
         this.peerManager.start();
         this.tcpServer.start();
     }

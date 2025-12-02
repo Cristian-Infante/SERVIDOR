@@ -1,18 +1,5 @@
 package com.arquitectura.bootstrap;
 
-import com.arquitectura.bootstrap.config.ServerConfig;
-import com.arquitectura.controladores.conexion.ConnectionHandler;
-import com.arquitectura.controladores.conexion.ConnectionHandlerPool;
-import com.arquitectura.controladores.conexion.ConnectionRegistry;
-import com.arquitectura.servicios.AudioStorageService;
-import com.arquitectura.servicios.CanalService;
-import com.arquitectura.servicios.ConexionService;
-import com.arquitectura.servicios.MensajeriaService;
-import com.arquitectura.servicios.MessageSyncService;
-import com.arquitectura.servicios.RegistroService;
-import com.arquitectura.servicios.ReporteService;
-import com.arquitectura.servicios.eventos.SessionEventBus;
-
 import java.io.IOException;
 import java.net.InetAddress;
 import java.net.ServerSocket;
@@ -22,6 +9,20 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.logging.Level;
 import java.util.logging.Logger;
+
+import com.arquitectura.bootstrap.config.ServerConfig;
+import com.arquitectura.controladores.conexion.ConnectionHandler;
+import com.arquitectura.controladores.conexion.ConnectionHandlerPool;
+import com.arquitectura.controladores.conexion.ConnectionRegistry;
+import com.arquitectura.controladores.p2p.ServerPeerManager;
+import com.arquitectura.servicios.AudioStorageService;
+import com.arquitectura.servicios.CanalService;
+import com.arquitectura.servicios.ConexionService;
+import com.arquitectura.servicios.MensajeriaService;
+import com.arquitectura.servicios.MessageSyncService;
+import com.arquitectura.servicios.RegistroService;
+import com.arquitectura.servicios.ReporteService;
+import com.arquitectura.servicios.eventos.SessionEventBus;
 
 /**
  * TCP Server that listens for client connections and delegates handling
@@ -42,6 +43,7 @@ public class TCPServer implements Runnable {
     private final MessageSyncService messageSyncService;
     private final SessionEventBus eventBus;
     private final ConnectionRegistry registry;
+    private final ServerPeerManager peerManager;
     private final ConnectionHandlerPool pool;
     private final ExecutorService executor;
 
@@ -56,7 +58,8 @@ public class TCPServer implements Runnable {
                      AudioStorageService audioStorageService,
                      MessageSyncService messageSyncService,
                      SessionEventBus eventBus,
-                     ConnectionRegistry registry) {
+                     ConnectionRegistry registry,
+                     ServerPeerManager peerManager) {
         ServerConfig config = ServerConfig.getInstance();
         this.port = config.getServerPort();
         this.maxConnections = config.getMaxConnections();
@@ -69,8 +72,9 @@ public class TCPServer implements Runnable {
         this.messageSyncService = messageSyncService;
         this.eventBus = eventBus;
         this.registry = registry;
+        this.peerManager = peerManager;
         this.pool = new ConnectionHandlerPool(10, () -> new ConnectionHandler(
-            registroService, canalService, mensajeriaService, reporteService, conexionService, audioStorageService, messageSyncService, eventBus, registry
+            registroService, canalService, mensajeriaService, reporteService, conexionService, audioStorageService, messageSyncService, eventBus, registry, peerManager
         ));
         this.executor = Executors.newCachedThreadPool();
     }
