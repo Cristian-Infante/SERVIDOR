@@ -640,13 +640,13 @@
       "targets": [
         {
           "datasource": {"type": "prometheus"},
-          "expr": "sum(chat_tcp_active_connections{job=\"rest-servers\"}) by (instance)",
+          "expr": "chat_tcp_active_connections{job=\"rest-servers\"} or vector(0)",
           "legendFormat": "{{instance}} - TCP Connections",
           "refId": "A"
         },
         {
           "datasource": {"type": "prometheus"},
-          "expr": "sum(chat_authenticated_sessions{job=\"rest-servers\"}) by (instance)",
+          "expr": "chat_authenticated_sessions{job=\"rest-servers\"} or vector(0)",
           "legendFormat": "{{instance}} - Auth Sessions",
           "refId": "B"
         }
@@ -719,19 +719,19 @@
       "targets": [
         {
           "datasource": {"type": "prometheus"},
-          "expr": "sum(rate(chat_commands_total{job=\"rest-servers\",command=\"LOGIN\"}[1m])) by (instance)",
+          "expr": "rate(chat_commands_total{job=\"rest-servers\",command=\"LOGIN\"}[1m]) or vector(0)",
           "legendFormat": "{{instance}} - LOGIN",
           "refId": "A"
         },
         {
           "datasource": {"type": "prometheus"},
-          "expr": "sum(rate(chat_commands_total{job=\"rest-servers\",command=\"SEND_USER\"}[1m])) by (instance)",
+          "expr": "rate(chat_commands_total{job=\"rest-servers\",command=\"SEND_USER\"}[1m]) or vector(0)",
           "legendFormat": "{{instance}} - SEND_USER",
           "refId": "B"
         },
         {
           "datasource": {"type": "prometheus"},
-          "expr": "sum(rate(chat_commands_total{job=\"rest-servers\",command=\"SEND_CHANNEL\"}[1m])) by (instance)",
+          "expr": "rate(chat_commands_total{job=\"rest-servers\",command=\"SEND_CHANNEL\"}[1m]) or vector(0)",
           "legendFormat": "{{instance}} - SEND_CHANNEL",
           "refId": "C"
         }
@@ -804,19 +804,19 @@
       "targets": [
         {
           "datasource": {"type": "prometheus"},
-          "expr": "sum(rate(chat_realtime_events_total{job=\"rest-servers\",event=\"NEW_MESSAGE\"}[1m])) by (instance)",
+          "expr": "rate(chat_realtime_events_total{job=\"rest-servers\",event=\"NEW_MESSAGE\"}[1m]) or vector(0)",
           "legendFormat": "{{instance}} - NEW_MESSAGE",
           "refId": "A"
         },
         {
           "datasource": {"type": "prometheus"},
-          "expr": "sum(rate(chat_realtime_events_total{job=\"rest-servers\",event=\"NEW_CHANNEL_MESSAGE\"}[1m])) by (instance)",
+          "expr": "rate(chat_realtime_events_total{job=\"rest-servers\",event=\"NEW_CHANNEL_MESSAGE\"}[1m]) or vector(0)",
           "legendFormat": "{{instance}} - CHANNEL_MSG",
           "refId": "B"
         },
         {
           "datasource": {"type": "prometheus"},
-          "expr": "sum(rate(chat_realtime_events_total{job=\"rest-servers\",event=\"USER_STATUS_CHANGED\"}[1m])) by (instance)",
+          "expr": "rate(chat_realtime_events_total{job=\"rest-servers\",event=\"USER_STATUS_CHANGED\"}[1m]) or vector(0)",
           "legendFormat": "{{instance}} - STATUS_CHANGE",
           "refId": "C"
         }
@@ -889,19 +889,19 @@
       "targets": [
         {
           "datasource": {"type": "prometheus"},
-          "expr": "sum(rate(chat_p2p_events_total{job=\"rest-servers\",type=\"CLIENT_CONNECTED\"}[1m])) by (instance)",
+          "expr": "rate(chat_p2p_events_total{job=\"rest-servers\",type=\"CLIENT_CONNECTED\"}[1m]) or vector(0)",
           "legendFormat": "{{instance}} - CLIENT_CONNECTED",
           "refId": "A"
         },
         {
           "datasource": {"type": "prometheus"},
-          "expr": "sum(rate(chat_p2p_events_total{job=\"rest-servers\",type=\"CLIENT_DISCONNECTED\"}[1m])) by (instance)",
+          "expr": "rate(chat_p2p_events_total{job=\"rest-servers\",type=\"CLIENT_DISCONNECTED\"}[1m]) or vector(0)",
           "legendFormat": "{{instance}} - CLIENT_DISCONNECTED",
           "refId": "B"
         },
         {
           "datasource": {"type": "prometheus"},
-          "expr": "sum(rate(chat_p2p_events_total{job=\"rest-servers\",type=\"CHANNEL_MESSAGE\"}[1m])) by (instance)",
+          "expr": "rate(chat_p2p_events_total{job=\"rest-servers\",type=\"CHANNEL_MESSAGE\"}[1m]) or vector(0)",
           "legendFormat": "{{instance}} - CHANNEL_MESSAGE",
           "refId": "C"
         }

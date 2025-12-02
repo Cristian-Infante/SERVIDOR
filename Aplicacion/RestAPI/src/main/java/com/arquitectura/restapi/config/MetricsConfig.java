@@ -1,25 +1,21 @@
 package com.arquitectura.restapi.config;
 
-import io.prometheus.client.exporter.common.TextFormat;
-import org.springframework.boot.actuate.metrics.export.prometheus.PrometheusScrapeEndpoint;
-import org.springframework.context.annotation.Bean;
-import org.springframework.context.annotation.Configuration;
-import org.springframework.context.annotation.Primary;
-import org.springframework.http.HttpHeaders;
-import org.springframework.http.HttpStatus;
-import org.springframework.http.MediaType;
-import org.springframework.http.ResponseEntity;
-import org.springframework.stereotype.Component;
-import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.RestController;
-
-import java.io.StringWriter;
-import java.io.Writer;
 import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.time.Duration;
+
+import org.springframework.boot.actuate.metrics.export.prometheus.PrometheusScrapeEndpoint;
+import org.springframework.context.annotation.Configuration;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.RestController;
+
+import io.prometheus.client.exporter.common.TextFormat;
 
 /**
  * Configuración para integrar las métricas del servidor TCP con Spring Boot Actuator.
@@ -49,7 +45,11 @@ public class MetricsConfig {
         public ResponseEntity<String> prometheus() {
             try {
                 // Obtener métricas básicas de Spring Boot usando el endpoint original
-                String springBootMetrics = prometheusScrapeEndpoint.scrape();
+                org.springframework.boot.actuate.endpoint.web.WebEndpointResponse<String> response = 
+                    prometheusScrapeEndpoint.scrape(
+                        org.springframework.boot.actuate.metrics.export.prometheus.TextOutputFormat.CONTENT_TYPE_004, 
+                        java.util.Set.of());
+                String springBootMetrics = response.getBody();
                 
                 // Obtener métricas personalizadas del servidor TCP
                 String tcpMetrics = getTcpServerMetrics();
