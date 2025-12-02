@@ -30,6 +30,9 @@ import com.arquitectura.entidades.TextoMensaje;
 import com.arquitectura.repositorios.CanalRepository;
 import com.arquitectura.repositorios.ClienteRepository;
 import com.arquitectura.repositorios.MensajeRepository;
+import com.arquitectura.servicios.eventos.SessionEvent;
+import com.arquitectura.servicios.eventos.SessionEventBus;
+import com.arquitectura.servicios.eventos.SessionEventType;
 
 /**
  * Coordina la captura y aplicación de estados de base de datos entre servidores pares.
@@ -42,15 +45,18 @@ public class DatabaseSyncCoordinator {
     private final CanalRepository canalRepository;
     private final MensajeRepository mensajeRepository;
     private final DataSource dataSource;
+    private final SessionEventBus eventBus;
 
     public DatabaseSyncCoordinator(ClienteRepository clienteRepository,
                                    CanalRepository canalRepository,
                                    MensajeRepository mensajeRepository,
-                                   DataSource dataSource) {
+                                   DataSource dataSource,
+                                   SessionEventBus eventBus) {
         this.clienteRepository = Objects.requireNonNull(clienteRepository, "clienteRepository");
         this.canalRepository = Objects.requireNonNull(canalRepository, "canalRepository");
         this.mensajeRepository = Objects.requireNonNull(mensajeRepository, "mensajeRepository");
         this.dataSource = Objects.requireNonNull(dataSource, "dataSource");
+        this.eventBus = eventBus; // Puede ser null si no se desean notificaciones
     }
 
     /**
@@ -632,10 +638,14 @@ public class DatabaseSyncCoordinator {
         String sqlWithoutId = "INSERT INTO invitaciones(canal_id, invitador_id, invitado_id, fecha_invitacion, estado) " +
             "VALUES(?,?,?,?,?) ON DUPLICATE KEY UPDATE invitador_id=VALUES(invitador_id), fecha_invitacion=VALUES(fecha_invitacion), " +
             "estado=VALUES(estado)";
+        
+        // Lista para almacenar invitaciones sincronizadas exitosamente
+        List<InvitationNotificationData> notificationsToSend = new ArrayList<>();
+        
         try (PreparedStatement withId = connection.prepareStatement(sqlWithId);
              PreparedStatement withoutId = connection.prepareStatement(sqlWithoutId)) {
             for (DatabaseSnapshot.InvitationRecord record : invitaciones) {
-                if (record.getInvitadoId() == null) {
+                if (record.getInvitadoId() == null && record.getInvitadoEmail() == null) {
                     continue;
                 }
                 Long localCanalId = resolveChannelId(connection, record.getCanalId(), record.getCanalUuid(), channelIdMap);
@@ -646,11 +656,17 @@ public class DatabaseSyncCoordinator {
                 if (record.getFechaInvitacion() != null && !record.getFechaInvitacion().isBlank()) {
                     timestamp = Timestamp.valueOf(LocalDateTime.parse(record.getFechaInvitacion()));
                 }
-                Long invitadorId = record.getInvitadorId() != null
-                    ? resolveClientId(record.getInvitadorId(), clientIdMap)
-                    : null;
-                Long invitadoId = resolveClientId(record.getInvitadoId(), clientIdMap);
+                
+                // Resolver IDs usando emails cuando estén disponibles (más confiable entre servidores)
+                Long invitadorId = resolveClientIdWithEmail(record.getInvitadorId(), record.getInvitadorEmail(), clientIdMap);
+                Long invitadoId = resolveClientIdWithEmail(record.getInvitadoId(), record.getInvitadoEmail(), clientIdMap);
+                
+                if (invitadoId == null) {
+                    LOGGER.fine(() -> "No se pudo resolver invitadoId para invitación, email: " + record.getInvitadoEmail());
+                    continue;
+                }
 
+                boolean updated = false;
                 if (record.getId() != null) {
                     withId.setLong(1, record.getId());
                     withId.setLong(2, localCanalId);
@@ -670,7 +686,7 @@ public class DatabaseSyncCoordinator {
                     } else {
                         withId.setNull(6, Types.VARCHAR);
                     }
-                    changed |= withId.executeUpdate() > 0;
+                    updated = withId.executeUpdate() > 0;
                 } else {
                     withoutId.setLong(1, localCanalId);
                     if (invitadorId != null) {
@@ -689,11 +705,83 @@ public class DatabaseSyncCoordinator {
                     } else {
                         withoutId.setNull(5, Types.VARCHAR);
                     }
-                    changed |= withoutId.executeUpdate() > 0;
+                    updated = withoutId.executeUpdate() > 0;
+                }
+                
+                if (updated) {
+                    changed = true;
+                    // Agregar a la lista de notificaciones solo para invitaciones pendientes
+                    if ("PENDIENTE".equals(record.getEstado())) {
+                        notificationsToSend.add(new InvitationNotificationData(
+                            localCanalId, record.getCanalUuid(), invitadorId, invitadoId
+                        ));
+                    }
                 }
             }
         }
+        
+        // Publicar eventos de invitación después de que el commit haya sido exitoso
+        // (esto se ejecuta antes del commit, pero los eventos se publican al eventBus)
+        if (eventBus != null && !notificationsToSend.isEmpty()) {
+            for (InvitationNotificationData notification : notificationsToSend) {
+                publishInvitationEvent(notification);
+            }
+        }
+        
         return changed;
+    }
+    
+    /**
+     * Publica un evento de invitación al eventBus para notificar a los usuarios locales.
+     */
+    private void publishInvitationEvent(InvitationNotificationData data) {
+        try {
+            Map<String, Object> payload = new HashMap<>();
+            payload.put("canalId", data.canalId);
+            payload.put("canalUuid", data.canalUuid);
+            payload.put("invitadorId", data.invitadorId);
+            payload.put("invitadoId", data.invitadoId);
+            
+            SessionEvent event = new SessionEvent(
+                SessionEventType.INVITE_SENT,
+                null, // sessionId - no aplica para sync
+                data.invitadorId,
+                payload
+            );
+            eventBus.publish(event);
+            LOGGER.fine(() -> "Publicado evento INVITE_SENT para usuario " + data.invitadoId);
+        } catch (Exception e) {
+            LOGGER.log(Level.WARNING, "Error publicando evento de invitación sincronizada", e);
+        }
+    }
+    
+    /**
+     * Datos necesarios para notificar una invitación sincronizada.
+     */
+    private static record InvitationNotificationData(
+        Long canalId,
+        String canalUuid,
+        Long invitadorId,
+        Long invitadoId
+    ) {}
+    
+    /**
+     * Resuelve el ID de cliente local usando primero el email (si está disponible) 
+     * y luego el mapeo de IDs como fallback.
+     */
+    private Long resolveClientIdWithEmail(Long originalId, String email, java.util.Map<Long, Long> clientIdMap) {
+        // Primero intentar por email (más confiable entre servidores)
+        if (email != null && !email.isBlank()) {
+            Cliente cliente = clienteRepository.findByEmail(email).orElse(null);
+            if (cliente != null) {
+                return cliente.getId();
+            }
+        }
+        // Fallback al mapeo de IDs
+        if (originalId != null) {
+            return resolveClientId(originalId, clientIdMap);
+        }
+        return null;
     }
 
     private void normalizeChannelRecord(DatabaseSnapshot.CanalRecord record) {

@@ -1,9 +1,9 @@
 package com.arquitectura.controladores.p2p;
 
-import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
-
 import java.util.ArrayList;
 import java.util.List;
+
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 
 /**
  * Representa un volcado de la información relevante de la base de datos
@@ -327,7 +327,9 @@ public class DatabaseSnapshot {
         private Long canalId;
         private String canalUuid;
         private Long invitadorId;
+        private String invitadorEmail; // Email para identificación global
         private Long invitadoId;
+        private String invitadoEmail; // Email para identificación global
         private String fechaInvitacion;
         private String estado;
 
@@ -372,6 +374,22 @@ public class DatabaseSnapshot {
 
         public void setInvitadoId(Long invitadoId) {
             this.invitadoId = invitadoId;
+        }
+        
+        public String getInvitadorEmail() {
+            return invitadorEmail;
+        }
+        
+        public void setInvitadorEmail(String invitadorEmail) {
+            this.invitadorEmail = invitadorEmail;
+        }
+        
+        public String getInvitadoEmail() {
+            return invitadoEmail;
+        }
+        
+        public void setInvitadoEmail(String invitadoEmail) {
+            this.invitadoEmail = invitadoEmail;
         }
 
         public String getFechaInvitacion() {

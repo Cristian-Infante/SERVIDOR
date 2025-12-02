@@ -1,14 +1,5 @@
 package com.arquitectura.controladores.p2p;
 
-import com.arquitectura.entidades.Canal;
-import com.arquitectura.entidades.Invitacion;
-import com.arquitectura.repositorios.CanalRepository;
-import com.arquitectura.repositorios.InvitacionRepository;
-import com.arquitectura.servicios.eventos.SessionEvent;
-import com.arquitectura.servicios.eventos.SessionEventBus;
-import com.arquitectura.servicios.eventos.SessionEventType;
-import com.arquitectura.servicios.eventos.SessionObserver;
-
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
@@ -16,6 +7,17 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.logging.Level;
 import java.util.logging.Logger;
+
+import com.arquitectura.entidades.Canal;
+import com.arquitectura.entidades.Cliente;
+import com.arquitectura.entidades.Invitacion;
+import com.arquitectura.repositorios.CanalRepository;
+import com.arquitectura.repositorios.ClienteRepository;
+import com.arquitectura.repositorios.InvitacionRepository;
+import com.arquitectura.servicios.eventos.SessionEvent;
+import com.arquitectura.servicios.eventos.SessionEventBus;
+import com.arquitectura.servicios.eventos.SessionEventType;
+import com.arquitectura.servicios.eventos.SessionObserver;
 
 /**
  * Replica los cambios de invitaciones entre servidores del clúster
@@ -28,14 +30,17 @@ public class ClusterInvitationReplicationListener implements SessionObserver {
 
     private final ServerPeerManager peerManager;
     private final CanalRepository canalRepository;
+    private final ClienteRepository clienteRepository;
     private final InvitacionRepository invitacionRepository;
 
     public ClusterInvitationReplicationListener(ServerPeerManager peerManager,
                                                 CanalRepository canalRepository,
+                                                ClienteRepository clienteRepository,
                                                 InvitacionRepository invitacionRepository,
                                                 SessionEventBus eventBus) {
         this.peerManager = Objects.requireNonNull(peerManager, "peerManager");
         this.canalRepository = Objects.requireNonNull(canalRepository, "canalRepository");
+        this.clienteRepository = Objects.requireNonNull(clienteRepository, "clienteRepository");
         this.invitacionRepository = Objects.requireNonNull(invitacionRepository, "invitacionRepository");
         Objects.requireNonNull(eventBus, "eventBus").subscribe(this);
     }
@@ -97,6 +102,19 @@ public class ClusterInvitationReplicationListener implements SessionObserver {
             record.setCanalUuid(canalUuid);
             record.setInvitadorId(invitacion.getInvitadorId());
             record.setInvitadoId(invitacion.getInvitadoId());
+            
+            // Incluir emails para identificación global entre servidores
+            if (invitacion.getInvitadorId() != null) {
+                clienteRepository.findById(invitacion.getInvitadorId())
+                    .map(Cliente::getEmail)
+                    .ifPresent(record::setInvitadorEmail);
+            }
+            if (invitacion.getInvitadoId() != null) {
+                clienteRepository.findById(invitacion.getInvitadoId())
+                    .map(Cliente::getEmail)
+                    .ifPresent(record::setInvitadoEmail);
+            }
+            
             LocalDateTime fecha = invitacion.getFechaInvitacion();
             record.setFechaInvitacion(fecha != null ? fecha.toString() : null);
             record.setEstado(invitacion.getEstado());

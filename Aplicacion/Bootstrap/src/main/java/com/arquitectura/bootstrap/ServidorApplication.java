@@ -92,7 +92,8 @@ public final class ServidorApplication {
             clienteRepository,
             canalRepository,
             mensajeRepository,
-            dataSource
+            dataSource,
+            eventBus
         );
         this.peerManager = new ServerPeerManager(
             serverConfig.getServerId(),
@@ -106,7 +107,7 @@ public final class ServidorApplication {
         connectionRegistry.setPeerManager(peerManager);
         new ClusterUserRegistrationListener(peerManager, eventBus);
         new ClusterChannelReplicationListener(peerManager, canalRepository, eventBus);
-        new ClusterInvitationReplicationListener(peerManager, canalRepository, invitacionRepository, eventBus);
+        new ClusterInvitationReplicationListener(peerManager, canalRepository, clienteRepository, invitacionRepository, eventBus);
         new com.arquitectura.servicios.eventos.LogSubscriber(logRepository, clienteRepository, canalRepository, eventBus);
         eventBus.subscribe(new LogSubscriber());
         
