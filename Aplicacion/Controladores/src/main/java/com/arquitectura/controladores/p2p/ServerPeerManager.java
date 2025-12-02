@@ -214,9 +214,7 @@ public class ServerPeerManager {
         SyncStatePayload payload = new SyncStatePayload();
         payload.setDatabase(snapshot);
         PeerEnvelope envelope = new PeerEnvelope(PeerMessageType.SYNC_STATE, serverId, mapper.valueToTree(payload));
-        for (PeerConnection connection : peers.values()) {
-            connection.send(envelope);
-        }
+        routeEnvelope(null, envelope);
     }
 
     public void broadcast(Object payload) {
