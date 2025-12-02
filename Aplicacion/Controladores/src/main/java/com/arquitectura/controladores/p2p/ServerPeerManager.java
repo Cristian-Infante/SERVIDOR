@@ -1,23 +1,5 @@
 package com.arquitectura.controladores.p2p;
 
-import com.arquitectura.controladores.conexion.ConnectionRegistry;
-import com.arquitectura.controladores.conexion.RemoteSessionSnapshot;
-import com.arquitectura.dto.ConnectionStatusUpdateDto;
-import com.arquitectura.entidades.Canal;
-import com.arquitectura.repositorios.CanalRepository;
-import com.arquitectura.repositorios.ClienteRepository;
-import com.arquitectura.servicios.metrics.ServerMetrics;
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.databind.SerializationFeature;
-import com.fasterxml.jackson.databind.node.ArrayNode;
-import com.fasterxml.jackson.databind.node.ObjectNode;
-import com.fasterxml.jackson.databind.node.TextNode;
-import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
-
-import com.arquitectura.controladores.p2p.DatabaseSnapshot;
-import com.arquitectura.controladores.p2p.DatabaseSyncCoordinator;
-
 import java.io.BufferedReader;
 import java.io.BufferedWriter;
 import java.io.IOException;
@@ -52,6 +34,20 @@ import java.util.logging.Logger;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
+import com.arquitectura.controladores.conexion.ConnectionRegistry;
+import com.arquitectura.controladores.conexion.RemoteSessionSnapshot;
+import com.arquitectura.dto.ConnectionStatusUpdateDto;
+import com.arquitectura.entidades.Canal;
+import com.arquitectura.repositorios.CanalRepository;
+import com.arquitectura.repositorios.ClienteRepository;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.SerializationFeature;
+import com.fasterxml.jackson.databind.node.ArrayNode;
+import com.fasterxml.jackson.databind.node.ObjectNode;
+import com.fasterxml.jackson.databind.node.TextNode;
+import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
+
 public class ServerPeerManager {
 
     private static final Logger LOGGER = Logger.getLogger(ServerPeerManager.class.getName());
@@ -74,6 +70,15 @@ public class ServerPeerManager {
     private final LocalAliasRegistry localAliases;
     private final String instanceId;
     private final String normalizedServerId;
+    
+    // Sistema de confirmación de mensajes
+    private final Map<String, PendingMessage> pendingMessages = new ConcurrentHashMap<>();
+    private final Map<String, Integer> replicationMetrics = new ConcurrentHashMap<>();
+    private java.util.concurrent.ScheduledExecutorService retryExecutor;
+    
+    // Configuración de reintento
+    private static final long MESSAGE_TIMEOUT_MS = 30000; // 30 segundos
+    private static final int MAX_RETRIES = 3;
 
     private volatile boolean running;
     private ServerSocket serverSocket;
@@ -99,6 +104,10 @@ public class ServerPeerManager {
         this.instanceId = UUID.randomUUID().toString();
         this.normalizedServerId = normalizeServerId(serverId);
         this.localAliases.initialize();
+        
+        // Inicializar el executor de reintento
+        this.retryExecutor = Executors.newSingleThreadScheduledExecutor(
+            r -> new Thread(r, "P2P-Retry-" + this.serverId));
     }
 
     public void start() {
@@ -108,6 +117,7 @@ public class ServerPeerManager {
         running = true;
         startAcceptor();
         connectToBootstrapPeers();
+        startRetrySystem();
     }
 
     public void stop() {
@@ -119,11 +129,26 @@ public class ServerPeerManager {
         } catch (IOException e) {
             LOGGER.log(Level.WARNING, "Error cerrando socket de peers", e);
         }
+        
+        // Detener sistema de reintentos
+        if (retryExecutor != null && !retryExecutor.isShutdown()) {
+            retryExecutor.shutdown();
+            try {
+                if (!retryExecutor.awaitTermination(5, java.util.concurrent.TimeUnit.SECONDS)) {
+                    retryExecutor.shutdownNow();
+                }
+            } catch (InterruptedException e) {
+                retryExecutor.shutdownNow();
+                Thread.currentThread().interrupt();
+            }
+        }
+        
         connections.forEach(PeerConnection::closeSilently);
         connections.clear();
         peers.clear();
         peersByAlias.clear();
         routeHints.clear();
+        pendingMessages.clear();
     }
 
     public Set<String> connectedPeerIds() {
@@ -225,21 +250,49 @@ public class ServerPeerManager {
         if (targetServerId == null || userId == null || payload == null) {
             return;
         }
+        
+        String messageId = generateMessageId();
         DirectMessagePayload message = new DirectMessagePayload();
+        message.setMessageId(messageId);
         message.setUserId(userId);
         message.setMessage(mapper.valueToTree(payload));
+        
+        // Rastrear mensaje para confirmación
+        PendingMessage pending = new PendingMessage(messageId, targetServerId, 
+                                                   PeerMessageType.DIRECT_MESSAGE, 
+                                                   mapper.valueToTree(message));
+        pendingMessages.put(messageId, pending);
+        
+        LOGGER.info(() -> String.format("📤 Reenviando mensaje directo %s a servidor %s para usuario %d", 
+            messageId, targetServerId, userId));
+        
         sendToPeer(targetServerId, PeerMessageType.DIRECT_MESSAGE, message);
+        incrementMetric("messages_sent");
     }
 
     public void forwardToChannel(String targetServerId, Long canalId, Object payload) {
         if (targetServerId == null || canalId == null || payload == null) {
             return;
         }
+        
+        String messageId = generateMessageId();
         ChannelMessagePayload message = new ChannelMessagePayload();
+        message.setMessageId(messageId);
         message.setCanalId(canalId);
         message.setCanalUuid(resolveChannelUuid(canalId));
         message.setMessage(mapper.valueToTree(payload));
+        
+        // Rastrear mensaje para confirmación
+        PendingMessage pending = new PendingMessage(messageId, targetServerId, 
+                                                   PeerMessageType.CHANNEL_MESSAGE, 
+                                                   mapper.valueToTree(message));
+        pendingMessages.put(messageId, pending);
+        
+        LOGGER.info(() -> String.format("📤 Reenviando mensaje de canal %s a servidor %s para canal %d", 
+            messageId, targetServerId, canalId));
+        
         sendToPeer(targetServerId, PeerMessageType.CHANNEL_MESSAGE, message);
+        incrementMetric("channel_messages_sent");
     }
 
     public void forwardToSession(String targetServerId, String sessionId, Object payload) {
@@ -794,7 +847,16 @@ public class ServerPeerManager {
     }
 
     private boolean shouldLogPayload(PeerMessageType type) {
-        return type != null && type != PeerMessageType.HELLO;
+        if (type == null || type == PeerMessageType.HELLO) {
+            return false;
+        }
+        // Log importante para mensajes de replicación y sus confirmaciones
+        return type == PeerMessageType.DIRECT_MESSAGE || 
+               type == PeerMessageType.CHANNEL_MESSAGE ||
+               type == PeerMessageType.DIRECT_MESSAGE_ACK ||
+               type == PeerMessageType.CHANNEL_MESSAGE_ACK ||
+               type == PeerMessageType.REPLICATION_STATUS ||
+               type == PeerMessageType.SYNC_STATE;
     }
 
     private void logIncomingPayload(PeerConnection connection, PeerEnvelope envelope, String rawJson) {
@@ -928,10 +990,13 @@ public class ServerPeerManager {
                 case CLIENT_CONNECTED -> handleClientConnected(connection, envelope);
                 case CLIENT_DISCONNECTED -> handleClientDisconnected(connection, envelope);
                 case CHANNEL_MEMBERSHIP -> handleChannelMembership(connection, envelope);
-                case DIRECT_MESSAGE -> handleDirectMessage(envelope.getPayload());
-                case CHANNEL_MESSAGE -> handleChannelMessage(envelope.getPayload());
+                case DIRECT_MESSAGE -> handleDirectMessage(envelope.getPayload(), envelope.getOrigin());
+                case CHANNEL_MESSAGE -> handleChannelMessage(envelope.getPayload(), envelope.getOrigin());
                 case SESSION_MESSAGE -> handleSessionMessage(envelope.getPayload());
                 case BROADCAST -> handleBroadcast(connection, envelope);
+                case DIRECT_MESSAGE_ACK -> handleDirectMessageAck(envelope.getPayload());
+                case CHANNEL_MESSAGE_ACK -> handleChannelMessageAck(envelope.getPayload());
+                case REPLICATION_STATUS -> handleReplicationStatus(envelope.getPayload());
                 default -> LOGGER.fine(() -> "Mensaje P2P no soportado: " + type);
             }
         } catch (Exception e) {
@@ -1042,23 +1107,63 @@ public class ServerPeerManager {
         }
     }
 
-    private void handleDirectMessage(JsonNode payload) throws IOException {
+    private void handleDirectMessage(JsonNode payload, String originServerId) throws IOException {
         DirectMessagePayload message = mapper.treeToValue(payload, DirectMessagePayload.class);
-        if (message != null && message.getUserId() != null && message.getMessage() != null) {
-            registry.deliverToUserLocally(message.getUserId(), message.getMessage());
+        boolean success = false;
+        String error = null;
+        
+        try {
+            if (message != null && message.getUserId() != null && message.getMessage() != null) {
+                LOGGER.info(() -> String.format("📨 Recibido mensaje directo P2P para usuario %d desde %s", 
+                    message.getUserId(), originServerId));
+                registry.deliverToUserLocally(message.getUserId(), message.getMessage());
+                success = true;
+                incrementMetric("messages_received");
+            } else {
+                error = "Payload inválido para mensaje directo";
+                LOGGER.warning(() -> "Payload inválido en mensaje directo P2P: " + payload);
+            }
+        } catch (Exception e) {
+            error = "Error procesando mensaje directo: " + e.getMessage();
+            LOGGER.log(Level.WARNING, "Error procesando mensaje directo P2P", e);
         }
+        
+        // Enviar confirmación
+        sendMessageAck(originServerId, message != null ? message.getMessageId() : null, 
+                      PeerMessageType.DIRECT_MESSAGE_ACK, success, error);
     }
 
-    private void handleChannelMessage(JsonNode payload) throws IOException {
+    private void handleChannelMessage(JsonNode payload, String originServerId) throws IOException {
         ChannelMessagePayload message = mapper.treeToValue(payload, ChannelMessagePayload.class);
-        if (message == null || message.getMessage() == null) {
-            return;
+        boolean success = false;
+        String error = null;
+        
+        try {
+            if (message == null || message.getMessage() == null) {
+                error = "Payload inválido para mensaje de canal";
+                LOGGER.warning(() -> "Payload inválido en mensaje de canal P2P: " + payload);
+            } else {
+                Long localCanalId = resolveChannelId(message.getCanalId(), message.getCanalUuid());
+                if (localCanalId == null) {
+                    String finalError = "Canal no encontrado: " + message.getCanalId() + "/" + message.getCanalUuid();
+                    error = finalError;
+                    LOGGER.warning(() -> finalError);
+                } else {
+                    LOGGER.info(() -> String.format("📨 Recibido mensaje de canal P2P para canal %d desde %s", 
+                        localCanalId, originServerId));
+                    registry.deliverToChannelLocally(localCanalId, message.getMessage());
+                    success = true;
+                    incrementMetric("channel_messages_received");
+                }
+            }
+        } catch (Exception e) {
+            error = "Error procesando mensaje de canal: " + e.getMessage();
+            LOGGER.log(Level.WARNING, "Error procesando mensaje de canal P2P", e);
         }
-        Long localCanalId = resolveChannelId(message.getCanalId(), message.getCanalUuid());
-        if (localCanalId == null) {
-            return;
-        }
-        registry.deliverToChannelLocally(localCanalId, message.getMessage());
+        
+        // Enviar confirmación
+        sendMessageAck(originServerId, message != null ? message.getMessageId() : null, 
+                      PeerMessageType.CHANNEL_MESSAGE_ACK, success, error);
     }
 
     private void handleSessionMessage(JsonNode payload) throws IOException {
@@ -1106,6 +1211,215 @@ public class ServerPeerManager {
         } catch (Exception e) {
             LOGGER.log(Level.WARNING, "No se pudo aplicar actualización de estado recibida del clúster", e);
         }
+    }
+
+    // Métodos para el sistema de confirmación de mensajes
+    private void sendMessageAck(String targetServerId, String messageId, PeerMessageType ackType, 
+                                boolean success, String error) {
+        if (targetServerId == null) {
+            return;
+        }
+        
+        MessageAck ack = new MessageAck();
+        ack.setMessageId(messageId);
+        ack.setOriginServerId(serverId);
+        ack.setSuccess(success);
+        ack.setError(error);
+        
+        LOGGER.info(() -> String.format("📤 Enviando ACK %s para mensaje %s a %s: %s", 
+            ackType, messageId, targetServerId, success ? "SUCCESS" : "ERROR: " + error));
+        
+        sendToPeer(targetServerId, ackType, ack);
+    }
+
+    private void handleDirectMessageAck(JsonNode payload) throws IOException {
+        MessageAck ack = mapper.treeToValue(payload, MessageAck.class);
+        if (ack != null) {
+            processMessageAck(ack, PeerMessageType.DIRECT_MESSAGE);
+        }
+    }
+
+    private void handleChannelMessageAck(JsonNode payload) throws IOException {
+        MessageAck ack = mapper.treeToValue(payload, MessageAck.class);
+        if (ack != null) {
+            processMessageAck(ack, PeerMessageType.CHANNEL_MESSAGE);
+        }
+    }
+
+    private void handleReplicationStatus(JsonNode payload) throws IOException {
+        ReplicationStatusPayload status = mapper.treeToValue(payload, ReplicationStatusPayload.class);
+        if (status != null) {
+            LOGGER.info(() -> String.format("📊 Estado de replicación recibido de %s: %s", 
+                status.getServerId(), status.getMetrics()));
+        }
+    }
+
+    private void processMessageAck(MessageAck ack, PeerMessageType originalType) {
+        if (ack.getMessageId() == null) {
+            return;
+        }
+        
+        PendingMessage pending = pendingMessages.remove(ack.getMessageId());
+        if (pending != null) {
+            if (ack.isSuccess()) {
+                LOGGER.info(() -> String.format("✅ Confirmación exitosa para mensaje %s (%s)", 
+                    ack.getMessageId(), originalType));
+                incrementMetric("messages_confirmed");
+            } else {
+                LOGGER.warning(() -> String.format("❌ Error en mensaje %s (%s): %s", 
+                    ack.getMessageId(), originalType, ack.getError()));
+                incrementMetric("messages_failed");
+            }
+        } else {
+            LOGGER.fine(() -> String.format("Confirmación recibida para mensaje desconocido: %s", 
+                ack.getMessageId()));
+        }
+    }
+
+    private void incrementMetric(String key) {
+        replicationMetrics.compute(key, (k, v) -> (v == null) ? 1 : v + 1);
+    }
+
+    private String generateMessageId() {
+        return serverId + "-" + System.currentTimeMillis() + "-" + UUID.randomUUID().toString().substring(0, 8);
+    }
+
+    public Map<String, Integer> getReplicationMetrics() {
+        return new ConcurrentHashMap<>(replicationMetrics);
+    }
+
+    public List<String> getPendingMessageIds() {
+        return new ArrayList<>(pendingMessages.keySet());
+    }
+
+    // Métodos de diagnóstico
+    public String generateDiagnosticReport() {
+        StringBuilder report = new StringBuilder();
+        report.append("=== REPORTE DE ESTADO P2P ===\n");
+        report.append(String.format("Servidor ID: %s\n", serverId));
+        report.append(String.format("Estado: %s\n", running ? "ACTIVO" : "DETENIDO"));
+        report.append(String.format("Puerto P2P: %d\n", peerPort));
+        report.append("\n--- CONEXIONES ---\n");
+        report.append(String.format("Peers conectados: %d\n", peers.size()));
+        
+        for (String peerId : peers.keySet()) {
+            report.append(String.format("  - %s\n", peerId));
+        }
+        
+        report.append("\n--- MÉTRICAS DE REPLICACIÓN ---\n");
+        Map<String, Integer> metrics = getReplicationMetrics();
+        if (metrics.isEmpty()) {
+            report.append("No hay métricas disponibles\n");
+        } else {
+            for (Map.Entry<String, Integer> entry : metrics.entrySet()) {
+                report.append(String.format("%s: %d\n", entry.getKey(), entry.getValue()));
+            }
+        }
+        
+        report.append("\n--- MENSAJES PENDIENTES ---\n");
+        List<String> pendingIds = getPendingMessageIds();
+        report.append(String.format("Total pendientes: %d\n", pendingIds.size()));
+        
+        if (!pendingIds.isEmpty()) {
+            report.append("IDs de mensajes pendientes:\n");
+            for (String messageId : pendingIds) {
+                PendingMessage pending = pendingMessages.get(messageId);
+                if (pending != null) {
+                    long ageMs = System.currentTimeMillis() - pending.getTimestamp();
+                    report.append(String.format("  - %s (edad: %ds, reintentos: %d, destino: %s)\n", 
+                        messageId, ageMs / 1000, pending.getRetryCount(), pending.getTargetServerId()));
+                }
+            }
+        }
+        
+        report.append("\n--- ESTADO DE CONECTIVIDAD ---\n");
+        Set<String> knownServers = knownClusterServerIds();
+        report.append(String.format("Servidores conocidos en el clúster: %d\n", knownServers.size()));
+        
+        for (String serverId : knownServers) {
+            boolean connected = peers.containsKey(serverId);
+            report.append(String.format("  - %s: %s\n", serverId, connected ? "CONECTADO" : "DESCONECTADO"));
+        }
+        
+        return report.toString();
+    }
+
+    public void sendReplicationStatusToAllPeers() {
+        ReplicationStatusPayload status = new ReplicationStatusPayload();
+        status.setServerId(serverId);
+        status.setMetrics(getReplicationMetrics());
+        status.setPendingMessages(getPendingMessageIds());
+        
+        broadcast(PeerMessageType.REPLICATION_STATUS, status);
+        LOGGER.info("📊 Estado de replicación enviado a todos los peers");
+    }
+
+    public void printDiagnosticReport() {
+        String report = generateDiagnosticReport();
+        System.out.println(report);
+        LOGGER.info("📊 Reporte de diagnóstico P2P generado");
+    }
+
+    private void startRetrySystem() {
+        if (retryExecutor != null && !retryExecutor.isShutdown()) {
+            // Programar verificación periódica de mensajes pendientes cada 10 segundos
+            retryExecutor.scheduleWithFixedDelay(this::checkPendingMessages, 10, 10, 
+                java.util.concurrent.TimeUnit.SECONDS);
+            LOGGER.info("🔄 Sistema de reintento P2P iniciado");
+        }
+    }
+
+    private void checkPendingMessages() {
+        if (!running) {
+            return;
+        }
+        
+        List<String> expiredMessageIds = new ArrayList<>();
+        List<PendingMessage> toRetry = new ArrayList<>();
+        
+        // Identificar mensajes expirados y que necesitan reintento
+        for (Map.Entry<String, PendingMessage> entry : pendingMessages.entrySet()) {
+            PendingMessage pending = entry.getValue();
+            
+            if (pending.isExpired(MESSAGE_TIMEOUT_MS)) {
+                if (pending.getRetryCount() >= MAX_RETRIES) {
+                    // Mensaje falló definitivamente
+                    expiredMessageIds.add(entry.getKey());
+                    LOGGER.warning(() -> String.format("❌ Mensaje %s falló después de %d reintentos", 
+                        pending.getMessageId(), pending.getRetryCount()));
+                    incrementMetric("messages_failed_permanent");
+                } else {
+                    // Reintentar mensaje
+                    toRetry.add(pending);
+                }
+            }
+        }
+        
+        // Limpiar mensajes que fallaron definitivamente
+        expiredMessageIds.forEach(pendingMessages::remove);
+        
+        // Reintentar mensajes
+        for (PendingMessage pending : toRetry) {
+            retryMessage(pending);
+        }
+        
+        // Log de estado periódico
+        if (!pendingMessages.isEmpty()) {
+            LOGGER.info(() -> String.format("📊 Mensajes P2P pendientes: %d, reintentando: %d, fallaron: %d", 
+                pendingMessages.size(), toRetry.size(), expiredMessageIds.size()));
+        }
+    }
+
+    private void retryMessage(PendingMessage pending) {
+        pending.incrementRetryCount();
+        pending.updateTimestamp(); // Actualizar timestamp para nuevo timeout
+        
+        LOGGER.info(() -> String.format("🔄 Reintentando mensaje %s (intento %d/%d) a servidor %s", 
+            pending.getMessageId(), pending.getRetryCount(), MAX_RETRIES, pending.getTargetServerId()));
+        
+        // Reenviar mensaje
+        sendToPeer(pending.getTargetServerId(), pending.getMessageType(), pending.getPayload());
+        incrementMetric("messages_retried");
     }
 
     private JsonNode wrapBroadcastPayload(Object payload) {
@@ -1660,7 +1974,10 @@ public class ServerPeerManager {
         DIRECT_MESSAGE,
         CHANNEL_MESSAGE,
         SESSION_MESSAGE,
-        BROADCAST
+        BROADCAST,
+        DIRECT_MESSAGE_ACK,
+        CHANNEL_MESSAGE_ACK,
+        REPLICATION_STATUS
     }
 
     private static final class PeerEnvelope {
@@ -1866,8 +2183,17 @@ public class ServerPeerManager {
     }
 
     private static final class DirectMessagePayload {
+        private String messageId;
         private Long userId;
         private JsonNode message;
+
+        public String getMessageId() {
+            return messageId;
+        }
+
+        public void setMessageId(String messageId) {
+            this.messageId = messageId;
+        }
 
         public Long getUserId() {
             return userId;
@@ -1887,9 +2213,18 @@ public class ServerPeerManager {
     }
 
     private static final class ChannelMessagePayload {
+        private String messageId;
         private Long canalId;
         private JsonNode message;
         private String canalUuid;
+
+        public String getMessageId() {
+            return messageId;
+        }
+
+        public void setMessageId(String messageId) {
+            this.messageId = messageId;
+        }
 
         public Long getCanalId() {
             return canalId;
@@ -1954,6 +2289,67 @@ public class ServerPeerManager {
         public String toString() {
             return host + ':' + port;
         }
+    }
+
+    // Clases para el sistema de confirmación de mensajes
+    private static final class PendingMessage {
+        private final String messageId;
+        private final String targetServerId;
+        private final PeerMessageType messageType;
+        private final JsonNode payload;
+        private long timestamp;
+        private int retryCount = 0;
+
+        public PendingMessage(String messageId, String targetServerId, PeerMessageType messageType, JsonNode payload) {
+            this.messageId = messageId;
+            this.targetServerId = targetServerId;
+            this.messageType = messageType;
+            this.payload = payload;
+            this.timestamp = System.currentTimeMillis();
+        }
+
+        // Getters
+        public String getMessageId() { return messageId; }
+        public String getTargetServerId() { return targetServerId; }
+        public PeerMessageType getMessageType() { return messageType; }
+        public JsonNode getPayload() { return payload; }
+        public long getTimestamp() { return timestamp; }
+        public int getRetryCount() { return retryCount; }
+        public void incrementRetryCount() { retryCount++; }
+        public void updateTimestamp() { this.timestamp = System.currentTimeMillis(); }
+        
+        public boolean isExpired(long timeoutMs) {
+            return System.currentTimeMillis() - timestamp > timeoutMs;
+        }
+    }
+
+    private static final class MessageAck {
+        private String messageId;
+        private String originServerId;
+        private boolean success;
+        private String error;
+
+        public String getMessageId() { return messageId; }
+        public void setMessageId(String messageId) { this.messageId = messageId; }
+        public String getOriginServerId() { return originServerId; }
+        public void setOriginServerId(String originServerId) { this.originServerId = originServerId; }
+        public boolean isSuccess() { return success; }
+        public void setSuccess(boolean success) { this.success = success; }
+        public String getError() { return error; }
+        public void setError(String error) { this.error = error; }
+    }
+
+    private static final class ReplicationStatusPayload {
+        private Map<String, Integer> metrics;
+        private List<String> pendingMessages;
+        private String serverId;
+
+        public Map<String, Integer> getMetrics() { return metrics; }
+        public void setMetrics(Map<String, Integer> metrics) { this.metrics = metrics; }
+        public List<String> getPendingMessages() { return pendingMessages; }
+        public void setPendingMessages(List<String> pendingMessages) { this.pendingMessages = pendingMessages; }
+        public String getServerId() { return serverId; }
+        public void setServerId(String serverId) { this.serverId = serverId; }
     }
 
     public interface PeerStatusListener {

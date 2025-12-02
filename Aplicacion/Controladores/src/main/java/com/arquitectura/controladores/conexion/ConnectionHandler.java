@@ -1,5 +1,18 @@
 package com.arquitectura.controladores.conexion;
 
+import java.io.BufferedReader;
+import java.io.BufferedWriter;
+import java.io.IOException;
+import java.io.InputStreamReader;
+import java.net.Socket;
+import java.nio.charset.StandardCharsets;
+import java.util.Base64;
+import java.util.Locale;
+import java.util.Map;
+import java.util.Objects;
+import java.util.logging.Level;
+import java.util.logging.Logger;
+
 import com.arquitectura.dto.AckResponse;
 import com.arquitectura.dto.ChannelRequest;
 import com.arquitectura.dto.CommandEnvelope;
@@ -8,8 +21,8 @@ import com.arquitectura.dto.InviteRequest;
 import com.arquitectura.dto.LoginRequest;
 import com.arquitectura.dto.LoginResponse;
 import com.arquitectura.dto.MessageRequest;
-import com.arquitectura.dto.RegisterRequest;
 import com.arquitectura.dto.MessageSyncResponse;
+import com.arquitectura.dto.RegisterRequest;
 import com.arquitectura.dto.UploadAudioRequest;
 import com.arquitectura.dto.UploadAudioResponse;
 import com.arquitectura.entidades.Canal;
@@ -24,23 +37,11 @@ import com.arquitectura.servicios.eventos.SessionEvent;
 import com.arquitectura.servicios.eventos.SessionEventBus;
 import com.arquitectura.servicios.eventos.SessionEventType;
 import com.arquitectura.servicios.metrics.ServerMetrics;
-import io.prometheus.client.Histogram;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 
-import java.io.BufferedReader;
-import java.io.BufferedWriter;
-import java.io.IOException;
-import java.io.InputStreamReader;
-import java.net.Socket;
-import java.nio.charset.StandardCharsets;
-import java.util.Base64;
-import java.util.Locale;
-import java.util.Map;
-import java.util.Objects;
-import java.util.logging.Level;
-import java.util.logging.Logger;
+import io.prometheus.client.Histogram;
 
 public class ConnectionHandler implements Runnable {
 
@@ -56,6 +57,7 @@ public class ConnectionHandler implements Runnable {
     private final MessageSyncService messageSyncService;
     private final SessionEventBus eventBus;
     private final ConnectionRegistry registry;
+    private final com.arquitectura.controladores.p2p.ServerPeerManager peerManager;
     private ConnectionHandlerPool pool;
     private final ObjectMapper mapper;
     
@@ -80,7 +82,8 @@ public class ConnectionHandler implements Runnable {
                               AudioStorageService audioStorageService,
                               MessageSyncService messageSyncService,
                               SessionEventBus eventBus,
-                              ConnectionRegistry registry) {
+                              ConnectionRegistry registry,
+                              com.arquitectura.controladores.p2p.ServerPeerManager peerManager) {
         this.registroService = Objects.requireNonNull(registroService, "registroService");
         this.canalService = Objects.requireNonNull(canalService, "canalService");
         this.mensajeriaService = Objects.requireNonNull(mensajeriaService, "mensajeriaService");
@@ -90,6 +93,7 @@ public class ConnectionHandler implements Runnable {
         this.messageSyncService = Objects.requireNonNull(messageSyncService, "messageSyncService");
         this.eventBus = Objects.requireNonNull(eventBus, "eventBus");
         this.registry = Objects.requireNonNull(registry, "registry");
+        this.peerManager = peerManager; // Puede ser null si P2P está deshabilitado
     }
 
     public void attach(Socket socket) {
@@ -238,6 +242,10 @@ public class ConnectionHandler implements Runnable {
             case "LIST_CONNECTED" -> send("LIST_CONNECTED", reporteService.usuariosConectados(clienteId));
             case "CLOSE_CONN" -> handleClose();
             case "BROADCAST" -> handleBroadcast(payload);
+            case "P2P_STATUS" -> handleP2PStatus();
+            case "P2P_METRICS" -> handleP2PMetrics();
+            case "P2P_PENDING" -> handleP2PPendingMessages();
+            case "P2P_SEND_STATUS" -> handleP2PSendStatus();
             default -> processReports(command);
         }
     }
@@ -526,7 +534,67 @@ public class ConnectionHandler implements Runnable {
 
     }
 
+    // Comandos de diagnóstico P2P
+    private void handleP2PStatus() throws IOException {
+        if (peerManager == null) {
+            send("P2P_STATUS", Map.of("error", "P2P no está habilitado"));
+            return;
+        }
+        
+        String report = peerManager.generateDiagnosticReport();
+        send("P2P_STATUS", Map.of("report", report, "timestamp", java.time.LocalDateTime.now()));
+    }
 
+    private void handleP2PMetrics() throws IOException {
+        if (peerManager == null) {
+            send("P2P_METRICS", Map.of("error", "P2P no está habilitado"));
+            return;
+        }
+        
+        Map<String, Integer> metrics = peerManager.getReplicationMetrics();
+        send("P2P_METRICS", Map.of(
+            "metrics", metrics,
+            "peers_connected", peerManager.connectedPeerIds().size(),
+            "known_servers", peerManager.knownClusterServerIds().size(),
+            "timestamp", java.time.LocalDateTime.now()
+        ));
+    }
+
+    private void handleP2PPendingMessages() throws IOException {
+        if (peerManager == null) {
+            send("P2P_PENDING", Map.of("error", "P2P no está habilitado"));
+            return;
+        }
+        
+        java.util.List<String> pendingIds = peerManager.getPendingMessageIds();
+        send("P2P_PENDING", Map.of(
+            "pending_messages", pendingIds,
+            "count", pendingIds.size(),
+            "timestamp", java.time.LocalDateTime.now()
+        ));
+    }
+
+    private void handleP2PSendStatus() throws IOException {
+        if (peerManager == null) {
+            send("P2P_SEND_STATUS", Map.of("error", "P2P no está habilitado"));
+            return;
+        }
+        
+        try {
+            peerManager.sendReplicationStatusToAllPeers();
+            send("P2P_SEND_STATUS", Map.of(
+                "success", true, 
+                "message", "Estado de replicación enviado a todos los peers",
+                "timestamp", java.time.LocalDateTime.now()
+            ));
+        } catch (Exception e) {
+            send("P2P_SEND_STATUS", Map.of(
+                "success", false, 
+                "error", e.getMessage(),
+                "timestamp", java.time.LocalDateTime.now()
+            ));
+        }
+    }
 
     private void cleanup() {
         if (sessionId != null) {
