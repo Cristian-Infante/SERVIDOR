@@ -87,7 +87,7 @@ public final class ServidorApplication {
         ServerMetrics.startMetricsServer(serverConfig.getMetricsPort());
         new MetricsSessionObserver(eventBus);
 
-        this.connectionRegistry = new ConnectionRegistry(eventBus, serverConfig.getServerId(), canalRepository);
+        this.connectionRegistry = new ConnectionRegistry(eventBus, serverConfig.getServerId(), canalRepository, clienteRepository);
         DatabaseSyncCoordinator databaseSyncCoordinator = new DatabaseSyncCoordinator(
             clienteRepository,
             canalRepository,

@@ -23,7 +23,9 @@ import java.util.stream.Collectors;
 import com.arquitectura.controladores.p2p.ServerPeerManager;
 import com.arquitectura.dto.CommandEnvelope;
 import com.arquitectura.entidades.Canal;
+import com.arquitectura.entidades.Cliente;
 import com.arquitectura.repositorios.CanalRepository;
+import com.arquitectura.repositorios.ClienteRepository;
 import com.arquitectura.servicios.conexion.ConnectionGateway;
 import com.arquitectura.servicios.conexion.SessionDescriptor;
 import com.arquitectura.servicios.eventos.SessionEvent;
@@ -44,18 +46,25 @@ public class ConnectionRegistry implements ConnectionGateway {
     private final SessionEventBus eventBus;
     private final String localServerId;
     private final CanalRepository canalRepository;
+    private final ClienteRepository clienteRepository;
     private final Set<String> knownRemoteServers = ConcurrentHashMap.newKeySet();
 
     private volatile ServerPeerManager peerManager;
 
     public ConnectionRegistry(SessionEventBus eventBus, CanalRepository canalRepository) {
-        this(eventBus, DEFAULT_SERVER_ID, canalRepository);
+        this(eventBus, DEFAULT_SERVER_ID, canalRepository, null);
     }
 
     public ConnectionRegistry(SessionEventBus eventBus, String localServerId, CanalRepository canalRepository) {
+        this(eventBus, localServerId, canalRepository, null);
+    }
+    
+    public ConnectionRegistry(SessionEventBus eventBus, String localServerId, 
+                              CanalRepository canalRepository, ClienteRepository clienteRepository) {
         this.eventBus = Objects.requireNonNull(eventBus, "eventBus");
         this.localServerId = localServerId != null ? localServerId : DEFAULT_SERVER_ID;
         this.canalRepository = Objects.requireNonNull(canalRepository, "canalRepository");
+        this.clienteRepository = clienteRepository; // Puede ser null para compatibilidad
         this.mapper = new ObjectMapper();
         this.mapper.registerModule(new JavaTimeModule());
         this.mapper.disable(com.fasterxml.jackson.databind.SerializationFeature.WRITE_DATES_AS_TIMESTAMPS);
@@ -281,10 +290,36 @@ public class ConnectionRegistry implements ConnectionGateway {
             .forEach(ctx -> send(ctx, payload));
 
         if (includeRemote && peerManager != null) {
-            Set<String> servers = remoteSessions.values().stream()
-                .filter(snapshot -> snapshot.getClienteId() != null && snapshot.getClienteId().equals(userId))
-                .map(RemoteSessionSnapshot::getServerId)
-                .collect(Collectors.toSet());
+            // Buscar el email del usuario local para identificar sesiones remotas correctamente
+            String userEmail = null;
+            if (clienteRepository != null) {
+                userEmail = clienteRepository.findById(userId)
+                    .map(Cliente::getEmail)
+                    .orElse(null);
+            }
+            
+            final String finalUserEmail = userEmail;
+            Set<String> servers;
+            
+            if (finalUserEmail != null && !finalUserEmail.isBlank()) {
+                // Buscar sesiones remotas por email (más confiable entre servidores)
+                servers = remoteSessions.values().stream()
+                    .filter(snapshot -> finalUserEmail.equalsIgnoreCase(snapshot.getEmail()))
+                    .map(RemoteSessionSnapshot::getServerId)
+                    .collect(Collectors.toSet());
+                
+                if (!servers.isEmpty()) {
+                    LOGGER.fine(() -> String.format("Encontradas %d sesiones remotas para usuario %d (email: %s)", 
+                        servers.size(), userId, finalUserEmail));
+                }
+            } else {
+                // Fallback: buscar por clienteId (comportamiento anterior, puede fallar entre servidores)
+                servers = remoteSessions.values().stream()
+                    .filter(snapshot -> snapshot.getClienteId() != null && snapshot.getClienteId().equals(userId))
+                    .map(RemoteSessionSnapshot::getServerId)
+                    .collect(Collectors.toSet());
+            }
+            
             for (String serverId : servers) {
                 peerManager.forwardToUser(serverId, userId, payload);
             }
@@ -768,10 +803,20 @@ public class ConnectionRegistry implements ConnectionGateway {
 
     private RemoteSessionSnapshot toSnapshot(SessionDescriptor descriptor) {
         Set<Long> canales = descriptor != null ? new HashSet<>(descriptor.getCanales()) : Set.of();
+        
+        // Obtener email del usuario para identificación global entre servidores
+        String email = null;
+        if (clienteRepository != null && descriptor != null && descriptor.getClienteId() != null) {
+            email = clienteRepository.findById(descriptor.getClienteId())
+                .map(Cliente::getEmail)
+                .orElse(null);
+        }
+        
         RemoteSessionSnapshot snapshot = new RemoteSessionSnapshot(localServerId,
             descriptor != null ? descriptor.getSessionId() : null,
             descriptor != null ? descriptor.getClienteId() : null,
             descriptor != null ? descriptor.getUsuario() : null,
+            email, // Incluir email para P2P
             descriptor != null ? descriptor.getIp() : null,
             canales);
         populateChannelMetadata(snapshot);
