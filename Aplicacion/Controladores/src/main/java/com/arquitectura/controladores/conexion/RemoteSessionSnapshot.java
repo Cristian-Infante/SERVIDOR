@@ -16,6 +16,7 @@ public class RemoteSessionSnapshot {
     private String sessionId;
     private Long clienteId;
     private String usuario;
+    private String email; // Email para identificación global entre servidores
     private String ip;
     private Set<Long> canales = new HashSet<>();
     private Map<Long, String> channelUuids = new HashMap<>();
@@ -37,6 +38,17 @@ public class RemoteSessionSnapshot {
         if (canales != null) {
             this.canales = new HashSet<>(canales);
         }
+    }
+    
+    public RemoteSessionSnapshot(String serverId,
+                                 String sessionId,
+                                 Long clienteId,
+                                 String usuario,
+                                 String email,
+                                 String ip,
+                                 Set<Long> canales) {
+        this(serverId, sessionId, clienteId, usuario, ip, canales);
+        this.email = email;
     }
 
     public String getServerId() {
@@ -70,7 +82,14 @@ public class RemoteSessionSnapshot {
     public void setUsuario(String usuario) {
         this.usuario = usuario;
     }
-
+    
+    public String getEmail() {
+        return email;
+    }
+    
+    public void setEmail(String email) {
+        this.email = email;
+    }
     public String getIp() {
         return ip;
     }
@@ -102,6 +121,7 @@ public class RemoteSessionSnapshot {
             ", sessionId='" + sessionId + '\'' +
             ", clienteId=" + clienteId +
             ", usuario='" + usuario + '\'' +
+            ", email='" + email + '\'' +
             ", canales=" + canales +
             '}';
     }

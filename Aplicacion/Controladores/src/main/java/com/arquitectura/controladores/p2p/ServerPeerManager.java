@@ -251,10 +251,23 @@ public class ServerPeerManager {
             return;
         }
         
+        // Obtener el email del usuario para identificación global entre servidores
+        String userEmail = null;
+        try {
+            userEmail = clienteRepository.findById(userId)
+                .map(cliente -> cliente.getEmail())
+                .orElse(null);
+        } catch (Exception e) {
+            LOGGER.warning(() -> "No se pudo obtener email para usuario " + userId + ": " + e.getMessage());
+        }
+        
+        final String finalUserEmail = userEmail; // Para usar en lambda
+        
         String messageId = generateMessageId();
         DirectMessagePayload message = new DirectMessagePayload();
         message.setMessageId(messageId);
         message.setUserId(userId);
+        message.setUserEmail(userEmail); // Usar email para identificación global
         message.setMessage(mapper.valueToTree(payload));
         
         // Rastrear mensaje para confirmación
@@ -263,8 +276,8 @@ public class ServerPeerManager {
                                                    mapper.valueToTree(message));
         pendingMessages.put(messageId, pending);
         
-        LOGGER.info(() -> String.format("📤 Reenviando mensaje directo %s a servidor %s para usuario %d", 
-            messageId, targetServerId, userId));
+        LOGGER.info(() -> String.format("📤 Reenviando mensaje directo %s a servidor %s para usuario %d (email: %s)", 
+            messageId, targetServerId, userId, finalUserEmail));
         
         sendToPeer(targetServerId, PeerMessageType.DIRECT_MESSAGE, message);
         incrementMetric("messages_sent");
@@ -834,14 +847,16 @@ public class ServerPeerManager {
             if (snapshot == null) {
                 continue;
             }
-            remapped.add(new RemoteSessionSnapshot(
+            RemoteSessionSnapshot newSnapshot = new RemoteSessionSnapshot(
                 serverId,
                 snapshot.getSessionId(),
                 snapshot.getClienteId(),
                 snapshot.getUsuario(),
                 snapshot.getIp(),
                 snapshot.getCanales()
-            ));
+            );
+            newSnapshot.setEmail(snapshot.getEmail());
+            remapped.add(newSnapshot);
         }
         return remapped;
     }
@@ -1113,12 +1128,23 @@ public class ServerPeerManager {
         String error = null;
         
         try {
-            if (message != null && message.getUserId() != null && message.getMessage() != null) {
-                LOGGER.info(() -> String.format("📨 Recibido mensaje directo P2P para usuario %d desde %s", 
-                    message.getUserId(), originServerId));
-                registry.deliverToUserLocally(message.getUserId(), message.getMessage());
-                success = true;
-                incrementMetric("messages_received");
+            if (message != null && message.getMessage() != null) {
+                // Resolver el ID local del usuario usando el email (identificador global)
+                Long localUserId = resolveLocalUserId(message.getUserId(), message.getUserEmail());
+                
+                if (localUserId != null) {
+                    final Long finalLocalUserId = localUserId;
+                    LOGGER.info(() -> String.format("📨 Recibido mensaje directo P2P para usuario local %d (email: %s, remoto: %d) desde %s", 
+                        finalLocalUserId, message.getUserEmail(), message.getUserId(), originServerId));
+                    registry.deliverToUserLocally(localUserId, message.getMessage());
+                    success = true;
+                    incrementMetric("messages_received");
+                } else {
+                    final String notFoundError = String.format("Usuario no encontrado localmente (email: %s, userId remoto: %d)", 
+                        message.getUserEmail(), message.getUserId());
+                    error = notFoundError;
+                    LOGGER.warning(() -> notFoundError);
+                }
             } else {
                 error = "Payload inválido para mensaje directo";
                 LOGGER.warning(() -> "Payload inválido en mensaje directo P2P: " + payload);
@@ -1131,6 +1157,28 @@ public class ServerPeerManager {
         // Enviar confirmación
         sendMessageAck(originServerId, message != null ? message.getMessageId() : null, 
                       PeerMessageType.DIRECT_MESSAGE_ACK, success, error);
+    }
+    
+    /**
+     * Resuelve el ID local del usuario usando el email como identificador global.
+     * Si el email está disponible, lo usa para buscar el usuario local.
+     * Si no, intenta usar el userId remoto directamente (fallback para compatibilidad).
+     */
+    private Long resolveLocalUserId(Long remoteUserId, String userEmail) {
+        // Prioridad 1: Buscar por email (identificador global único)
+        if (userEmail != null && !userEmail.isBlank()) {
+            try {
+                return clienteRepository.findByEmail(userEmail)
+                    .map(cliente -> cliente.getId())
+                    .orElse(null);
+            } catch (Exception e) {
+                LOGGER.warning(() -> "Error buscando usuario por email " + userEmail + ": " + e.getMessage());
+            }
+        }
+        
+        // Fallback: Usar el userId remoto directamente (solo funciona si las bases de datos están sincronizadas)
+        LOGGER.warning(() -> String.format("⚠️ No se encontró email, usando userId remoto %d como fallback", remoteUserId));
+        return remoteUserId;
     }
 
     private void handleChannelMessage(JsonNode payload, String originServerId) throws IOException {
@@ -2185,6 +2233,7 @@ public class ServerPeerManager {
     private static final class DirectMessagePayload {
         private String messageId;
         private Long userId;
+        private String userEmail; // Email para identificación global entre servidores
         private JsonNode message;
 
         public String getMessageId() {
@@ -2201,6 +2250,14 @@ public class ServerPeerManager {
 
         public void setUserId(Long userId) {
             this.userId = userId;
+        }
+        
+        public String getUserEmail() {
+            return userEmail;
+        }
+        
+        public void setUserEmail(String userEmail) {
+            this.userEmail = userEmail;
         }
 
         public JsonNode getMessage() {

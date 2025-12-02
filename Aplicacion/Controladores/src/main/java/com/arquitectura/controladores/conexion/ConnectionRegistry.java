@@ -1,17 +1,5 @@
 package com.arquitectura.controladores.conexion;
 
-import com.arquitectura.controladores.p2p.ServerPeerManager;
-import com.arquitectura.dto.CommandEnvelope;
-import com.arquitectura.entidades.Canal;
-import com.arquitectura.repositorios.CanalRepository;
-import com.arquitectura.servicios.conexion.ConnectionGateway;
-import com.arquitectura.servicios.conexion.SessionDescriptor;
-import com.arquitectura.servicios.eventos.SessionEvent;
-import com.arquitectura.servicios.eventos.SessionEventBus;
-import com.arquitectura.servicios.eventos.SessionEventType;
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
-
 import java.io.BufferedWriter;
 import java.io.IOException;
 import java.io.OutputStreamWriter;
@@ -24,13 +12,25 @@ import java.util.HashSet;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.logging.Logger;
 import java.util.stream.Collectors;
-import java.util.Objects;
+
+import com.arquitectura.controladores.p2p.ServerPeerManager;
+import com.arquitectura.dto.CommandEnvelope;
+import com.arquitectura.entidades.Canal;
+import com.arquitectura.repositorios.CanalRepository;
+import com.arquitectura.servicios.conexion.ConnectionGateway;
+import com.arquitectura.servicios.conexion.SessionDescriptor;
+import com.arquitectura.servicios.eventos.SessionEvent;
+import com.arquitectura.servicios.eventos.SessionEventBus;
+import com.arquitectura.servicios.eventos.SessionEventType;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 
 public class ConnectionRegistry implements ConnectionGateway {
 
@@ -588,6 +588,7 @@ public class ConnectionRegistry implements ConnectionGateway {
             snapshot.getIp(),
             snapshot.getCanales()
         );
+        copy.setEmail(snapshot.getEmail());
         copy.setChannelUuids(snapshot.getChannelUuids());
         return copy;
     }
