@@ -178,6 +178,51 @@ public class ConnectionRegistry implements ConnectionGateway {
         unregister(sessionId);
     }
 
+    /**
+     * Cierra todas las sesiones activas de forma ordenada.
+     * Envía notificación de apagado a cada cliente y publica eventos LOGOUT.
+     * Este método debe llamarse durante el shutdown del servidor.
+     * 
+     * @param shutdownMessage Mensaje a enviar a los clientes antes de cerrar
+     */
+    public void shutdownAllSessions(String shutdownMessage) {
+        LOGGER.info("🔌 Iniciando cierre de todas las sesiones (" + contexts.size() + " conexiones activas)");
+        
+        // Preparar la notificación de shutdown
+        com.arquitectura.dto.ServerNotification notification = new com.arquitectura.dto.ServerNotification(
+            "SERVER_SHUTDOWN",
+            shutdownMessage != null ? shutdownMessage : "El servidor se está apagando",
+            "Cierre programado del servidor"
+        );
+        
+        // Copiar las claves para evitar ConcurrentModificationException
+        List<String> sessionIds = new ArrayList<>(contexts.keySet());
+        
+        for (String sessionId : sessionIds) {
+            ConnectionContext context = contexts.get(sessionId);
+            if (context == null) {
+                continue;
+            }
+            
+            try {
+                // Enviar notificación de shutdown al cliente
+                send(context, notification);
+                
+                // Dar un pequeño tiempo para que llegue el mensaje
+                Thread.sleep(50);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            } catch (Exception e) {
+                LOGGER.warning("Error enviando notificación de shutdown a " + sessionId + ": " + e.getMessage());
+            }
+            
+            // Cerrar la sesión (esto publicará el evento LOGOUT)
+            unregister(sessionId);
+        }
+        
+        LOGGER.info("✅ Todas las sesiones han sido cerradas");
+    }
+
     @Override
     public void broadcast(Object payload) {
         broadcastInternal(payload, true);

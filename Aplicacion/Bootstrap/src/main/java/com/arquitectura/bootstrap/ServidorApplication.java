@@ -10,6 +10,7 @@ import com.arquitectura.controladores.conexion.ConnectionRegistry;
 import com.arquitectura.controladores.p2p.ClusterChannelReplicationListener;
 import com.arquitectura.controladores.p2p.ClusterInvitationReplicationListener;
 import com.arquitectura.controladores.p2p.ClusterUserRegistrationListener;
+import com.arquitectura.controladores.p2p.ClusterUserStatusReplicationListener;
 import com.arquitectura.controladores.p2p.DatabaseSyncCoordinator;
 import com.arquitectura.controladores.p2p.ServerPeerManager;
 import com.arquitectura.repositorios.CanalRepository;
@@ -106,6 +107,7 @@ public final class ServidorApplication {
         );
         connectionRegistry.setPeerManager(peerManager);
         new ClusterUserRegistrationListener(peerManager, eventBus);
+        new ClusterUserStatusReplicationListener(peerManager, clienteRepository, eventBus);
         new ClusterChannelReplicationListener(peerManager, canalRepository, eventBus);
         new ClusterInvitationReplicationListener(peerManager, canalRepository, clienteRepository, invitacionRepository, eventBus);
         new com.arquitectura.servicios.eventos.LogSubscriber(logRepository, clienteRepository, canalRepository, eventBus);
@@ -137,6 +139,46 @@ public final class ServidorApplication {
         this.tcpServer = new TCPServer(registroService, canalService, mensajeriaService, reporteService, conexionService, audioStorageService, messageSyncService, eventBus, connectionRegistry, this.peerManager);
         this.peerManager.start();
         this.tcpServer.start();
+        
+        // Registrar shutdown hook para limpieza ordenada
+        Runtime.getRuntime().addShutdownHook(new Thread(this::shutdown, "Server-Shutdown-Hook"));
+    }
+
+    /**
+     * Realiza un cierre ordenado del servidor:
+     * 1. Notifica a los clientes conectados
+     * 2. Cierra todas las sesiones (publicando eventos LOGOUT)
+     * 3. Detiene el peer manager (notificando al cluster)
+     * 4. Detiene el servidor TCP
+     */
+    public void shutdown() {
+        java.util.logging.Logger logger = java.util.logging.Logger.getLogger(ServidorApplication.class.getName());
+        logger.info("🛑 Iniciando cierre ordenado del servidor...");
+        
+        try {
+            // 1. Cerrar todas las conexiones de clientes (esto también publica LOGOUT para cada uno)
+            connectionRegistry.shutdownAllSessions("El servidor se está apagando");
+            
+            // 2. Dar tiempo para que los eventos LOGOUT se repliquen al cluster
+            Thread.sleep(500);
+            
+            // 3. Detener el peer manager
+            if (peerManager != null) {
+                peerManager.stop();
+            }
+            
+            // 4. Detener el servidor TCP
+            if (tcpServer != null) {
+                tcpServer.shutdown();
+            }
+            
+            logger.info("✅ Servidor cerrado correctamente");
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            logger.warning("Shutdown interrumpido");
+        } catch (Exception e) {
+            logger.warning("Error durante el shutdown: " + e.getMessage());
+        }
     }
 
     public ServidorController createServidorController(ServidorView view) {

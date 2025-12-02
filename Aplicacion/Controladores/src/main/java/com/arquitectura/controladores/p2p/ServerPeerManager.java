@@ -1228,10 +1228,53 @@ public class ServerPeerManager {
         JsonNode payload = envelope.getPayload();
         JsonNode messageNode = extractBroadcastMessage(payload);
         if (messageNode != null) {
-            registry.broadcastLocal(messageNode);
+            // Transformar el mensaje si es un USER_STATUS_CHANGED para usar ID local
+            JsonNode transformedNode = transformUserStatusForLocalBroadcast(messageNode);
+            registry.broadcastLocal(transformedNode);
             applyClusterSideEffects(messageNode);
         }
         relayStateUpdate(connection, PeerMessageType.BROADCAST, payload, envelope.getOrigin());
+    }
+    
+    /**
+     * Transforma un mensaje USER_STATUS_CHANGED para usar el ID local del usuario.
+     * Esto es necesario porque los IDs de usuario pueden diferir entre servidores.
+     */
+    private JsonNode transformUserStatusForLocalBroadcast(JsonNode messageNode) {
+        if (messageNode == null || !messageNode.isObject()) {
+            return messageNode;
+        }
+        
+        JsonNode eventNode = messageNode.get("evento");
+        if (eventNode == null || !"USER_STATUS_CHANGED".equals(eventNode.asText())) {
+            return messageNode; // No es un evento de estado, devolver sin modificar
+        }
+        
+        JsonNode emailNode = messageNode.get("usuarioEmail");
+        if (emailNode == null || emailNode.isNull()) {
+            return messageNode; // No hay email, no podemos transformar
+        }
+        
+        String email = emailNode.asText();
+        if (email == null || email.isBlank()) {
+            return messageNode;
+        }
+        
+        // Buscar el usuario local por email
+        var localCliente = clienteRepository.findByEmail(email).orElse(null);
+        if (localCliente == null) {
+            return messageNode; // No encontrado localmente, devolver sin modificar
+        }
+        
+        // Crear una copia del mensaje con el ID local
+        try {
+            com.fasterxml.jackson.databind.node.ObjectNode modifiedNode = messageNode.deepCopy();
+            modifiedNode.put("usuarioId", localCliente.getId());
+            return modifiedNode;
+        } catch (Exception e) {
+            LOGGER.log(Level.WARNING, "Error transformando USER_STATUS_CHANGED para broadcast local", e);
+            return messageNode;
+        }
     }
 
     private void applyClusterSideEffects(JsonNode messageNode) {
@@ -1248,13 +1291,33 @@ public class ServerPeerManager {
         }
         try {
             ConnectionStatusUpdateDto update = mapper.treeToValue(messageNode, ConnectionStatusUpdateDto.class);
-            if (update.getUsuarioId() == null) {
+            
+            // Primero intentar buscar por email (más confiable entre servidores con diferentes IDs)
+            Long localUserId = null;
+            if (update.getUsuarioEmail() != null && !update.getUsuarioEmail().isBlank()) {
+                localUserId = clienteRepository.findByEmail(update.getUsuarioEmail())
+                    .map(cliente -> cliente.getId())
+                    .orElse(null);
+            }
+            
+            // Fallback al ID si no encontramos por email
+            if (localUserId == null) {
+                localUserId = update.getUsuarioId();
+            }
+            
+            if (localUserId == null) {
+                LOGGER.warning(() -> "No se pudo resolver usuario local para actualización de estado: " + 
+                    update.getUsuarioEmail());
                 return;
             }
-            clienteRepository.setConnected(update.getUsuarioId(), update.isConectado());
+            
+            clienteRepository.setConnected(localUserId, update.isConectado());
+            
+            final Long finalLocalUserId = localUserId;
             LOGGER.fine(() -> String.format(
-                "Estado de usuario %d actualizado por broadcast remoto (%s)",
-                update.getUsuarioId(),
+                "Estado de usuario %d (email: %s) actualizado por broadcast remoto (%s)",
+                finalLocalUserId,
+                update.getUsuarioEmail(),
                 update.isConectado() ? "conectado" : "desconectado"));
         } catch (Exception e) {
             LOGGER.log(Level.WARNING, "No se pudo aplicar actualización de estado recibida del clúster", e);
@@ -1567,12 +1630,63 @@ public class ServerPeerManager {
                     payload.setClienteId(snapshot.getClienteId());
                     relayStateUpdate(null, PeerMessageType.CLIENT_DISCONNECTED,
                         mapper.valueToTree(payload), remoteId);
+                    
+                    // Notificar a los clientes locales que este usuario se desconectó
+                    notifyLocalClientsUserDisconnected(snapshot);
                 }
             }
             LOGGER.info(() -> "Conexión con servidor " + remoteId + " cerrada");
             if (removed) {
                 notifyPeerDisconnected(remoteId);
             }
+        }
+    }
+    
+    /**
+     * Notifica a los clientes locales que un usuario de un servidor remoto se ha desconectado.
+     * Esto es necesario para actualizar el estado de los usuarios cuando un servidor peer se cae.
+     */
+    private void notifyLocalClientsUserDisconnected(RemoteSessionSnapshot snapshot) {
+        if (snapshot == null || snapshot.getClienteId() == null) {
+            return;
+        }
+        
+        try {
+            // Buscar el usuario local por email para obtener el ID correcto
+            Long localUserId = null;
+            String email = snapshot.getEmail();
+            if (email != null && !email.isBlank()) {
+                localUserId = clienteRepository.findByEmail(email)
+                    .map(cliente -> cliente.getId())
+                    .orElse(null);
+            }
+            
+            if (localUserId == null) {
+                LOGGER.fine(() -> "No se encontró usuario local para notificar desconexión: " + email);
+                return;
+            }
+            
+            // Actualizar el estado en la BD local
+            clienteRepository.setConnected(localUserId, false);
+            
+            // Crear y enviar notificación a clientes locales
+            ConnectionStatusUpdateDto dto = new ConnectionStatusUpdateDto();
+            dto.setEvento("USER_STATUS_CHANGED");
+            dto.setUsuarioId(localUserId);
+            dto.setUsuarioNombre(snapshot.getUsuario());
+            dto.setUsuarioEmail(email);
+            dto.setConectado(false);
+            dto.setSesionesActivas(0);
+            dto.setTimestamp(java.time.LocalDateTime.now());
+            
+            registry.broadcastLocal(dto);
+            
+            final Long finalLocalUserId = localUserId;
+            LOGGER.info(() -> String.format(
+                "Notificado a clientes locales: usuario %d (%s) desconectado por caída del servidor remoto",
+                finalLocalUserId, email));
+        } catch (Exception e) {
+            LOGGER.log(Level.WARNING, "Error notificando desconexión de usuario remoto a clientes locales", e);
         }
     }
 
