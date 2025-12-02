@@ -22,6 +22,21 @@ services:
       - prometheus
       - loki
 
+  # Service Discovery para Prometheus (Node.js)
+  service-discovery:
+    image: node:18-alpine
+    container_name: frontend-service-discovery
+    volumes:
+      - ./service-discovery.js:/app/service-discovery.js:ro
+      - prometheus-targets:/etc/prometheus/targets
+    working_dir: /app
+    command: node service-discovery.js
+    networks:
+      - frontend-monitoring
+    restart: unless-stopped
+    depends_on:
+      - prometheus
+
   # Grafana para el Frontend - Puerto 3002
   grafana:
     image: grafana/grafana:latest
@@ -32,7 +47,6 @@ services:
       - GF_SECURITY_ADMIN_PASSWORD=admin123
       - GF_USERS_ALLOW_SIGN_UP=false
       - GF_SERVER_ROOT_URL=http://localhost:3002
-      - GF_INSTALL_PLUGINS=grafana-clock-panel,grafana-simple-json-datasource
     volumes:
       - frontend-grafana-data:/var/lib/grafana
       - ./monitoring/grafana/provisioning:/etc/grafana/provisioning
@@ -50,6 +64,7 @@ services:
     volumes:
       - ./monitoring/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
       - frontend-prometheus-data:/prometheus
+      - prometheus-targets:/etc/prometheus/targets
     command:
       - '--config.file=/etc/prometheus/prometheus.yml'
       - '--storage.tsdb.path=/prometheus'
@@ -97,6 +112,8 @@ volumes:
   frontend-prometheus-data:
     driver: local
   frontend-loki-data:
+    driver: local
+  prometheus-targets:
     driver: local
 
 networks:

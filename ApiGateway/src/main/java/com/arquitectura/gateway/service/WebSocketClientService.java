@@ -1,6 +1,16 @@
 package com.arquitectura.gateway.service;
 
-import com.arquitectura.gateway.config.ServersConfiguration;
+import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.ScheduledFuture;
+import java.util.concurrent.TimeUnit;
+
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -10,13 +20,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestTemplate;
 
-import java.time.LocalDateTime;
-import java.util.*;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.Executors;
-import java.util.concurrent.ScheduledExecutorService;
-import java.util.concurrent.ScheduledFuture;
-import java.util.concurrent.TimeUnit;
+import com.arquitectura.gateway.config.ServersConfiguration;
 
 /**
  * Servicio para recolectar datos de servidores REST configurados estáticamente.
@@ -33,11 +37,15 @@ public class WebSocketClientService {
     @Autowired
     private DataAggregationService aggregationService;
     
+    @Autowired
+    private com.arquitectura.gateway.websocket.WebSocketController webSocketController;
+    
     private final RestTemplate restTemplate = new RestTemplate();
     private final ScheduledExecutorService scheduler = Executors.newScheduledThreadPool(4);
     private final Map<String, ScheduledFuture<?>> metricsJobs = new ConcurrentHashMap<>();
     private final Map<String, ScheduledFuture<?>> logsJobs = new ConcurrentHashMap<>();
     private final Map<String, ServerStatus> serverStatuses = new ConcurrentHashMap<>();
+    private ScheduledFuture<?> serverPollingJob;
     
     /**
      * Inicia la recolección automática cuando la aplicación está lista.
@@ -58,6 +66,101 @@ public class WebSocketClientService {
         }
         
         logger.info("Recolección automática iniciada para {} servidores", servers.size());
+        
+        // Iniciar polling de estado de servidores
+        startServerStatusPolling();
+    }
+    
+    /**
+     * Inicia el polling automático para detectar cambios de estado de servidores.
+     */
+    private void startServerStatusPolling() {
+        logger.info("Iniciando polling de estado de servidores cada 10 segundos...");
+        
+        serverPollingJob = scheduler.scheduleAtFixedRate(
+            this::checkAllServersStatus,
+            10, // Iniciar después de 10 segundos
+            10, // Ejecutar cada 10 segundos
+            TimeUnit.SECONDS
+        );
+    }
+    
+    /**
+     * Verifica el estado de todos los servidores configurados.
+     */
+    private void checkAllServersStatus() {
+        try {
+            logger.debug("Verificando estado de todos los servidores...");
+            
+            List<ServersConfiguration.ServerConfig> servers = serversConfig.getAllServers();
+            
+            for (ServersConfiguration.ServerConfig server : servers) {
+                checkServerStatus(server);
+            }
+            
+            logger.debug("Verificación de estado completada para {} servidores", servers.size());
+            
+        } catch (Exception e) {
+            logger.error("Error durante la verificación de estado de servidores: {}", e.getMessage());
+        }
+    }
+    
+    /**
+     * Verifica el estado de un servidor específico y notifica cambios.
+     */
+    private void checkServerStatus(ServersConfiguration.ServerConfig server) {
+        try {
+            boolean currentlyAvailable = isServerAvailable(server);
+            ServerStatus status = serverStatuses.get(server.getId());
+            
+            if (status == null) {
+                // Primer check del servidor
+                status = new ServerStatus(server.getId(), currentlyAvailable);
+                serverStatuses.put(server.getId(), status);
+                
+                if (currentlyAvailable) {
+                    logger.info("Servidor {} detectado como disponible", server.getId());
+                    // Solo iniciar recolección si no está ya activa
+                    if (!metricsJobs.containsKey(server.getId())) {
+                        startCollectionForServer(server);
+                    }
+                } else {
+                    logger.info("Servidor {} detectado como no disponible", server.getId());
+                    aggregationService.markServerInactive(server.getId());
+                    webSocketController.broadcastServerDisconnected(server.getId());
+                }
+            } else {
+                // Verificar si cambió el estado
+                boolean wasActive = status.isActive();
+                
+                if (currentlyAvailable && !wasActive) {
+                    // Servidor se conectó
+                    logger.info("Servidor {} se ha conectado", server.getId());
+                    status.setActive(true);
+                    aggregationService.markServerActive(server.getId());
+                    
+                    // Iniciar recolección si no está activa
+                    if (!metricsJobs.containsKey(server.getId())) {
+                        startCollectionForServer(server);
+                    } else {
+                        webSocketController.broadcastServerConnected(server.getId(), server.getHost(), server.getPort());
+                    }
+                    
+                } else if (!currentlyAvailable && wasActive) {
+                    // Servidor se desconectó
+                    logger.info("Servidor {} se ha desconectado", server.getId());
+                    status.setActive(false);
+                    aggregationService.markServerInactive(server.getId());
+                    webSocketController.broadcastServerDisconnected(server.getId());
+                    
+                    // Detener recolección
+                    stopCollectionForServer(server.getId());
+                }
+            }
+            
+        } catch (Exception e) {
+            logger.error("Error verificando estado del servidor {}: {}", server.getId(), e.getMessage());
+        }
     }
     
     /**
@@ -78,6 +181,9 @@ public class WebSocketClientService {
             // Inicializar estado del servidor
             serverStatuses.put(server.getId(), new ServerStatus(server.getId(), true));
             aggregationService.markServerActive(server.getId());
+            
+            // Notificar conexión del servidor via WebSocket
+            webSocketController.broadcastServerConnected(server.getId(), server.getHost(), server.getPort());
             
             // Programar recolección de métricas
             ScheduledFuture<?> metricsJob = scheduler.scheduleAtFixedRate(
@@ -131,6 +237,8 @@ public class WebSocketClientService {
                 ServerStatus status = serverStatuses.get(server.getId());
                 if (status != null) {
                     status.updateLastSuccessfulMetrics();
+                    // Marcar como activo y notificar si cambió el estado
+                    updateServerStatus(server.getId(), true);
                 }
                 
                 logger.debug("Métricas recolectadas exitosamente para servidor: {}", server.getId());
@@ -138,14 +246,16 @@ public class WebSocketClientService {
             } else {
                 logger.warn("Respuesta vacía o error HTTP para métricas del servidor {}: {}", 
                            server.getId(), response.getStatusCode());
-                // Marcar servidor como inactivo
+                // Marcar servidor como inactivo y notificar
                 aggregationService.markServerInactive(server.getId());
+                updateServerStatus(server.getId(), false);
             }
             
         } catch (Exception e) {
             logger.error("Error recolectando métricas del servidor {}: {}", server.getId(), e.getMessage());
-            // Marcar servidor como inactivo cuando falla la conexión
+            // Marcar servidor como inactivo cuando falla la conexión y notificar
             aggregationService.markServerInactive(server.getId());
+            updateServerStatus(server.getId(), false);
         }
     }
     
@@ -324,6 +434,9 @@ public class WebSocketClientService {
         // Marcar servidor como inactivo en agregación
         aggregationService.markServerInactive(serverId);
         
+        // Notificar desconexión del servidor via WebSocket
+        webSocketController.broadcastServerDisconnected(serverId);
+        
         logger.info("Recolección detenida para servidor: {}", serverId);
     }
     
@@ -375,6 +488,36 @@ public class WebSocketClientService {
         } catch (Exception e) {
             logger.warn("Servidor {} no disponible - {}", server.getId(), e.getMessage());
             return false;
+        }
+    }
+    
+    /**
+     * Cambia el estado del servidor y notifica via WebSocket si hay cambio.
+     */
+    private void updateServerStatus(String serverId, boolean newStatus) {
+        ServerStatus status = serverStatuses.get(serverId);
+        if (status == null) {
+            return;
+        }
+        
+        boolean oldStatus = status.isActive();
+        
+        // Solo notificar si hay cambio de estado
+        if (oldStatus != newStatus) {
+            status.setActive(newStatus);
+            
+            if (newStatus) {
+                // Servidor volvió a estar activo
+                ServersConfiguration.ServerConfig server = serversConfig.findServerById(serverId);
+                if (server != null) {
+                    logger.info("Servidor {} cambió a ACTIVO", serverId);
+                    webSocketController.broadcastServerConnected(serverId, server.getHost(), server.getPort());
+                }
+            } else {
+                // Servidor se volvió inactivo
+                logger.warn("Servidor {} cambió a INACTIVO", serverId);
+                webSocketController.broadcastServerDisconnected(serverId);
+            }
         }
     }
     

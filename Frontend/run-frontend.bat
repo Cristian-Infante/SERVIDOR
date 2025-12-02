@@ -55,6 +55,14 @@ if !errorlevel! equ 0 (
     echo [×] Loki: No disponible
 )
 
+:: Verificar API Gateway (externo)
+netstat -ano | findstr ":8091" >nul 2>&1
+if !errorlevel! equ 0 (
+    echo [✓] API Gateway: http://localhost:8091 (externo)
+) else (
+    echo [!] API Gateway: No detectado - Necesario para métricas
+)
+
 echo.
 echo ═══════════════════════════════════════════
 echo OPCIONES DISPONIBLES:

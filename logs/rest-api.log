@@ -1,2 +1,81 @@
-2025-11-27 03:11:49 [HikariPool-1 housekeeper] WARN  com.zaxxer.hikari.pool.HikariPool - HikariPool-1 - Thread starvation or clock leap detected (housekeeper delta=3h10m59s860ms536µs900ns).
-2025-11-27 07:46:58 [HikariPool-1 housekeeper] WARN  com.zaxxer.hikari.pool.HikariPool - HikariPool-1 - Thread starvation or clock leap detected (housekeeper delta=4h31m34s788ms401µs800ns).
+2025-12-01 03:09:13 [HikariPool-1 housekeeper] WARN  com.zaxxer.hikari.pool.HikariPool - HikariPool-1 - Thread starvation or clock leap detected (housekeeper delta=4h36m56s792ms794µs900ns).
+2025-12-01 17:49:08 [main] INFO  c.a.restapi.RestApiApplication - Starting RestApiApplication v1.0-SNAPSHOT using Java 22.0.1 with PID 64056 (C:\Users\USUARIO\OneDrive\Escritorio\Servidor\Aplicacion\RestAPI\target\RestAPI-1.0-SNAPSHOT.jar started by USUARIO in C:\Users\USUARIO\OneDrive\Escritorio\Servidor)
+2025-12-01 17:49:08 [main] INFO  c.a.restapi.RestApiApplication - No active profile set, falling back to 1 default profile: "default"
+2025-12-01 17:49:10 [main] INFO  o.s.b.w.e.tomcat.TomcatWebServer - Tomcat initialized with port 8089 (http)
+2025-12-01 17:49:10 [main] INFO  o.s.b.w.s.c.ServletWebServerApplicationContext - Root WebApplicationContext: initialization completed in 1690 ms
+2025-12-01 17:49:10 [main] INFO  c.a.r.websocket.LogsWebSocketHandler - LogsWebSocketHandler inicializado. Buscará logs después de: 2025-11-30T17:49:10.800190900
+2025-12-01 17:49:11 [main] INFO  o.s.b.a.e.web.EndpointLinksResolver - Exposing 3 endpoint(s) beneath base path '/actuator'
+2025-12-01 17:49:12 [main] INFO  o.s.b.w.e.tomcat.TomcatWebServer - Tomcat started on port 8089 (http) with context path ''
+2025-12-01 17:49:12 [main] INFO  c.a.restapi.RestApiApplication - Started RestApiApplication in 4.496 seconds (process running for 5.152)
+2025-12-01 17:49:15 [http-nio-8089-exec-1] INFO  o.s.web.servlet.DispatcherServlet - Initializing Servlet 'dispatcherServlet'
+2025-12-01 17:49:15 [http-nio-8089-exec-1] INFO  o.s.web.servlet.DispatcherServlet - Completed initialization in 1 ms
+2025-12-01 19:07:45 [main] INFO  c.a.restapi.RestApiApplication - Starting RestApiApplication v1.0-SNAPSHOT using Java 22.0.1 with PID 23956 (C:\Users\USUARIO\OneDrive\Escritorio\Servidor\Aplicacion\RestAPI\target\RestAPI-1.0-SNAPSHOT.jar started by USUARIO in C:\Users\USUARIO\OneDrive\Escritorio\Servidor)
+2025-12-01 19:07:45 [main] INFO  c.a.restapi.RestApiApplication - No active profile set, falling back to 1 default profile: "default"
+2025-12-01 19:07:46 [main] INFO  o.s.b.w.e.tomcat.TomcatWebServer - Tomcat initialized with port 8089 (http)
+2025-12-01 19:07:46 [main] INFO  o.s.b.w.s.c.ServletWebServerApplicationContext - Root WebApplicationContext: initialization completed in 1721 ms
+2025-12-01 19:07:47 [main] INFO  c.a.r.websocket.LogsWebSocketHandler - LogsWebSocketHandler inicializado. Buscará logs después de: 2025-11-30T19:07:47.265841800
+2025-12-01 19:07:47 [main] INFO  o.s.b.a.e.web.EndpointLinksResolver - Exposing 3 endpoint(s) beneath base path '/actuator'
+2025-12-01 19:07:48 [main] INFO  o.s.b.w.e.tomcat.TomcatWebServer - Tomcat started on port 8089 (http) with context path ''
+2025-12-01 19:07:48 [main] INFO  c.a.restapi.RestApiApplication - Started RestApiApplication in 4.667 seconds (process running for 5.358)
+2025-12-01 19:07:51 [http-nio-8089-exec-1] INFO  o.s.web.servlet.DispatcherServlet - Initializing Servlet 'dispatcherServlet'
+2025-12-01 19:07:51 [http-nio-8089-exec-1] INFO  o.s.web.servlet.DispatcherServlet - Completed initialization in 1 ms
+2025-12-01 19:21:38 [main] INFO  c.a.restapi.RestApiApplication - Starting RestApiApplication v1.0-SNAPSHOT using Java 22.0.1 with PID 34356 (C:\Users\USUARIO\OneDrive\Escritorio\Servidor\Aplicacion\RestAPI\target\RestAPI-1.0-SNAPSHOT.jar started by USUARIO in C:\Users\USUARIO\OneDrive\Escritorio\Servidor)
+2025-12-01 19:21:38 [main] INFO  c.a.restapi.RestApiApplication - No active profile set, falling back to 1 default profile: "default"
+2025-12-01 19:21:40 [main] INFO  o.s.b.w.e.tomcat.TomcatWebServer - Tomcat initialized with port 8089 (http)
+2025-12-01 19:21:40 [main] INFO  o.s.b.w.s.c.ServletWebServerApplicationContext - Root WebApplicationContext: initialization completed in 1742 ms
+2025-12-01 19:21:40 [main] INFO  c.a.r.websocket.LogsWebSocketHandler - LogsWebSocketHandler inicializado. Buscará logs después de: 2025-11-30T19:21:40.485670300
+2025-12-01 19:21:40 [main] INFO  o.s.b.a.e.web.EndpointLinksResolver - Exposing 3 endpoint(s) beneath base path '/actuator'
+2025-12-01 19:21:41 [main] INFO  o.s.b.w.e.tomcat.TomcatWebServer - Tomcat started on port 8089 (http) with context path ''
+2025-12-01 19:21:41 [main] INFO  c.a.restapi.RestApiApplication - Started RestApiApplication in 4.315 seconds (process running for 5.002)
+2025-12-01 19:21:41 [http-nio-8089-exec-1] INFO  o.s.web.servlet.DispatcherServlet - Initializing Servlet 'dispatcherServlet'
+2025-12-01 19:21:41 [http-nio-8089-exec-1] INFO  o.s.web.servlet.DispatcherServlet - Completed initialization in 2 ms
+2025-12-01 19:23:47 [main] INFO  c.a.restapi.RestApiApplication - Starting RestApiApplication v1.0-SNAPSHOT using Java 22.0.1 with PID 23532 (C:\Users\USUARIO\OneDrive\Escritorio\Servidor\Aplicacion\RestAPI\target\RestAPI-1.0-SNAPSHOT.jar started by USUARIO in C:\Users\USUARIO\OneDrive\Escritorio\Servidor)
+2025-12-01 19:23:47 [main] INFO  c.a.restapi.RestApiApplication - No active profile set, falling back to 1 default profile: "default"
+2025-12-01 19:23:49 [main] INFO  o.s.b.w.e.tomcat.TomcatWebServer - Tomcat initialized with port 8089 (http)
+2025-12-01 19:23:49 [main] INFO  o.s.b.w.s.c.ServletWebServerApplicationContext - Root WebApplicationContext: initialization completed in 1556 ms
+2025-12-01 19:23:49 [main] INFO  c.a.r.websocket.LogsWebSocketHandler - LogsWebSocketHandler inicializado. Buscará logs después de: 2025-11-30T19:23:49.834107700
+2025-12-01 19:23:50 [main] INFO  o.s.b.a.e.web.EndpointLinksResolver - Exposing 3 endpoint(s) beneath base path '/actuator'
+2025-12-01 19:23:51 [main] INFO  o.s.b.w.e.tomcat.TomcatWebServer - Tomcat started on port 8089 (http) with context path ''
+2025-12-01 19:23:51 [main] INFO  c.a.restapi.RestApiApplication - Started RestApiApplication in 4.22 seconds (process running for 4.837)
+2025-12-01 19:23:54 [http-nio-8089-exec-1] INFO  o.s.web.servlet.DispatcherServlet - Initializing Servlet 'dispatcherServlet'
+2025-12-01 19:23:54 [http-nio-8089-exec-1] INFO  o.s.web.servlet.DispatcherServlet - Completed initialization in 0 ms
+2025-12-01 19:25:15 [main] INFO  c.a.restapi.RestApiApplication - Starting RestApiApplication v1.0-SNAPSHOT using Java 22.0.1 with PID 64056 (C:\Users\USUARIO\OneDrive\Escritorio\Servidor\Aplicacion\RestAPI\target\RestAPI-1.0-SNAPSHOT.jar started by USUARIO in C:\Users\USUARIO\OneDrive\Escritorio\Servidor)
+2025-12-01 19:25:15 [main] INFO  c.a.restapi.RestApiApplication - No active profile set, falling back to 1 default profile: "default"
+2025-12-01 19:25:17 [main] INFO  o.s.b.w.e.tomcat.TomcatWebServer - Tomcat initialized with port 8089 (http)
+2025-12-01 19:25:18 [main] INFO  o.s.b.w.s.c.ServletWebServerApplicationContext - Root WebApplicationContext: initialization completed in 1941 ms
+2025-12-01 19:25:18 [main] INFO  c.a.r.websocket.LogsWebSocketHandler - LogsWebSocketHandler inicializado. Buscará logs después de: 2025-11-30T19:25:18.363564600
+2025-12-01 19:25:18 [main] INFO  o.s.b.a.e.web.EndpointLinksResolver - Exposing 3 endpoint(s) beneath base path '/actuator'
+2025-12-01 19:25:19 [main] INFO  o.s.b.w.e.tomcat.TomcatWebServer - Tomcat started on port 8089 (http) with context path ''
+2025-12-01 19:25:19 [main] INFO  c.a.restapi.RestApiApplication - Started RestApiApplication in 4.895 seconds (process running for 5.642)
+2025-12-01 19:25:19 [http-nio-8089-exec-1] INFO  o.s.web.servlet.DispatcherServlet - Initializing Servlet 'dispatcherServlet'
+2025-12-01 19:25:19 [http-nio-8089-exec-1] INFO  o.s.web.servlet.DispatcherServlet - Completed initialization in 3 ms
+2025-12-01 19:28:38 [main] INFO  c.a.restapi.RestApiApplication - Starting RestApiApplication v1.0-SNAPSHOT using Java 22.0.1 with PID 56352 (C:\Users\USUARIO\OneDrive\Escritorio\Servidor\Aplicacion\RestAPI\target\RestAPI-1.0-SNAPSHOT.jar started by USUARIO in C:\Users\USUARIO\OneDrive\Escritorio\Servidor)
+2025-12-01 19:28:38 [main] INFO  c.a.restapi.RestApiApplication - No active profile set, falling back to 1 default profile: "default"
+2025-12-01 19:28:40 [main] INFO  o.s.b.w.e.tomcat.TomcatWebServer - Tomcat initialized with port 8089 (http)
+2025-12-01 19:28:40 [main] INFO  o.s.b.w.s.c.ServletWebServerApplicationContext - Root WebApplicationContext: initialization completed in 1918 ms
+2025-12-01 19:28:40 [main] INFO  c.a.r.websocket.LogsWebSocketHandler - LogsWebSocketHandler inicializado. Buscará logs después de: 2025-11-30T19:28:40.947254200
+2025-12-01 19:28:41 [main] INFO  o.s.b.a.e.web.EndpointLinksResolver - Exposing 3 endpoint(s) beneath base path '/actuator'
+2025-12-01 19:28:42 [main] INFO  o.s.b.w.e.tomcat.TomcatWebServer - Tomcat started on port 8089 (http) with context path ''
+2025-12-01 19:28:42 [main] INFO  c.a.restapi.RestApiApplication - Started RestApiApplication in 4.7 seconds (process running for 5.317)
+2025-12-01 19:28:44 [http-nio-8089-exec-1] INFO  o.s.web.servlet.DispatcherServlet - Initializing Servlet 'dispatcherServlet'
+2025-12-01 19:28:44 [http-nio-8089-exec-1] INFO  o.s.web.servlet.DispatcherServlet - Completed initialization in 0 ms
+2025-12-01 19:31:04 [main] INFO  c.a.restapi.RestApiApplication - Starting RestApiApplication v1.0-SNAPSHOT using Java 22.0.1 with PID 14948 (C:\Users\USUARIO\OneDrive\Escritorio\Servidor\Aplicacion\RestAPI\target\RestAPI-1.0-SNAPSHOT.jar started by USUARIO in C:\Users\USUARIO\OneDrive\Escritorio\Servidor)
+2025-12-01 19:31:04 [main] INFO  c.a.restapi.RestApiApplication - No active profile set, falling back to 1 default profile: "default"
+2025-12-01 19:31:06 [main] INFO  o.s.b.w.e.tomcat.TomcatWebServer - Tomcat initialized with port 8089 (http)
+2025-12-01 19:31:06 [main] INFO  o.s.b.w.s.c.ServletWebServerApplicationContext - Root WebApplicationContext: initialization completed in 1670 ms
+2025-12-01 19:31:07 [main] INFO  c.a.r.websocket.LogsWebSocketHandler - LogsWebSocketHandler inicializado. Buscará logs después de: 2025-11-30T19:31:07.081825400
+2025-12-01 19:31:07 [main] INFO  o.s.b.a.e.web.EndpointLinksResolver - Exposing 3 endpoint(s) beneath base path '/actuator'
+2025-12-01 19:31:08 [main] INFO  o.s.b.w.e.tomcat.TomcatWebServer - Tomcat started on port 8089 (http) with context path ''
+2025-12-01 19:31:08 [main] INFO  c.a.restapi.RestApiApplication - Started RestApiApplication in 4.611 seconds (process running for 5.411)
+2025-12-01 19:31:09 [http-nio-8089-exec-1] INFO  o.s.web.servlet.DispatcherServlet - Initializing Servlet 'dispatcherServlet'
+2025-12-01 19:31:09 [http-nio-8089-exec-1] INFO  o.s.web.servlet.DispatcherServlet - Completed initialization in 2 ms
+2025-12-01 19:47:50 [main] INFO  c.a.restapi.RestApiApplication - Starting RestApiApplication v1.0-SNAPSHOT using Java 22.0.1 with PID 36944 (C:\Users\USUARIO\OneDrive\Escritorio\Servidor\Aplicacion\RestAPI\target\RestAPI-1.0-SNAPSHOT.jar started by USUARIO in C:\Users\USUARIO\OneDrive\Escritorio\Servidor)
+2025-12-01 19:47:50 [main] INFO  c.a.restapi.RestApiApplication - No active profile set, falling back to 1 default profile: "default"
+2025-12-01 19:47:52 [main] INFO  o.s.b.w.e.tomcat.TomcatWebServer - Tomcat initialized with port 8089 (http)
+2025-12-01 19:47:52 [main] INFO  o.s.b.w.s.c.ServletWebServerApplicationContext - Root WebApplicationContext: initialization completed in 2166 ms
+2025-12-01 19:47:53 [main] INFO  c.a.r.websocket.LogsWebSocketHandler - LogsWebSocketHandler inicializado. Buscará logs después de: 2025-11-30T19:47:53.323101800
+2025-12-01 19:47:53 [main] INFO  o.s.b.a.e.web.EndpointLinksResolver - Exposing 3 endpoint(s) beneath base path '/actuator'
+2025-12-01 19:47:54 [main] INFO  o.s.b.w.e.tomcat.TomcatWebServer - Tomcat started on port 8089 (http) with context path ''
+2025-12-01 19:47:54 [main] INFO  c.a.restapi.RestApiApplication - Started RestApiApplication in 5.389 seconds (process running for 6.181)
+2025-12-01 19:48:03 [http-nio-8089-exec-1] INFO  o.s.web.servlet.DispatcherServlet - Initializing Servlet 'dispatcherServlet'
+2025-12-01 19:48:03 [http-nio-8089-exec-1] INFO  o.s.web.servlet.DispatcherServlet - Completed initialization in 2 ms

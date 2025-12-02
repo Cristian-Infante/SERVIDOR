@@ -1,6 +1,7 @@
 global:
-  scrape_interval: 15s
-  evaluation_interval: 15s
+  scrape_interval: 5s
+  evaluation_interval: 5s
+  scrape_timeout: 4s
   external_labels:
     monitor: 'frontend-prometheus'
 
@@ -25,14 +26,24 @@ scrape_configs:
     scrape_timeout: 5s
     honor_labels: true
 
-  # Scrape directo de servidores REST (si exponen métricas)
+  # Scrape dinámico de servidores REST usando Service Discovery
   - job_name: 'rest-servers'
-    static_configs:
-      - targets: ['host.docker.internal:8089']
-    scrape_interval: 15s
+    file_sd_configs:
+      - files:
+          - '/etc/prometheus/targets/rest-servers.json'
+        refresh_interval: 10s
+    scrape_interval: 5s
     metrics_path: '/actuator/prometheus'
-    scrape_timeout: 5s
-    honor_labels: true
+    scrape_timeout: 4s
+    honor_labels: false
+    params:
+      match[]:
+        - '{__name__=~".*"}'  # Scrape all metrics at once
+    # Métricas path para Spring Boot Actuator
+    metric_relabel_configs:
+      - source_labels: [__name__]
+        target_label: __name__
+        regex: '(.+)'
 
   # Métricas del contenedor de Grafana
   - job_name: 'grafana'

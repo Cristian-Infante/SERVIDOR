@@ -206,6 +206,8 @@
                 this.connected = false;
                 this.serverModals = new Map();
                 this.connectedServers = [];
+                this.dynamicUpdateTimeout = null;
+                this.lastMetricsData = null;
                 
                 this.initializeElements();
                 this.bindEvents();
@@ -225,6 +227,10 @@
                 
                 // Estado de datos para health checks
                 this.lastMetricsData = null;
+                
+                // Inicializar con listas vacías
+                this.clearServersList();
+                this.clearAllModals();
             }
 
             get baseUrl() {
@@ -291,10 +297,7 @@
                             this.updateStatus('gateway-available', 'Gateway disponible');
                             this.connectBtn.disabled = false;
                             
-                            // Información de servidores configurados (sección eliminada)
-                            // this.displayServersConfiguration(data);
-
-                            this.addMessage('success', `Gateway disponible - ${data.totalServers} servidor(es) configurado(s)`);
+                            this.addMessage('success', `Gateway disponible - Haz clic en "Conectar" para ver servidores`);
                         } else {
                             throw new Error(data.message || 'Gateway responde pero con error');
                         }
@@ -359,8 +362,8 @@
                 this.addMessage('info', 'Conectando al API Gateway via WebSocket...');
                 
                 try {
-                    // Cargar servidores en paralelo mientras se conecta WebSocket
-                    this.loadAvailableServersAsync();
+                    // Cargar servidores dinámicamente mientras se conecta WebSocket
+                    this.loadDynamicServers();
                     
                     this.socket = new SockJS(`${this.baseUrl}/ws`);
                     this.stompClient = window.Stomp.over(this.socket);
@@ -493,6 +496,12 @@
                 this.stompClient.subscribe('/topic/logs', (message) => {
                     const data = JSON.parse(message.body);
                     this.handleLogsUpdate(data);
+                });
+
+                // Suscribirse a eventos de servidores (conexión/desconexión)
+                this.stompClient.subscribe('/topic/servers', (message) => {
+                    const data = JSON.parse(message.body);
+                    this.handleServerEvent(data);
                 });
             }
 
@@ -1023,6 +1032,20 @@
                     </div>
                 `;
                 this.serverModals.clear();
+                this.connectedServers = [];
+                
+                // Limpiar también la lista de servidores
+                this.clearServersList();
+            }
+
+            clearServersList() {
+                this.serversList.innerHTML = `
+                    <div class="text-center py-8 text-blue-500">
+                        <i class="fas fa-server text-4xl mb-3 text-blue-300"></i>
+                        <p>No conectado al Gateway</p>
+                        <p class="text-sm">Presiona "Conectar" para ver servidores en tiempo real</p>
+                    </div>
+                `;
             }
 
             // Real-time Data Handlers
@@ -1040,6 +1063,20 @@
                     Object.entries(data.data.serverMetrics).forEach(([serverId, serverMetrics]) => {
                         if (serverMetrics && serverMetrics.metrics) {
                             if (serverMetrics.status === 'ACTIVE') {
+                                // Crear card si no existe para este servidor activo
+                                if (!this.serverModals.has(serverId)) {
+                                    // Crear un objeto server básico para la card
+                                    const serverInfo = {
+                                        id: serverId,
+                                        name: `Servidor ${serverId}`,
+                                        host: serverId.split(':')[0] || 'localhost',
+                                        port: serverId.split(':')[1] || '8089',
+                                        baseUrl: `http://${serverId}`
+                                    };
+                                    this.createServerModals(serverInfo);
+                                    console.log(`Card creada dinámicamente para servidor activo: ${serverId}`);
+                                }
+                                
                                 // Mostrar y actualizar si el servidor está activo
                                 this.showServerCard(serverId);
                                 this.updateMetricsModal(serverId, serverMetrics.metrics);
@@ -1054,6 +1091,15 @@
                         // Actualizar lista de servidores para reflejar estado actual
                         this.updateServersListDisplay();
                     });
+                    
+                    // Actualizar dinámicamente la lista de servidores cada 30 segundos
+                    // Solo si no hay una actualización ya programada
+                    if (!this.dynamicUpdateTimeout) {
+                        this.dynamicUpdateTimeout = setTimeout(() => {
+                            this.loadDynamicServers();
+                            this.dynamicUpdateTimeout = null;
+                        }, 30000); // 30 segundos
+                    }
                 } else if (data.data && typeof data.data === 'object') {
                     // Fallback por si la estructura cambia
                     Object.entries(data.data).forEach(([serverId, metrics]) => {
@@ -1118,6 +1164,110 @@
                         this.displayServersList(this.connectedServers);
                     }
                 }, 100); // Debounce de 100ms
+            }
+
+            // Manejar eventos de servidores (conexión/desconexión) en tiempo real
+            handleServerEvent(data) {
+                console.log('Evento de servidor recibido:', data);
+                
+                if (data.type === 'server-connected') {
+                    this.addMessage('success', `Servidor conectado: ${data.serverId} (${data.host}:${data.port})`);
+                    
+                    // Actualización completa de la interfaz
+                    setTimeout(() => {
+                        this.refreshCompleteInterface();
+                    }, 1000); // Pequeña pausa para que el Gateway actualice su estado
+                    
+                } else if (data.type === 'server-disconnected') {
+                    this.addMessage('warning', `Servidor desconectado: ${data.serverId}`);
+                    
+                    // Ocultar y remover la card del servidor desconectado
+                    this.hideServerCard(data.serverId);
+                    this.removeServerModals(data.serverId);
+                    
+                    // Actualización completa de la interfaz
+                    setTimeout(() => {
+                        this.refreshCompleteInterface();
+                    }, 1000);
+                }
+            }
+            
+            // Refrescar completamente toda la interfaz (lista, modales, galería, dashboard)
+            async refreshCompleteInterface() {
+                try {
+                    console.log('Refrescando interfaz completa...');
+                    
+                    // 1. Recargar lista de servidores dinámicos
+                    const activeServers = await this.loadDynamicServers();
+                    
+                    // 2. Actualizar galería de modales
+                    await this.refreshModalsGallery();
+                    
+                    // 3. Actualizar modal de servidores conectados si está abierto
+                    await this.refreshConnectedServersModal();
+                    
+                    // 4. Forzar actualización de métricas en tiempo real para servidores activos
+                    this.refreshActiveServerMetrics();
+                    
+                    console.log(`Interfaz refrescada - ${activeServers?.length || 0} servidores activos`);
+                    
+                } catch (error) {
+                    console.error('Error refrescando interfaz completa:', error);
+                    this.addMessage('error', 'Error actualizando la interfaz');
+                }
+            }
+            
+            // Refrescar la galería de modales
+            async refreshModalsGallery() {
+                // Verificar qué servidores están realmente activos
+                const response = await fetch(`${this.baseUrl}/api/servers/status`);
+                const result = await response.json();
+                
+                if (result.success && result.servers) {
+                    // Limpiar modales de servidores inactivos
+                    for (const [serverId, modalData] of this.serverModals.entries()) {
+                        const serverData = result.servers[serverId];
+                        if (!serverData || serverData.status !== 'ACTIVE') {
+                            this.hideServerCard(serverId);
+                        } else {
+                            this.showServerCard(serverId);
+                        }
+                    }
+                }
+            }
+            
+            // Refrescar modal de servidores conectados si está visible
+            async refreshConnectedServersModal() {
+                const connectedModal = document.querySelector('[data-modal="connected-servers"]');
+                if (connectedModal && !connectedModal.classList.contains('hidden')) {
+                    // Re-poblar el contenido del modal con datos actualizados
+                    await this.loadDynamicServers();
+                }
+            }
+            
+            // Refrescar métricas de servidores activos
+            refreshActiveServerMetrics() {
+                // Disparar actualización inmediata de métricas para servidores visibles
+                for (const [serverId, modalData] of this.serverModals.entries()) {
+                    const serverCard = document.querySelector(`[data-server="${serverId}"]`);
+                    if (serverCard && !serverCard.classList.contains('hidden')) {
+                        // Forzar actualización de métricas si el modal está visible
+                        const metricsContainer = serverCard.querySelector('.metrics-content');
+                        if (metricsContainer) {
+                            // Disparar actualización inmediata
+                            this.requestMetricsUpdate(serverId);
+                        }
+                    }
+                }
+            }
+            
+            // Solicitar actualización inmediata de métricas para un servidor
+            requestMetricsUpdate(serverId) {
+                // Esto fuerza que el siguiente update de métricas llegue más rápido
+                if (this.stompClient && this.stompClient.connected) {
+                    // El Gateway ya envía actualizaciones, solo aseguramos que el UI esté listo
+                    console.log(`Solicitando actualización de métricas para servidor: ${serverId}`);
+                }
             }
 
             // UI Helpers
@@ -1248,13 +1398,68 @@
                 }
             }
 
+            // Cargar servidores dinámicamente desde el Gateway usando /api/servers/status
+            async loadDynamicServers() {
+                try {
+                    const response = await fetch(`${this.baseUrl}/api/servers/status`);
+                    const result = await response.json();
+                    
+                    if (result.success) {
+                        const activeServers = [];
+                        // Procesar servidores del estado de recolección
+                        if (result.servers) {
+                            for (const [serverId, serverData] of Object.entries(result.servers)) {
+                                if (serverData.config && serverData.status === 'ACTIVE') {
+                                    activeServers.push({
+                                        id: serverId,
+                                        name: serverData.config.name || serverId,
+                                        host: serverData.config.host,
+                                        port: serverData.config.port,
+                                        baseUrl: serverData.config.baseUrl,
+                                        status: serverData.status,
+                                        lastMetrics: serverData.lastMetricsTimestamp,
+                                        isActive: true
+                                    });
+                                }
+                            }
+                        }
+                        
+                        this.displayServersList(activeServers);
+                        
+                        // Crear y mostrar cards para servidores activos
+                        activeServers.forEach(server => {
+                            if (!this.serverModals.has(server.id)) {
+                                const serverCard = this.createServerModals(server);
+                                this.showServerCard(server.id); // Mostrar directamente para servidores activos
+                                console.log(`Card creada y mostrada para servidor activo: ${server.id}`);
+                            } else {
+                                this.showServerCard(server.id); // Mostrar si ya existe
+                            }
+                        });
+                        
+                        return activeServers;
+                    } else {
+                        this.addMessage('warning', `Error obteniendo estado de servidores: ${result.message}`);
+                        return [];
+                    }
+                } catch (error) {
+                    console.error('Error cargando servidores dinámicos:', error);
+                    this.addMessage('error', `Error de red obteniendo servidores: ${error.message}`);
+                    return [];
+                }
+            }
+
             displayServersList(servers) {
                 if (servers.length === 0) {
                     this.serversList.innerHTML = `
                         <div class="text-center py-8 text-blue-500">
                             <i class="fas fa-server text-4xl mb-3 text-blue-300"></i>
-                            <p>No hay servidores conectados</p>
-                            <p class="text-sm">Agrega un servidor para ver sus modales en tiempo real</p>
+                            <p>No hay servidores activos detectados</p>
+                            <p class="text-sm">Los servidores aparecerán automáticamente cuando envíen métricas al Gateway</p>
+                            <div class="mt-4 text-xs text-gray-400">
+                                <i class="fas fa-info-circle mr-1"></i>
+                                Detección automática vía API Gateway - Sin configuración manual
+                            </div>
                         </div>
                     `;
                     return;
@@ -1262,57 +1467,42 @@
 
                 let html = '<div class="space-y-3">';
                 servers.forEach(server => {
-                    // Determinar estado real basado en si hay métricas activas
-                    let isActive = false;
-                    let healthStatus = 'INACTIVE';
-                    
-                    // Verificar si existe una card visible para este servidor (indica que está recibiendo métricas)
-                    const serverCard = document.getElementById(`server-card-${server.id}`);
-                    if (serverCard && serverCard.style.display !== 'none') {
-                        isActive = true;
-                        healthStatus = 'ACTIVE';
-                    }
-                    
-                    // Alternativamente, verificar en lastMetricsData si está disponible
-                    if (this.lastMetricsData && this.lastMetricsData.serverMetrics && this.lastMetricsData.serverMetrics[server.id]) {
-                        const serverMetrics = this.lastMetricsData.serverMetrics[server.id];
-                        if (serverMetrics.status === 'ACTIVE') {
-                            isActive = true;
-                            healthStatus = 'ACTIVE';
-                        }
-                    }
-                    
-                    const statusColor = isActive ? 'text-green-600' : 'text-red-600';
-                    const statusText = isActive ? 'ENCENDIDO' : 'APAGADO';
-                    const statusBg = isActive ? 'bg-green-50' : 'bg-red-50';
+                    const isActive = server.isActive || false;
+                    const statusColor = isActive ? 'text-green-600' : 'text-gray-600';
+                    const statusText = isActive ? 'ACTIVO' : 'INACTIVO';
+                    const statusBg = isActive ? 'bg-green-50' : 'bg-gray-50';
+                    const lastMetrics = server.lastMetrics ? new Date(server.lastMetrics).toLocaleTimeString() : 'N/A';
                     
                     html += `
                         <div class="flex items-center justify-between p-4 bg-blue-50 rounded-lg border border-blue-100">
                             <div class="flex items-center space-x-3">
-                                <i class="fas fa-server text-blue-400"></i>
+                                <i class="fas fa-server ${isActive ? 'text-green-500' : 'text-gray-400'}"></i>
                                 <div>
                                     <div class="font-medium text-blue-900">${server.name}</div>
                                     <div class="text-sm text-blue-600">
-                                        ID: ${server.id} | Host: ${server.host}:${server.port}
+                                        <i class="fas fa-network-wired mr-1"></i>${server.host}:${server.port}
                                     </div>
                                     <div class="text-xs text-gray-500">
-                                        Health check: ${healthStatus} | URL: ${server.baseUrl}
+                                        <i class="fas fa-link mr-1"></i>${server.baseUrl}
                                     </div>
                                 </div>
                             </div>
-                            <div class="flex items-center space-x-3">
+                            <div class="flex flex-col items-end space-y-1">
                                 <span class="px-3 py-1 text-xs font-medium rounded-full ${statusColor} ${statusBg}">
                                     <i class="fas fa-circle text-xs mr-1"></i>${statusText}
                                 </span>
-                                <div class="text-xs text-gray-500">
-                                    <i class="fas fa-heartbeat mr-1"></i>Dinámico
+                                <div class="text-xs text-gray-400">
+                                    <i class="fas fa-clock mr-1"></i>Última métrica: ${lastMetrics}
+                                </div>
+                                <div class="text-xs text-emerald-600">
+                                    <i class="fas fa-magic mr-1"></i>Detectado automáticamente
                                 </div>
                             </div>
                         </div>
                     `;
                 });
+
                 html += '</div>';
-                
                 this.serversList.innerHTML = html;
             }
 
