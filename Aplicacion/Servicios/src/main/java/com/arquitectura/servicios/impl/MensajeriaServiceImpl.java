@@ -53,6 +53,9 @@ public class MensajeriaServiceImpl implements MensajeriaService, SessionObserver
         Mensaje mensaje = construirMensaje(request, false);
         Mensaje saved = mensajeRepository.save(mensaje);
         registrarLog(saved);
+
+        // Entrega inmediata (local y remota) antes de publicar eventos
+        entregar(saved);
         
         // Eventos para logs y estadísticas
         eventBus.publish(new SessionEvent(SessionEventType.MESSAGE_SENT, null, request.getEmisor(), saved));
@@ -71,6 +74,9 @@ public class MensajeriaServiceImpl implements MensajeriaService, SessionObserver
         Mensaje mensaje = construirMensaje(request, true);
         Mensaje saved = mensajeRepository.save(mensaje);
         registrarLog(saved);
+
+        // Entrega inmediata (local y remota) antes de publicar eventos
+        entregar(saved);
         
         // Eventos para logs y estadísticas
         eventBus.publish(new SessionEvent(SessionEventType.MESSAGE_SENT, null, request.getEmisor(), saved));
