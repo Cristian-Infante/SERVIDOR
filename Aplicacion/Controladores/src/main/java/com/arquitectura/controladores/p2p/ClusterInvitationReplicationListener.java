@@ -79,6 +79,18 @@ public class ClusterInvitationReplicationListener implements SessionObserver {
                 return;
             }
             DatabaseSnapshot snapshot = new DatabaseSnapshot();
+
+            // Incluir datos básicos del canal para garantizar que el receptor pueda
+            // resolver el UUID aunque aún no haya sincronizado el canal.
+            canalRepository.findById(invitacion.getCanalId()).ifPresent(canal -> {
+                DatabaseSnapshot.CanalRecord canalRecord = new DatabaseSnapshot.CanalRecord();
+                canalRecord.setId(canal.getId());
+                canalRecord.setUuid(canalUuid);
+                canalRecord.setNombre(canal.getNombre());
+                canalRecord.setPrivado(canal.getPrivado());
+                snapshot.setCanales(List.of(canalRecord));
+            });
+
             DatabaseSnapshot.InvitationRecord record = new DatabaseSnapshot.InvitationRecord();
             record.setId(invitacion.getId());
             record.setCanalId(invitacion.getCanalId());
