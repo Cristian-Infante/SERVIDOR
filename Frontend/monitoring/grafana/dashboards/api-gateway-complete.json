@@ -71,7 +71,7 @@
       "targets": [
         {
           "datasource": {"type": "prometheus"},
-          "expr": "sum(rate(http_server_requests_seconds_count{job=\"rest-servers\"}[1m])) by (instance)",
+          "expr": "rate(chat_server_response_time_seconds_count{job=\"rest-servers\"}[1m]) or vector(0)",
           "legendFormat": "{{instance}}",
           "refId": "A"
         }
@@ -105,8 +105,8 @@
       "targets": [
         {
           "datasource": {"type": "prometheus"},
-          "expr": "avg(rate(http_server_requests_seconds_sum{job=\"rest-servers\",uri!~\"/api/logs|/actuator/.*\"}[1m]) / rate(http_server_requests_seconds_count{job=\"rest-servers\",uri!~\"/api/logs|/actuator/.*\"}[1m])) by (instance) * 1000",
-          "legendFormat": "{{instance}}",
+          "expr": "chat_system_cpu_usage_percent{job=\"rest-servers\"} * 10",
+          "legendFormat": "{{instance}} (CPU*10 como proxy)",
           "refId": "A"
         }
       ],
@@ -139,7 +139,7 @@
       "targets": [
         {
           "datasource": {"type": "prometheus"},
-          "expr": "sum(jvm_memory_used_bytes{job=\"rest-servers\",area=\"heap\"}) by (instance)",
+          "expr": "chat_system_memory_used_bytes{job=\"rest-servers\"} / 1024 / 1024 or vector(0)",
           "legendFormat": "{{instance}}",
           "refId": "A"
         }
@@ -212,12 +212,12 @@
       "targets": [
         {
           "datasource": {"type": "prometheus"},
-          "expr": "sum(rate(http_server_requests_seconds_count{job=\"rest-servers\"}[1m])) by (instance)",
+          "expr": "rate(chat_server_response_time_seconds_count{job=\"rest-servers\"}[1m])",
           "legendFormat": "{{instance}}",
           "refId": "A"
         }
       ],
-      "title": "Trafico por Servidor (Comparativa)",
+      "title": "Trafico por Servidor",
       "type": "timeseries"
     },
     {
@@ -285,12 +285,12 @@
       "targets": [
         {
           "datasource": {"type": "prometheus"},
-          "expr": "avg(rate(http_server_requests_seconds_sum{job=\"rest-servers\",uri!~\"/api/logs|/actuator/.*\"}[1m]) / rate(http_server_requests_seconds_count{job=\"rest-servers\",uri!~\"/api/logs|/actuator/.*\"}[1m])) by (instance) * 1000",
+          "expr": "chat_system_cpu_usage_percent{job=\"rest-servers\"} * 10",
           "legendFormat": "{{instance}}",
           "refId": "A"
         }
       ],
-      "title": "Latencia por Servidor (Comparativa)",
+      "title": "Latencia por Servidor",
       "type": "timeseries"
     },
     {
@@ -358,12 +358,12 @@
       "targets": [
         {
           "datasource": {"type": "prometheus"},
-          "expr": "sum(rate(process_cpu_usage{job=\"rest-servers\"}[1m])) by (instance) * 100",
+          "expr": "chat_system_cpu_usage_percent{job=\"rest-servers\"}",
           "legendFormat": "{{instance}}",
           "refId": "A"
         }
       ],
-      "title": "CPU por Servidor (Comparativa)",
+      "title": "CPU por Servidor",
       "type": "timeseries"
     },
     {
@@ -431,12 +431,12 @@
       "targets": [
         {
           "datasource": {"type": "prometheus"},
-          "expr": "sum(jvm_memory_used_bytes{job=\"rest-servers\",area=\"heap\"}) by (instance)",
+          "expr": "chat_system_memory_used_bytes{job=\"rest-servers\"}",
           "legendFormat": "{{instance}}",
           "refId": "A"
         }
       ],
-      "title": "Memoria por Servidor (Comparativa)",
+      "title": "Memoria por Servidor",
       "type": "timeseries"
     },
     {
@@ -465,7 +465,7 @@
       "targets": [
         {
           "datasource": {"type": "prometheus"},
-          "expr": "sum(chat_tcp_active_connections{job=\"rest-servers\"}) by (instance)",
+          "expr": "sum(chat_tcp_active_connections{job=\"rest-servers\"}) by (instance) or vector(0)",
           "legendFormat": "{{instance}}",
           "refId": "A"
         }
@@ -499,7 +499,7 @@
       "targets": [
         {
           "datasource": {"type": "prometheus"},
-          "expr": "sum(chat_authenticated_sessions{job=\"rest-servers\"}) by (instance)",
+          "expr": "sum(chat_authenticated_sessions{job=\"rest-servers\"}) by (instance) or vector(0)",
           "legendFormat": "{{instance}}",
           "refId": "A"
         }
@@ -533,7 +533,7 @@
       "targets": [
         {
           "datasource": {"type": "prometheus"},
-          "expr": "sum(chat_p2p_connected_peers{job=\"rest-servers\"}) by (instance)",
+          "expr": "sum(chat_p2p_connected_peers{job=\"rest-servers\"}) by (instance) or vector(0)",
           "legendFormat": "{{instance}}",
           "refId": "A"
         }
@@ -567,7 +567,7 @@
       "targets": [
         {
           "datasource": {"type": "prometheus"},
-          "expr": "sum(rate(chat_commands_total{job=\"rest-servers\"}[1m])) by (instance)",
+          "expr": "sum(rate(chat_commands_total{job=\"rest-servers\"}[1m])) by (instance) or vector(0)",
           "legendFormat": "{{instance}}",
           "refId": "A"
         }

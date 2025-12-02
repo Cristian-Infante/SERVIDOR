@@ -48,16 +48,55 @@ public class MetricsController {
     @GetMapping(produces = TextFormat.CONTENT_TYPE_004)
     public ResponseEntity<String> getMetrics() {
         try {
+            // Obtener métricas básicas de Spring Boot
             Writer writer = new StringWriter();
             TextFormat.write004(writer, CollectorRegistry.defaultRegistry.metricFamilySamples());
+            String springBootMetrics = writer.toString();
+            
+            // Obtener métricas personalizadas del servidor TCP (puerto 5100)
+            String tcpMetrics = getTcpServerMetrics();
+            
+            // Combinar ambas métricas
+            String combinedMetrics;
+            if (tcpMetrics != null && !tcpMetrics.isEmpty()) {
+                combinedMetrics = springBootMetrics + "\n" + tcpMetrics;
+            } else {
+                combinedMetrics = springBootMetrics;
+            }
             
             HttpHeaders headers = new HttpHeaders();
             headers.setContentType(MediaType.parseMediaType(TextFormat.CONTENT_TYPE_004));
             
-            return new ResponseEntity<>(writer.toString(), headers, HttpStatus.OK);
+            return new ResponseEntity<>(combinedMetrics, headers, HttpStatus.OK);
         } catch (IOException e) {
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
                     .body("Error al generar métricas: " + e.getMessage());
+        }
+    }
+    
+    /**
+     * Obtiene las métricas personalizadas del servidor TCP desde puerto 5100
+     */
+    private String getTcpServerMetrics() {
+        try {
+            java.net.http.HttpClient client = java.net.http.HttpClient.newHttpClient();
+            java.net.http.HttpRequest request = java.net.http.HttpRequest.newBuilder()
+                    .uri(java.net.URI.create("http://localhost:5100/metrics"))
+                    .timeout(java.time.Duration.ofSeconds(5))
+                    .build();
+            
+            java.net.http.HttpResponse<String> response = client.send(request, 
+                    java.net.http.HttpResponse.BodyHandlers.ofString());
+            
+            if (response.statusCode() == 200) {
+                return response.body();
+            } else {
+                System.err.println("Error al obtener métricas TCP: HTTP " + response.statusCode());
+                return "";
+            }
+        } catch (Exception e) {
+            System.err.println("Error conectando al servidor TCP de métricas: " + e.getMessage());
+            return "";
         }
     }
 
